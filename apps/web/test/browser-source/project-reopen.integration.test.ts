@@ -1501,3 +1501,149 @@ it("removes the fact of no open suggestion when a reload finds an applied Accept
     expect({ facts, inFlight: server.inFlight() }).toEqual({ facts: ["false"], inFlight: [] });
     expect(server.log.unexpected).toEqual([]);
   });
+
+// Fewer steps in series for the open, an Acceptance, and a Rejection (#1937).
+
+/**
+ * Proves the steps of an action. The fake holds each request. The requests of step `n` must all start, and no other
+ * request, before the fake answers them. Then the fake answers them, and `after(n)` runs. When the screen shows the
+ * end of the action (`settled`), the action sends no other request.
+ */
+async function expectSteps(server: ReturnType<typeof fakeServer>, from: number, steps: string[][],
+  settled: () => unknown, after: (step: number) => Promise<void> = async () => {}) {
+  let start = from;
+  for (const [index, step] of steps.entries()) {
+    await expect.poll(() => sorted(server.log.started.slice(start)), { timeout: 3_000 }).toEqual(sorted(step));
+    start += step.length;
+    server.release();
+    await after(index + 1);
+  }
+  await expect.poll(settled).toBe(true);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ requests: server.log.started.length - from, unexpected: server.log.unexpected })
+    .toEqual({ requests: steps.flat().length, unexpected: [] });
+}
+
+/** Loads the page with each request held, and mounts the view when the open ends. */
+function loadHeld(server: ReturnType<typeof fakeServer>, container: string) {
+  document.body.insertAdjacentHTML("beforeend", `<main id="${container}"></main>`);
+  const documentImpl = { querySelector: (selector: string) => selector === "#app"
+    ? document.getElementById(container) : document.querySelector(selector),
+  documentElement: document.documentElement } as unknown as Document;
+  server.holdEach(true);
+  const loading = loadStoryOSWebState({ documentImpl,
+    locationImpl: { origin: location.origin, pathname: `/projects/${PROJECT}` },
+    fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+  let root: HTMLElement | undefined;
+  return {
+    root: () => root,
+    mount: async () => {
+      const loaded = await loading;
+      const view = mountStage1View(loaded.root, loaded);
+      unmounts.push(() => view.unmount());
+      root = loaded.root;
+    },
+  };
+}
+
+/** The requests of the open of a tab with no Editor Session, step by step (#1937). */
+const NEW_TAB_STEPS = [
+  [PROTOCOL, PROJECT_READ, LIST],
+  [chapterRead(CHAPTER), CHALLENGE, TREE, STATISTICS, ASSISTANCE, SKILLS],
+  [SESSION_CREATE],
+  [openProposalsRead(CHAPTER), ACTIVITY_READ],
+  [PROPOSAL_READ],
+];
+/** The open ends with the answer of the creation (step 3). */
+const OPEN_ENDS = 3;
+
+/** The Chapter, the suggestion card, the save state, and the panels on the screen. */
+function screenState(root: HTMLElement | undefined) {
+  return { title: root?.querySelector(".editor-panel h2")?.textContent,
+    save: root?.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
+    revision: root?.querySelector("[data-authoritative-revision-id]")?.getAttribute("data-authoritative-revision-id"),
+    cards: [...root?.querySelectorAll<HTMLElement>(".block-proposal") ?? []].map((card) =>
+      `${card.dataset.proposalId}:${card.textContent}`),
+    chapters: [...root?.querySelectorAll<HTMLElement>("button[data-chapter-id]") ?? []].map((button) =>
+      button.textContent),
+    statistics: root?.querySelector("[data-manuscript-statistics]")?.getAttribute("data-statistics-outcome") };
+}
+
+it("opens a new tab with the reads of the Project in the step of the Chapter read", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE], proposals: true });
+  await deleteJournal(server.scenario.journalName);
+  const tab = loadHeld(server, "app");
+
+  await expectSteps(server, 0, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1,
+    async (step) => { if (step === OPEN_ENDS) await tab.mount(); });
+
+  expect(screenState(tab.root())).toMatchObject({ title: "Chapter A", save: "saved", revision: REVISION });
+});
+
+it("opens a second tab of a Project that another tab writes in with the steps of a new tab and no takeover",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE], proposals: true });
+    await openWorkspace(server);
+    // The second tab has its own session storage, so it has no Editor Session (ADR 0107).
+    sessionStorage.clear();
+    await expect.poll(server.inFlight).toEqual([]);
+    const from = server.log.started.length;
+    const tab = loadHeld(server, "second");
+
+    await expectSteps(server, from, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1,
+      async (step) => { if (step === OPEN_ENDS) await tab.mount(); });
+
+    expect(screenState(tab.root())).toMatchObject({ title: "Chapter A", save: "saved", revision: REVISION });
+  });
+
+it.each([
+  { decision: "acceptance", command: ACCEPTANCE, button: "accept",
+    reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
+    steps: [[CHALLENGE], [ACCEPTANCE], [...reopenReads(CHAPTER), TREE, STATISTICS, openProposalsRead(CHAPTER)],
+      [ACTIVITY_READ, PROPOSAL_READ, OTHER_READ]] },
+  { decision: "rejection", command: REJECTION, button: "reject", reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ],
+    steps: [[CHALLENGE], [REJECTION], [openProposalsRead(CHAPTER), PROPOSAL_READ, OTHER_READ]] },
+])("settles the $decision of a Proposal in three steps, then the reads that need an answer of step 3", async ({
+  command, button, reads, steps }) => {
+  const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied",
+    other: true });
+  const workspace = await openWorkspace(server);
+  const control = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-${button}]`);
+  await expect.poll(() => control()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  const from = server.log.started.length;
+  server.holdEach(true);
+
+  control()!.click();
+
+  await expectSteps(server, from, steps, () => canonicalCards(workspace.root) === OTHER.proposal_id);
+});
+
+const canonicalCards = (root: HTMLElement) => screenState(root).cards.map((card) => card.split(":")[0]).join("|");
+
+it.each([
+  // After the Acceptance, the other Proposal of the same block has a changed base.
+  { decision: "acceptance", command: ACCEPTANCE, button: "accept", revision: ACCEPTED_REVISION,
+    reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
+    card: `${OTHER.proposal_id}:${OTHER.candidate_text}正文已变化。接受会用候选文字替换目标的当前文字。✓ 接受× 拒绝` },
+  { decision: "rejection", command: REJECTION, button: "reject", revision: REVISION,
+    reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ], card: `${OTHER.proposal_id}:${OTHER.candidate_text}✓ 接受× 拒绝` },
+])("shows the same screen after the $decision with no read that repeats a read of the action", async ({ command,
+  button, revision, reads, card }) => {
+  const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied",
+    other: true });
+  const workspace = await openWorkspace(server);
+  const control = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-${button}]`);
+  await expect.poll(() => control()?.disabled).toBe(false);
+  await expect.poll(() => screenState(workspace.root).statistics).toBe("unavailable");
+
+  control()!.click();
+
+  await expect.poll(() => canonicalCards(workspace.root)).toBe(OTHER.proposal_id);
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ screen: screenState(workspace.root), unexpected: server.log.unexpected }).toEqual({
+    screen: { title: "Chapter A", save: "saved", revision, cards: [card], chapters: ["Chapter A", "Chapter B"],
+      statistics: "unavailable" }, unexpected: [] });
+});
