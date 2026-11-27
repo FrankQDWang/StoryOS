@@ -1731,6 +1731,32 @@ it("sends no Author Edit of the Arrival Input when another tab changes the Curre
     [openProposals(CHAPTER_C), `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`, ACTIVITY]);
 });
 
+// The caret of the Arriving Chapter goes only to the editor of the same Chapter (#1934).
+it("gives no focus and no caret of a click in the Arriving Chapter to the editor of another Chapter after the reopen",
+  async () => {
+    const workspace = await openWorkspace();
+    await workspace.copy(CHAPTER_B);
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    await userEvent.click(workspace.editor().querySelector("p")!);
+    const clicked = workspace.editor().contains(document.activeElement);
+    workspace.server.hold(`GET ${P}`);
+    workspace.server.release(READ_B);
+    await expect.poll(() => workspace.server.isHeld(`GET ${P}`)).toBe(true);
+
+    workspace.server.moveTo(CHAPTER_C);
+    workspace.server.release(`GET ${P}`);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() }))
+      .toEqual({ title: "Chapter C", body: "Gamma", editable: true, alert: undefined, save: "saved" });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS, READ_C, SESSION_READ],
+      [openProposals(CHAPTER_C), `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`, ACTIVITY]);
+    expect({ clicked, focus: workspace.editor().contains(document.activeElement) }).toEqual({ clicked: true,
+      focus: false });
+  });
+
 it("accepts no input in an Arriving Chapter whose copy does not have the fact of no open suggestion", async () => {
   const workspace = await openWorkspace((server) => {
     server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000474";

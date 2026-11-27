@@ -776,7 +776,7 @@ function ProjectEditorView({
                 if (typed.hasInput() && next.editor.openedProjection.authoritative_revision_id === typed.revisionId) {
                   inputRef.current = undefined;
                   handOverStore.current = typed;
-                } else if (!typed.hasInput() && typed.focused()) {
+                } else if (!typed.hasInput() && typed.focused() && next.chapter.chapter.chapter_id === typed.chapterId) {
                   // The editor of the Chapter keeps the focus and the caret of a click in the Arriving Chapter (#1934).
                   caretStore.current = typed.selection();
                 }

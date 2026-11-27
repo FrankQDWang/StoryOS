@@ -4,7 +4,7 @@ import { getChapter } from "../../../../generated/typescript/storyos-public-rele
 import { requestResult } from "../../src/indexed-db-request.ts";
 import { JOURNAL_DATABASE_VERSION } from "../../src/local-edit-journal.ts";
 import {
-  applyTrustedInput, assertPageProjectReceipts, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
+  applyTrustedInput, assertPageProjectReceipts, recordFrameRequests, updateAuthorEditSubmissionHold, updateClientSessionCookie, updateClipboardPermission,
 } from "../support/browser-command-client.ts";
 import { beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import {
@@ -238,29 +238,25 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     root().querySelector<HTMLButtonElement>(`[data-confirm-delete-chapter="${a}"]`)?.click();
     await expect.poll(() => shown(manuscriptEditor(root(), recoveryWindow)), { timeout: SWITCH_WAIT })
       .toEqual({ title: "Chapter C", body: "Theta", editable: true });
-    // Each request that the page started from the selection to the key. The page lists a request when it ends, so the
-    // journey reads the list after the switch ended.
-    const startedBetween = (start: number, end: number) => recoveryWindow.performance.getEntriesByType("resource")
-      .filter((entry) => entry.startTime >= start && entry.startTime <= end)
-      .map((entry) => new URL(entry.name).pathname.replace(projectId, "P").replaceAll(b, "B"));
     await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
-    const selectedAt = recoveryWindow.performance.now();
+    // Each request of the page from the selection to the key, recorded when it starts.
+    await recordFrameRequests({ action: "start" });
     await selectTreeChapter(root(), b, { arrival: "in-progress" });
     await expect.poll(() => ({ ...shown(manuscriptEditor(root(), recoveryWindow)), held: recoveryWindow.document
       .documentElement.dataset.storyosHeldRequests }), { timeout: SWITCH_WAIT }).toEqual({ title: "Chapter B",
       body: "Beta", editable: true, held: "1" });
     focusManuscriptEnd(manuscriptEditor(root(), recoveryWindow), recoveryWindow);
     await applyTrustedInput({ operation: "insert_text", text: " Iota" });
-    const keyAt = recoveryWindow.performance.now();
+    const atKey = (await recordFrameRequests({ action: "read" }))
+      .map((request) => request.replace(projectId, "P").replaceAll(b, "B"));
     await updateAuthorEditSubmissionHold({ action: "release" });
     await switched("Chapter B", "Beta Iota", recoveryWindow);
-    const atKey = startedBetween(selectedAt, keyAt);
     const iotaLoad = await reloadProject(frame, projectId);
     const iota = applicationWindow(frame);
     expect({ thetaStep, atKey, shown: shown(manuscriptEditor(iotaLoad, iota)),
       stored: await storedText(iota, projectId, b) }).toEqual({
       thetaStep: { shown: { title: "Chapter C", body: "Theta", editable: true }, stored: ["Theta"] },
       // The switch reads no list of Chapter B: the Chapter read, the Challenge, and the held command.
-      atKey: ["/api/v1/projects/P/chapters/B", "/api/v1/projects/P/anti-forgery-challenges",
-        "/api/v1/projects/P/current-chapter"], shown: { title: "Chapter B", body: "Beta Iota", editable: true }, stored: ["Beta Iota"] });
+      atKey: ["GET /api/v1/projects/P/chapters/B", "POST /api/v1/projects/P/anti-forgery-challenges",
+        "PUT /api/v1/projects/P/current-chapter"], shown: { title: "Chapter B", body: "Beta Iota", editable: true }, stored: ["Beta Iota"] });
   }, 300_000);
