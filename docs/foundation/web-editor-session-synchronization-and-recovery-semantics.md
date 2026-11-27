@@ -92,13 +92,26 @@ state of today.
 At a load, the stored Editor Session of a tab can have a base that is not the
 Chapter that the Server reads now, because another Editor Session wrote. When
 the Journal partition of the stored Session has no open work, the load opens a
-new Editor Session, as a new tab does. Open work is a record that no closed
-group covers, a group that is not closed, a decision flight, an unresolved
-Withdrawal, or a retained recovery row. A closed group has no outcome query,
-and it is an applied Author Edit, a zero-authority Author Edit that revised a
-Proposal, or a settled or refused decision. A conflicted or refused Author Edit
-is open work, because the Server does not have its text. When open work exists,
-the load keeps the stored Session and its recovery state.
+new Editor Session, as a new tab does. The check uses the rule of the working
+set (ADR 0036). Open work is a record that no closed group covers, a group that
+has no payload collection and is not closed, a decision flight, an unresolved
+Withdrawal, or a retained recovery row. A closed group has no outcome query and
+no reconciliation, and it is one of these:
+
+- an applied Author Edit;
+- a zero-authority Author Edit with no effect, when the Journal proves that its
+  text is the text of the base;
+- a zero-authority Author Edit that revised a Proposal, when no later record
+  targets that Proposal Revision.
+
+A zero-authority group of another Chapter that a record follows is open work. A
+conflicted or refused Author Edit is open work, because the Server does not
+have its text. A Delete Chapter or a Delete Volume moves the Server base of each
+Editor Session to a later Snapshot. When the Server base of the stored Session
+has a later Project Activity Position than the base that the Journal stores,
+the check uses the stored base, because the Journal proves its groups against
+that base. When open work exists, the load keeps the stored Session and its
+recovery state, and the load does not remove or change its records.
 
 A command of an Editor Session moves only the base Snapshot of that Editor
 Session. An applied Author Edit or Undo moves that base to the new Revision

@@ -356,11 +356,19 @@ function baseIsNotChapter(value: unknown, chapter: GetChapterResponse): boolean 
  */
 async function partitionHasOpenWork(database: IDBDatabase, value: unknown, scope: ProjectScope,
   profile: Release1ProtocolProfile, cryptoImpl: Crypto): Promise<boolean> {
-  const session = value as GetEditorSessionResponse;
-  const partition = partitionFrom(session, scope, profile);
+  const served = value as GetEditorSessionResponse;
+  const partition = partitionFrom(served, scope, profile);
+  const partitionId = partition.journal_partition_id;
+  const stored = (await requestResult(database.transaction("metadata", "readonly").objectStore("metadata")
+    .get(`active_base:${partitionId}`)) as { value?: GetEditorSessionResponse["base_snapshot"] } | undefined)?.value;
+  // A deletion moves the base of each Editor Session on the Server (ADR 0107). The Journal then has the earlier base,
+  // which the check of its rows uses. Another earlier base is corrupt, and the check counts it as open work.
+  const moved = stored !== undefined && boundedU64(stored.project_activity_position)
+    && boundedU64(served.base_snapshot.project_activity_position)
+    && BigInt(stored.project_activity_position) < BigInt(served.base_snapshot.project_activity_position);
+  const session = moved ? { ...served, base_snapshot: stored } : served;
   if (await journalHasOpenWork({ database, partition, session, cryptoImpl,
     maxJsonStringUtf8Bytes: profile.max_json_string_utf8_bytes })) return true;
-  const partitionId = partition.journal_partition_id;
   const metadata = database.transaction("metadata", "readonly").objectStore("metadata");
   const rows = (prefix: string) => requestResult(metadata.getAll(IDBKeyRange.bound(
     `${prefix}${partitionId}:`, `${prefix}${partitionId}:\uffff`)));
