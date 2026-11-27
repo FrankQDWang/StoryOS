@@ -164,17 +164,12 @@ test("an accepted candidate reference keeps the accepted Revision when a hydrate
   assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), [key]);
 });
 
-test("an accepted candidate with line feeds makes Chapter text only of a reference in its first part", () => {
+test("an accepted candidate with line feeds keeps only a reference in its first part, as Chapter text", () => {
   const project = scope();
   // The Server splits the candidate at each line feed, and only the first part keeps the target block (ADR 0106).
   addDraftReferences(project, [candidateEntry(2, 4), candidateEntry(1, 2), candidateEntry(6, 8), candidateEntry(3, 7)]);
   acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, "\n雨停了。\n风起了。"]]), NEXT);
-  assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(FIRST!, 1, 3, NEXT),
-    reference(FIRST!, 0, 1, NEXT), candidateEntry(6, 8).reference, candidateEntry(3, 7).reference]);
-  // A reference to a later part leaves with its candidate, as a candidate reference does.
-  const before = withCandidate("\n雨停了。\n风起了。");
-  trackDraftReferences(project, CHAPTER, new Set(),
-    before.tr.replaceWith(0, before.doc.content.size, state("雨停了。", "风起了。").doc.content), tree);
+  // A reference to a later part, or across a line feed, leaves the draft: the draft does not know the new blocks.
   assert.deepEqual(draftEntries(project).map((item) => item.reference),
     [reference(FIRST!, 1, 3, NEXT), reference(FIRST!, 0, 1, NEXT)]);
 });

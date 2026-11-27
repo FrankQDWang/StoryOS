@@ -325,6 +325,24 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await expect(candidate()).toHaveCount(1);
     assert.equal(await candidate().locator('.block-proposal-text').textContent(), splitText);
+    // The author adds a part of each paragraph of the candidate to the message.
+    const selectInCandidate = (from: number, to: number) => page.evaluate(({ proposalId, operationId, from, to }) => {
+      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
+        '[data-manuscript-editor]')?.editor;
+      let start: number | undefined;
+      editor?.state.doc.descendants((node, position) => {
+        if (node.type.name === 'blockProposal' && node.attrs.proposalId === proposalId
+          && node.attrs.operationId === operationId) start = position + 1;
+      });
+      if (editor === undefined || start === undefined) throw new Error('The candidate is not in the editor');
+      editor.commands.setTextSelection({ from: start + from, to: start + to });
+      editor.view.focus();
+    }, { proposalId, operationId: secondaryOutcome.operation_id, from, to });
+    for (const [from, to] of [[0, 4], [unsplit.length + 1, splitText.length]] as const) {
+      await selectInCandidate(from, to);
+      await page.locator('[data-add-selection-reference]').click();
+    }
+    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(2);
     // The Chapter Head moved after the Proposal opened, so the Acceptance replaces the secondary Block text (ADR 0064).
     const pending = (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)!;
@@ -358,17 +376,24 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       editor.view.focus();
     }, addedId);
     await page.locator('[data-add-selection-reference]').click();
-    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(1);
+    // The reference to the first paragraph of the candidate is now Chapter text of its target block. The reference
+    // to the second paragraph left the draft, and the later selection names the new block.
+    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(2);
     assert.deepEqual(await page.evaluate((projectId) => {
       const key = Object.keys(sessionStorage).find((name) => name.startsWith('selection_references:')
         && name.endsWith(`:${projectId}`));
       const draft = JSON.parse(sessionStorage.getItem(key ?? '') ?? '{"entries":[]}') as
-        { entries: { reference: { start?: { manuscript_block_id: string }; end?: { manuscript_block_id: string } } }[] };
-      return draft.entries.map(({ reference }) => [reference.start?.manuscript_block_id, reference.end?.manuscript_block_id]);
-    }, projectId), [[addedId, addedId]]);
-    // The later request of the journey works on the whole Chapter, so the author removes the reference again.
-    await page.locator('[data-selection-reference-label] [data-remove-selection-reference]').click();
-    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(0);
+        { entries: { reference: { start?: { manuscript_block_id: string; offset: number };
+          end?: { manuscript_block_id: string; offset: number } } }[] };
+      return draft.entries.map(({ reference }) => [reference.start?.manuscript_block_id, reference.start?.offset,
+        reference.end?.manuscript_block_id, reference.end?.offset]);
+    }, projectId), [[secondary.manuscript_block_id, 0, secondary.manuscript_block_id, 4],
+      [addedId, 0, addedId, 'A second paragraph.'.length]]);
+    // The later request of the journey works on the whole Chapter, so the author removes the references again.
+    for (const left of [1, 0]) {
+      await page.locator('[data-selection-reference-label] [data-remove-selection-reference]').first().click();
+      await expect(page.locator('[data-selection-reference-label]')).toHaveCount(left);
+    }
     await expect(authorBlock).toContainText('Author continues writing.');
     assert.deepEqual(await retainedHistory(), originalHistory);
     await page.locator(`[data-assistant-history-run="${run.run_id}"]`).waitFor();

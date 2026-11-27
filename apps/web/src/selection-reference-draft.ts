@@ -229,35 +229,35 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
  * Makes each reference to an accepted candidate a Chapter text reference at the Revision after the
  * acceptance. `candidates` gives the accepted candidate text of each Operation. The Server splits the candidate
  * at each line feed, and only the first part with text stays in its target block (ADR 0106, section 2). Thus only
- * a reference in that part becomes Chapter text, with the offsets of the part. Each other reference stays a
- * candidate reference, and it leaves the draft with its candidate.
+ * a reference in that part becomes Chapter text, with the offsets of the part. Each other reference to an accepted
+ * candidate leaves the draft, because the draft does not know the new blocks.
  */
 export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
   candidates: ReadonlyMap<string, string>, revisionId: string): void {
   const draft = read(scope);
-  const firstPart = (entry: DraftReference) => {
-    if (entry.reference.kind !== "proposal_candidate_text" || entry.reference.proposal_id !== proposalId
-      || entry.candidate === undefined) return undefined;
-    const text = candidates.get(entry.reference.operation_id);
-    if (text === undefined) return undefined;
-    const start = Math.max(text.search(/[^\n]/), 0);
-    const end = text.indexOf("\n", start);
-    const part = { start, end: end < 0 ? text.length : end };
-    return part.start <= entry.reference.start_offset && entry.reference.end_offset <= part.end ? part : undefined;
-  };
-  if (!draft.entries.some((entry) => firstPart(entry) !== undefined)) return;
-  write(scope, { ...draft, entries: draft.entries.map((entry) => {
-    const part = firstPart(entry);
-    if (part === undefined || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
-      return entry;
+  const accepted = (entry: DraftReference) => entry.reference.kind === "proposal_candidate_text"
+    && entry.reference.proposal_id === proposalId && entry.candidate !== undefined
+    ? candidates.get(entry.reference.operation_id) : undefined;
+  if (!draft.entries.some((entry) => accepted(entry) !== undefined)) return;
+  const entries: DraftReference[] = [];
+  for (const entry of draft.entries) {
+    const text = accepted(entry);
+    if (text === undefined || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
+      entries.push(entry);
+      continue;
     }
+    const start = Math.max(text.search(/[^\n]/), 0);
+    const lineFeed = text.indexOf("\n", start);
+    const end = lineFeed < 0 ? text.length : lineFeed;
+    if (entry.reference.start_offset < start || entry.reference.end_offset > end) continue;
     const { blockId } = entry.candidate;
-    const point = (offset: number) => ({ manuscript_block_id: blockId, offset: offset - part.start });
-    return { key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
+    const point = (offset: number) => ({ manuscript_block_id: blockId, offset: offset - start });
+    entries.push({ key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
       reference: { kind: "chapter_text", chapter_id: entry.reference.chapter_id,
         base_authoritative_revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        start: point(entry.reference.start_offset), end: point(entry.reference.end_offset) } };
-  }) });
+        start: point(entry.reference.start_offset), end: point(entry.reference.end_offset) } });
+  }
+  write(scope, { ...draft, entries });
 }
 
 /** Gives the moved references of one Chapter the saved Revision of the editor document. */
