@@ -1784,6 +1784,34 @@ it("accepts no input in an Arriving Chapter whose copy does not have the fact of
   expect(typed).toEqual({ ...READY, editable: false, fact: "false", save: "saved", footer: OPENING });
 });
 
+// The switch of the ticket after ADR 0107 (#1934): the copy of Chapter B has text from a pointer read and no fact, and
+// the author types before the Chapter read of the switch answers.
+it("accepts a key before the Chapter read of the switch answers in a Chapter whose copy has text and no fact",
+  async () => {
+    const workspace = await openWorkspace((server) => { server.refuse.add(openProposals(CHAPTER_B)); });
+    await workspace.copy(CHAPTER_B);
+    workspace.server.refuse.delete(openProposals(CHAPTER_B));
+    workspace.stopIdle();
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => ({ held: workspace.server.isHeld(READ_B), fact: workspace.fact() }))
+      .toEqual({ held: true, fact: "true" });
+    await workspace.typeAtEnd("?");
+    const typed = { ...workspace.shown(), fact: workspace.fact() };
+    workspace.server.acceptEdits = true;
+    workspace.server.release(READ_B);
+    await expect.poll(workspace.runIdle).toBe(true);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() }))
+      .toEqual({ ...READY, body: "Beta?", save: "saved" });
+    await expectRequests(workspace.server, before, [openProposals(CHAPTER_B), ...SWITCH_STEPS, ...REOPEN_STEPS],
+      [...PANEL_READS, ACTIVITY], ...SAVE_B);
+    expect({ typed, stored: workspace.server.texts[CHAPTER_B]!.body, edits: workspace.server.editRequests.length })
+      .toEqual({ typed: { ...READY, body: "Beta?", fact: "true" }, stored: "Beta?", edits: 1 });
+  });
+
 // The case of the instance (#1934). The display of a Chapter that the tab shows read-only records the fact "no open
 // suggestion", so the Arriving Chapter accepts input at once and the switch reads no list.
 it("accepts input at once in a Chapter that the tab showed read-only, before the Chapter read of the switch answers",
