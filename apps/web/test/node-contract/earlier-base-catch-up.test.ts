@@ -114,5 +114,5 @@ test("a paste of many paragraphs is one replacement", () => {
 test("edits that are more than one Author Edit can have give no steps", () => {
   const current = Array.from({ length: 241 }, (_, index) => block(many(index), "雨夜。"));
 
-  assert.equal(stepsOnCurrent(current, current.map((item) => ({ ...item, text: "雨夜，风起。" }))), undefined);
+  assert.equal(stepsOnCurrent(current, current.map((item) => ({ ...item, text: "雨夜，风起。" })))?.length, undefined);
 });
