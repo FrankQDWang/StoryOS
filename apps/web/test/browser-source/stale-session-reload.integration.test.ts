@@ -19,8 +19,10 @@ const NEW_SESSION = "018f0000-0000-7001-8000-000000000a42";
 const NEW_SNAPSHOT = "018f0000-0000-7001-8000-000000000a43";
 const MOVED_SNAPSHOT = "018f0000-0000-7001-8000-000000000a45";
 const LATER_BODY = "Base, and the text of another tab";
-type Revision = ReturnType<typeof chapterRevision>;
-const REVISIONS = { base: chapterRevision(REVISION, "Base"), later: chapterRevision(LATER_REVISION, LATER_BODY) };
+type Revision = { revision_id: string; body: string;
+  blocks: { manuscript_block_id: string; block_kind: "paragraph" | "heading"; text: string }[] };
+const REVISIONS: { base: Revision; later: Revision } = { base: chapterRevision(REVISION, "Base"),
+  later: chapterRevision(LATER_REVISION, LATER_BODY) };
 const EDIT = { from: 4, to: 4, text: "!", resultingBody: "Base!" };
 const UNDO_GROUP = "018f0000-0000-7001-8000-000000000a44";
 // Two inputs of one group that end on the base text, so the Server gives `no_effect`.
