@@ -1,7 +1,6 @@
 import type { EditorWorkspace, JournalSnapshot, JournalSubmissionGroup } from "./editor-types.ts";
 import { hasCurrentSubmissionShape, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
-import { hasVersion5Request } from "./journal-version-5-upgrade.ts";
 import { earlierJournalKey, readRecoveryDispositions, recoveryKey, recoveryPrefix, recoveryMaterial, recoveryRequest as result, RECOVERY_PAGE_SIZE, type EarlierJournalText, type LocalRecoveryMaterial } from "./local-recovery-record.ts";
 export type { EarlierJournalText, LocalRecoveryMaterial } from "./local-recovery-record.ts";
 
@@ -71,15 +70,5 @@ export async function readLocalRecovery(workspace: EditorWorkspace, after?: Reco
   const pending = after ? [] : snapshot.groups.filter((group) => group.settlement.kind === "outcome_query_requires_reconfirmation"
     && !snapshot.localRecovery?.some((item) => item.group.journal_submission_group_id === group.journal_submission_group_id))
     .map((group) => recoveryMaterial(snapshot, group));
-  // The Server has no Admission of a rejected version 5 group, and the client sends no v1 request again. Its text is
-  // in the editor and here, for manual re-entry.
-  const rejected = after ? [] : snapshot.groups.filter((group) => hasVersion5Request(group)
-    && group.settlement.kind === "outcome_query_rejected_no_admission").map((group): EarlierJournalText => {
-    const target = group.frozen_request_body.proposal_target;
-    return { format_version: 1, disposition: "retained_from_earlier_journal", project_scope: group.project_scope,
-      journal_partition_id: group.journal_partition_id, journal_submission_group_id: group.journal_submission_group_id,
-      ...(target ? { proposal_target: { proposal_id: target.proposal_id, operation_id: target.operation_id } } : {}),
-      text: snapshot.bodyBySequence.get(group.covered_sequence_range.last)! };
-  });
-  return [...pending, ...rejected, ...retained];
+  return [...pending, ...retained];
 }

@@ -12,6 +12,7 @@ import type {
   TransportCapsule,
 } from "./editor-types.ts";
 import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { freezeRejectedVersion5Groups, hasVersion5Request } from "./journal-version-5-upgrade.ts";
 import {
   beginOutcomeQueryAttempt,
   completeOutcomeQueryUnavailable,
@@ -462,7 +463,7 @@ export async function reconcileLostAcknowledgement({
   if (closed.kind === "rejected") {
     const rest = { ...group };
     delete rest.reconciliation;
-    return commitOutcomeQueryWithGroup(workspace, {
+    const rejected = await commitOutcomeQueryWithGroup(workspace, {
       ...durableQuery,
       next: {
         ...rest,
@@ -472,6 +473,9 @@ export async function reconcileLostAcknowledgement({
         },
       },
     });
+    // The Server accepts no v1 request, so the next save sends a version 5 group as v2 (#1947).
+    if (hasVersion5Request(rejected)) await freezeRejectedVersion5Groups(workspace.database, cryptoImpl);
+    return rejected;
   }
   if (closed.kind === "requires_reconfirmation") {
     const rest = { ...group };
