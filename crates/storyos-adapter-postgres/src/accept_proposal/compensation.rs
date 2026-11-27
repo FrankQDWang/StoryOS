@@ -345,6 +345,32 @@ pub(crate) async fn reversal_blocks(
     }) {
         return Ok(None);
     }
+    // A Reversal Proposal changes the text of Blocks and cannot remove the Blocks that the split
+    // of an accepted candidate added (ADR 0106, section 2).
+    let prior_ids: Vec<&str> = blocks
+        .iter()
+        .map(|block| block.manuscript_block_id.as_str())
+        .collect();
+    let added_by_split: bool = client
+        .query_one(
+            "SELECT EXISTS (
+               SELECT 1 FROM storyos.manuscript_revision_members
+                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  AND revision_id = $3::text::uuid
+                  AND manuscript_block_id::text <> ALL ($4::text[]))",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &loaded.resulting_revision_id,
+                &prior_ids,
+            ],
+        )
+        .await
+        .map_err(database_error)?
+        .get(/*idx*/ 0);
+    if added_by_split {
+        return Ok(None);
+    }
     Ok(Some(blocks))
 }
 
