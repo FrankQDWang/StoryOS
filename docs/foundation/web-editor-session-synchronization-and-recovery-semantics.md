@@ -98,7 +98,10 @@ decision flight. When open work exists, the load keeps the stored Session and
 its recovery state.
 
 A command of an Editor Session moves only the base Snapshot of that Editor
-Session. A Delete Chapter or a Delete Volume that changes the Current Chapter
+Session. An applied Author Edit or Undo moves that base to the new Revision
+when the base is on the same Chapter, also when the base is on an earlier
+Revision. An applied Acceptance moves that base only when the base is on the
+prior head. A Delete Chapter or a Delete Volume that changes the Current Chapter
 moves the base of each Editor Session of the Project to the head of the new
 Current Chapter.
 

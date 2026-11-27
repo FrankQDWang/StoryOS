@@ -893,7 +893,7 @@ test("each Editor Session settles its own Author Edit and exact retries return o
     const otherApplied = await sendOther(otherRequest("7", firstRevision, "1"),
       "018f0000-0000-7001-8000-000000000073");
     if (otherApplied.effect.kind !== "authoritative_applied") throw new Error("the other Editor Session did not apply");
-    assert.equal(otherApplied.receipt.result, "applied");
+    assert.equal(otherApplied.receipt.result, "authoritative_applied");
     const secondRevision = otherApplied.effect.authoritative_revision.revision_id;
     assert.notEqual(secondRevision, firstRevision);
 
