@@ -514,7 +514,7 @@ export function BlockProposalDisplay({
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(target.proposalId);
           // A reference to the accepted candidate text now refers to the same text in the Chapter (ADR 0062).
-          acceptDraftCandidates(scope, target.proposalId, acceptedCandidates(target.proposalId,
+          acceptDraftCandidates(scope, target.proposalId, await acceptedCandidates(target.proposalId,
             response.receipt), response.effect.authoritative_revision.revision_id);
         }
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
@@ -543,9 +543,19 @@ export function BlockProposalDisplay({
     })();
   };
 
-  const acceptedCandidates = (proposalId: string,
-    receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] }) =>
-    acceptedCandidateTexts(reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal, receipt);
+  /**
+   * The candidate text of each accepted Operation. The displayed read can be of another Proposal Revision, for
+   * example after a retry of an acceptance whose read failed, so the display then reads the Proposal again.
+   */
+  const acceptedCandidates = async (proposalId: string,
+    receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] }) => {
+    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal;
+    if (displayed?.revision_id === receipt.proposal_revision_id) return acceptedCandidateTexts(displayed, receipt);
+    const current = await getProposal({ baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
+      projectId: scope.project_id, proposalId }).catch(() => undefined);
+    return acceptedCandidateTexts(current?.project_scope.project_id === scope.project_id
+      && current.proposal.proposal_id === proposalId ? current.proposal : undefined, receipt);
+  };
 
   const retryPending = (proposalId: string) => {
     const workspace = editorProps.persistWorkspace;
@@ -568,7 +578,7 @@ export function BlockProposalDisplay({
         const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(proposalId);
-          acceptDraftCandidates(scope, proposalId, acceptedCandidates(proposalId, response.receipt),
+          acceptDraftCandidates(scope, proposalId, await acceptedCandidates(proposalId, response.receipt),
             response.effect.authoritative_revision.revision_id);
         }
         if (response.effect.kind === "refused") {

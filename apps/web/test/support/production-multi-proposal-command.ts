@@ -356,9 +356,23 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect(addedBlock).toHaveText('A second paragraph.');
     const addedId = await addedBlock.getAttribute('data-id');
     assert.ok(addedId !== null && addedId !== secondary.manuscript_block_id);
-    // Each reference to the accepted candidate is now Chapter text of the block that shows its paragraph (ADR 0062).
-    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(2);
-    await expect.poll(() => page.evaluate((projectId) => {
+    // A later selection of a part of the new paragraph gives a reference to the new block (ticket item 5).
+    await page.evaluate((blockId) => {
+      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
+        '[data-manuscript-editor]')?.editor;
+      let from: number | undefined;
+      editor?.state.doc.descendants((node, position) => {
+        if (node.attrs.id === blockId) from = position + 1;
+      });
+      if (editor === undefined || from === undefined) throw new Error('The new block is not in the editor');
+      editor.commands.setTextSelection({ from, to: from + 'A second'.length });
+      editor.view.focus();
+    }, addedId);
+    await page.locator('[data-add-selection-reference]').click();
+    // The editor of the accepted Revision also made each earlier reference to the candidate Chapter text of the block
+    // that shows its paragraph (ADR 0062).
+    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(3);
+    assert.deepEqual(await page.evaluate((projectId) => {
       const key = Object.keys(sessionStorage).find((name) => name.startsWith('selection_references:')
         && name.endsWith(`:${projectId}`));
       const draft = JSON.parse(sessionStorage.getItem(key ?? '') ?? '{"entries":[]}') as
@@ -366,10 +380,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
           end?: { manuscript_block_id: string; offset: number } } }[] };
       return draft.entries.map(({ reference }) => [reference.kind, reference.start?.manuscript_block_id,
         reference.start?.offset, reference.end?.manuscript_block_id, reference.end?.offset]);
-    }, projectId)).toEqual([['chapter_text', secondary.manuscript_block_id, 0, secondary.manuscript_block_id, 4],
-      ['chapter_text', addedId, 0, addedId, 'A second paragraph.'.length]]);
+    }, projectId), [['chapter_text', secondary.manuscript_block_id, 0, secondary.manuscript_block_id, 4],
+      ['chapter_text', addedId, 0, addedId, 'A second paragraph.'.length],
+      ['chapter_text', addedId, 0, addedId, 'A second'.length]]);
     // The later request of the journey works on the whole Chapter, so the author removes the references again.
-    for (const left of [1, 0]) {
+    for (const left of [2, 1, 0]) {
       await page.locator('[data-selection-reference-label] [data-remove-selection-reference]').first().click();
       await expect(page.locator('[data-selection-reference-label]')).toHaveCount(left);
     }

@@ -158,42 +158,35 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
 }
 
 /**
- * The entry of a reference that waits for the new blocks of an accepted candidate, after the editor shows `blocks`.
- * `whole` is true when the editor shows a new document, as a hydrate or a new editor does.
+ * Gives each reference of one Chapter that waits for the new blocks of an accepted candidate the blocks of the
+ * editor document at `revisionId`. Only the document of the accepted Revision names the new blocks:
+ * - The target block and the next blocks have the texts of the parts: the reference becomes Chapter text of them.
+ * - Else the reference leaves the draft, because the accepted Revision does not have the parts.
+ * A document of another Revision changes nothing.
  */
-function shownSplit(entry: DraftReference, split: AcceptedSplit, chapterId: string,
-  blocks: readonly { manuscript_block_id: string; text: string }[], tree: ChapterOrder | undefined,
-  whole: boolean): DraftReference | undefined {
-  const target = entry.candidate === undefined ? -1
-    : blocks.findIndex((block) => block.manuscript_block_id === entry.candidate!.blockId);
-  if (target < 0) return entry;
-  const shown = blocks.slice(target, target + split.parts.length);
-  if (shown.length !== split.parts.length || shown.some((block, index) => block.text !== split.parts[index])) {
-    // The target block shows the accepted text, but the next blocks are not the parts: the reference leaves.
-    // A document of the Revision before the acceptance does not show the accepted text, so the reference waits.
-    return whole && shown[0]!.text === split.parts[0] ? undefined : entry;
-  }
-  const point = ({ part, offset }: PartPoint) => ({ manuscript_block_id: shown[part]!.manuscript_block_id, offset });
-  const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: chapterId,
-    base_authoritative_revision_id: split.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-    start: point(split.start), end: point(split.end) };
-  const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference });
-  return { key: entry.key, moved: false, reference,
-    label: label ?? { chapter: entry.label.chapter, part: entry.label.part } };
-}
-
-/**
- * Gives each reference of one Chapter that waits for the new blocks of an accepted candidate the blocks of a new
- * editor. A new editor gets its document with no transaction, for example after an acceptance.
- */
-export function showAcceptedSplits(scope: ProjectScope, chapterId: string,
+export function showAcceptedSplits(scope: ProjectScope, chapterId: string, revisionId: string,
   blocks: readonly { manuscript_block_id: string; text: string }[], tree: ChapterOrder | undefined): void {
   const draft = read(scope);
+  const shownSplit = (entry: DraftReference, split: AcceptedSplit): DraftReference | undefined => {
+    const target = entry.candidate === undefined ? -1
+      : blocks.findIndex((block) => block.manuscript_block_id === entry.candidate!.blockId);
+    const shown = target < 0 ? [] : blocks.slice(target, target + split.parts.length);
+    if (shown.length !== split.parts.length || shown.some((block, index) => block.text !== split.parts[index])) {
+      return undefined;
+    }
+    const point = ({ part, offset }: PartPoint) => ({ manuscript_block_id: shown[part]!.manuscript_block_id, offset });
+    const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: chapterId,
+      base_authoritative_revision_id: split.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      start: point(split.start), end: point(split.end) };
+    const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference });
+    return { key: entry.key, moved: false, reference,
+      label: label ?? { chapter: entry.label.chapter, part: entry.label.part } };
+  };
   let changed = false;
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
-    const next = entry.reference.chapter_id !== chapterId || entry.split === undefined ? entry
-      : shownSplit(entry, entry.split, chapterId, blocks, tree, true);
+    const next = entry.reference.chapter_id !== chapterId || entry.split?.revisionId !== revisionId ? entry
+      : shownSplit(entry, entry.split);
     changed ||= next !== entry;
     if (next !== undefined) entries.push(next);
   }
@@ -208,6 +201,7 @@ export function showAcceptedSplits(scope: ProjectScope, chapterId: string,
  * - A candidate reference moves while the editor shows its candidate, and takes the newest Proposal
  *   Revision. It disappears when its text is deleted or when its candidate goes from the document, for
  *   example after a rejection or a withdrawal.
+ * - A reference that waits for the new blocks of an accepted candidate does not change (see `showAcceptedSplits`).
  */
 export function trackDraftReferences(scope: ProjectScope, chapterId: string, tracked: Set<string>,
   transaction: Transaction, tree: ChapterOrder | undefined): void {
@@ -272,7 +266,7 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
     const next = entry.reference.chapter_id !== chapterId ? entry
-      : entry.split !== undefined ? shownSplit(entry, entry.split, chapterId, blocks, tree, hydrate)
+      : entry.split !== undefined ? entry
         : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
           : candidateEntry(entry, entry.reference);
     changed ||= next !== entry;
@@ -282,17 +276,17 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
 }
 
 /**
- * The candidate text of each accepted Operation, from the displayed read of the accepted Proposal Revision. A read
- * of another Proposal Revision gives no text, because its candidates can differ from the accepted candidates.
+ * The candidate text of each accepted Operation, from a read of the accepted Proposal Revision. A read of another
+ * Proposal Revision gives no text (`undefined`), because its candidates can differ from the accepted candidates.
  */
 export function acceptedCandidateTexts(
-  displayed: { revision_id: string; operations: readonly { operation_id: string; candidate_text: string }[] }
+  read: { revision_id: string; operations: readonly { operation_id: string; candidate_text: string }[] }
     | undefined,
   receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] },
-): Map<string, string> {
-  return new Map(displayed?.revision_id !== receipt.proposal_revision_id ? [] : displayed.operations
-    .filter((operation) => receipt.selected_operation_ids.includes(operation.operation_id))
-    .map((operation) => [operation.operation_id, operation.candidate_text]));
+): Map<string, string | undefined> {
+  const exact = read?.revision_id === receipt.proposal_revision_id ? read : undefined;
+  return new Map(receipt.selected_operation_ids.map((operationId) => [operationId,
+    exact?.operations.find((operation) => operation.operation_id === operationId)?.candidate_text]));
 }
 
 /**
@@ -318,22 +312,24 @@ function candidateParts(text: string): { start: number; text: string }[] {
  * - A reference that ends after the first part waits for the new blocks (see `AcceptedSplit`).
  * - A start in a line feed moves to the next part, and an end in a line feed moves to the end of the part before
  *   it. A reference that then has no text leaves the draft.
- * - A reference to an Operation with no accepted text stays a candidate reference.
+ * - A reference to an accepted Operation with no known text (`undefined`) leaves the draft, because the draft
+ *   cannot name its Chapter text.
  */
 export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
-  candidates: ReadonlyMap<string, string>, revisionId: string): void {
+  candidates: ReadonlyMap<string, string | undefined>, revisionId: string): void {
   const draft = read(scope);
   const accepted = (entry: DraftReference) => entry.reference.kind === "proposal_candidate_text"
     && entry.reference.proposal_id === proposalId && entry.candidate !== undefined
-    ? candidates.get(entry.reference.operation_id) : undefined;
-  if (!draft.entries.some((entry) => accepted(entry) !== undefined)) return;
+    && candidates.has(entry.reference.operation_id);
+  if (!draft.entries.some(accepted)) return;
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
-    const text = accepted(entry);
-    if (text === undefined || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
+    if (!accepted(entry) || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
       entries.push(entry);
       continue;
     }
+    const text = candidates.get(entry.reference.operation_id);
+    if (text === undefined) continue;
     const parts = candidateParts(text);
     const { start_offset: from, end_offset: to } = entry.reference;
     const startPart = parts.findIndex((part) => part.start + part.text.length > from);
