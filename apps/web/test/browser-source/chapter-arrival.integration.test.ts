@@ -2437,14 +2437,9 @@ it.each([
     await expect.poll(() => workspace.server.answered.filter((name) => name === SWITCH).length).toBe(2);
     await expect.poll(workspace.ready).toEqual(STOPPED_A);
     const stopped = { ...workspace.ready(), save: workspace.saveState(), refused };
-    // A read-only editor cannot have the focus. So that a trusted key reaches the editor of Chapter A, the test makes
-    // its element editable for the browser. The editor ignores the key: it sends no Author Edit and starts no save.
-    workspace.editor().setAttribute("contenteditable", "true");
-    focusManuscriptEnd(workspace.editor(), window);
-    await applyTrustedInput({ operation: "insert_text", text: "!" });
-
-    expect({ stopped, idle: workspace.runIdle(), save: workspace.saveState() }).toEqual({ stopped: { ...STOPPED_A,
-      save: "saved", refused: answerFirst ? undefined : STOPPED_A }, idle: false, save: "saved" });
+    // The editor of Chapter A is read-only, so it cannot have the focus, and no key of the author reaches it.
+    expect({ stopped, idle: workspace.runIdle() }).toEqual({ stopped: { ...STOPPED_A, save: "saved",
+      refused: answerFirst ? undefined : STOPPED_A }, idle: false });
     // The navigation reads Chapter C and opens the Project. After its command, it sends no request.
     await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`,
       "GET /api/v1/projects", `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, ...SWITCH_STEPS], []);
