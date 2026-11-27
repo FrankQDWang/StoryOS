@@ -58,7 +58,7 @@ When the Chapter read of the switch answers with a Revision that is not the Revi
 
 ### 5. A switch that does not reach the editor
 
-When the quiet step refuses, or the switch ends with a refusal, a conflict, or a failed read, the tab shows what the switch of today shows: the earlier Chapter and the sentence of today. When the Set Current Chapter command ends with no answer of the Server, its result is not known. The tab then accepts no input, reads the Project again, and shows the Chapter and the editor that the Server has. Section 4 applies to Arrival Input with that editor. When that read fails, the tab shows the sentence of today, and the editor accepts no input until a later selection reads the Project again. When the reopen finds that the tab lost the writer, the tab shows what the switch of today shows: the selected Chapter, read-only. In each case of this section that does not give Arrival Input to the editor of the read, Arrival Input goes to the notice of section 4.
+When the quiet step refuses, or the switch ends with a refusal, a conflict, or a failed read, the tab shows what the switch of today shows: the earlier Chapter and the sentence of today. When the Set Current Chapter command ends with no answer of the Server, its result is not known. The tab then accepts no input, reads the Project again, and shows the Chapter and the editor that the Server has. Section 4 applies to Arrival Input with that editor. When that read fails, the tab shows the sentence of today, and the editor accepts no input until a later selection reads the Project again. When the reopen finds that the tab lost the writer, the tab shows what the switch of today shows: the selected Chapter, read-only. In the other cases of this section, Arrival Input goes to the notice of section 4.
 
 ### 6. A second selection
 
@@ -71,7 +71,7 @@ While the switch waits for the `Retry-After` of a Challenge rate limit, the Arri
 
 ### What does not change
 
-- A tab that does not hold the writer, the switch of a Proposal navigation, and the Author Undo of a switch keep the path of today. One exception: when the command of a Proposal navigation ends with no answer of the Server, the editor accepts no input until a selection reads the Project again, as in section 5.
+- A tab that does not hold the writer, the switch of a Proposal navigation, and the Author Undo of a switch keep the path of today. Two exceptions: when the command of a Proposal navigation ends with no answer of the Server, the editor accepts no input until a selection reads the Project again, as in section 5. A command of a selection waits for the end of a command of a Proposal navigation in flight, as in section 6.
 - The Current Chapter of [ADR 0026](0026-keep-current-chapter-outside-authoritative-state.md) and each check of the Server stay.
 - The Editor Session Writing Controller stays the one owner of the Pending Edit Projection ([ADR 0046](0046-give-the-pending-edit-projection-one-owner-in-the-editor-session-writing-controller.md)). Arrival Input is outside the projection until the hand-over. A current-chapter change still needs no unsettled input of the earlier Chapter.
 - Input in a Chapter that has a base enters the Local Edit Journal at once ([ADR 0065](0065-keep-challenge-wait-input-in-the-local-edit-journal-as-records-that-follow-an-unsettled-group.md)). Arrival Input has no base, so it cannot be a Journal record.

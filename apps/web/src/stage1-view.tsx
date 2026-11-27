@@ -340,6 +340,11 @@ function ProjectEditorView({
     navigationCommandRef.current = value;
     setNavigationCommandState(value);
   };
+  // The end of the command of a Proposal navigation in flight, and the count of these commands. A command of a contents
+  // selection waits for that end, and it does not go out after a later navigation command.
+  const navigationEndRef = useRef<Promise<void> | undefined>(undefined);
+  const navigationEndedRef = useRef<() => void>(() => {});
+  const navigationCommandsRef = useRef(0);
   // True after a Set Current Chapter command of this part ended with no answer of the Server, until the tab read the
   // Current Chapter of the Server. Until then, the editor accepts no input (ADR 0105, section 5).
   const [resultUnknown, setResultUnknownState] = useState(false);
@@ -628,8 +633,8 @@ function ProjectEditorView({
                 const open = next.project.project.open;
                 const current = next.kind === "project-ready" && open.kind === "current_chapter"
                   ? open.current_chapter_id : undefined;
-                const noEffect = current === serverChapterRef.current && chapter === unknownChapter && chapter === goal();
-                if (current !== undefined && current !== serverChapterRef.current) {
+                const moved = current !== undefined && current !== serverChapterRef.current;
+                if (moved) {
                   // The command had an effect, so the Editor Session has a new base.
                   reopened = true;
                   changed = true;
@@ -637,16 +642,17 @@ function ProjectEditorView({
                   movedRef.current = true;
                   reopenAt = current;
                 }
-                // With no effect, this editor accepts input again only when the read gives its editor with the writer.
+                // With no move, this editor accepts input again only when the read gives its editor with the writer.
                 // Else the tab shows the Project as the read gives it.
                 const same = !movedRef.current && next.kind === "project-ready" && next.editor.kind === "editor-ready"
                   && next.editor.session.writer.kind === "current_writer";
-                if (current === undefined || (noEffect && !same)) {
+                if (current === undefined || (!moved && !same)) {
                   handedOff = true;
                   onReopened(next);
                   return;
                 }
-                if (noEffect) {
+                // The command of this switch had no effect, and its Chapter is still the newest selection.
+                if (!moved && chapter === unknownChapter && chapter === goal()) {
                   setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
                   return;
                 }
@@ -680,6 +686,15 @@ function ProjectEditorView({
                   target = opened.chapter;
                   targets.set(chapter, target);
                 }
+                // A command of a Proposal navigation in flight can change the Current Chapter. So this command waits
+                // for its end, and the step starts again from its result.
+                const navigationEnd = navigationEndRef.current;
+                if (navigationEnd !== undefined || resultUnknownRef.current) {
+                  await navigationEnd;
+                  if (generation !== switchGenerationRef.current) return;
+                  continue;
+                }
+                const navigations = navigationCommandsRef.current;
                 // A Command Challenge rate limit propagates to the wait. A newer selection after the Command Challenge
                 // replaces the command before it goes out.
                 const switched = await setOwnedCurrentChapter({
@@ -691,8 +706,8 @@ function ProjectEditorView({
                   expectedCurrentChapterId: serverChapterRef.current,
                   expectedTargetRevisionId: target.chapter.current_revision.revision_id,
                   editorSessionId,
-                  // An unknown result of a Proposal navigation during the Command Challenge also replaces the command.
-                  proceed: () => chapter === goal() && !resultUnknownRef.current,
+                  // A command of a Proposal navigation during the Command Challenge also replaces the command.
+                  proceed: () => chapter === goal() && navigationCommandsRef.current === navigations,
                 }).catch((error: unknown) => {
                   if (error instanceof SkippedCurrentChapterError) return undefined;
                   if (!(error instanceof UnknownCurrentChapterResultError)) throw error;
@@ -909,7 +924,11 @@ function ProjectEditorView({
       const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
-        onCommandSent: () => { setNavigationCommand(true); },
+        onCommandSent: () => {
+          navigationCommandsRef.current += 1;
+          navigationEndRef.current = new Promise((resolve) => { navigationEndedRef.current = resolve; });
+          setNavigationCommand(true);
+        },
         // After an effect, the Editor Session has a new base, so this editor accepts no input until a reopen, and the
         // next selection expects the new Current Chapter.
         onCommandEnded: (end) => {
@@ -920,6 +939,8 @@ function ProjectEditorView({
             setReadOnly(true);
           }
           setNavigationCommand(false);
+          navigationEndRef.current = undefined;
+          navigationEndedRef.current();
         },
         onOpened: (next, focus, notice) => {
           setSwitchRecovery(undefined); onProposalOpened(checked(next), focus, notice);

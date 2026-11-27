@@ -76,8 +76,8 @@ export async function setOwnedCurrentChapter(options: {
           if (error instanceof StoryOSProtocolError && (retried || endsCommand(error))) {
             sent.delete(command.idempotencyKey);
           }
+          // The repeat got no answer and can have applied the command. A later intent must not get its replay.
           if (!(error instanceof StoryOSProtocolError) && retried) {
-            // The caller reads the result, so a replay of this key must not give it again to a later intent.
             sent.delete(command.idempotencyKey);
             inFlight.delete(identity);
             throw new UnknownCurrentChapterResultError("the Set Current Chapter command got no answer");
