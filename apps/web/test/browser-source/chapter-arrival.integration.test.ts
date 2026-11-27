@@ -64,7 +64,8 @@ async function sha256(body: string): Promise<string> {
  * whose expected Current Chapter is not the Current Chapter with the conflict `stale_current_chapter`. With
  * `lostSwitch`, the next `lostSwitch` responses of a switch do not arrive, after the fake answered each one. A repeat
  * with the same idempotency key gets the response of the first one. The Server does not get the next `unreachableSwitch`
- * switch requests. A switch to a Chapter in `conflicts` has the conflict `wrong_target_head`.
+ * switch requests. A switch to a Chapter in `conflicts` has the conflict `wrong_target_head`. With `deleteChapter`, the
+ * removal of Chapter C applies.
  * `holdAnswer(name)` holds the response of the next request of that name, after the fake answered it, until
  * `release(name)`. A name in `refuse` of the Activity read, the Project read, the Editor Session read, or the Command
  * Challenge has no answer.
@@ -94,7 +95,7 @@ function arrivalServer() {
     effect: undefined as unknown, limited: false, emptyAfterSwitch: false,
     answered: [] as string[], acceptEdits: false, editRequests: [] as Record<string, unknown>[], truncated: false,
     run: undefined as ({ run_id: string } & Record<string, unknown>) | undefined, switches: [] as string[][],
-    lostSwitch: 0, unreachableSwitch: 0, conflicts: new Set<string>(),
+    lostSwitch: 0, unreachableSwitch: 0, conflicts: new Set<string>(), deleteChapter: false,
     hold(name: string) { holding.add(name); },
     holdAnswer(name: string) { holdingAnswers.add(name); },
     /** Another tab makes `chapterId` the Current Chapter. */
@@ -225,7 +226,7 @@ function arrivalServer() {
     if (name === `DELETE ${P}/chapters/${CHAPTER_C}` && server.refuse.has(name)) {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
     }
-    if (name === `DELETE ${P}/chapters/${CHAPTER_C}`) {
+    if (name === `DELETE ${P}/chapters/${CHAPTER_C}` && server.deleteChapter) {
       const reply = JSON.parse(JSON.stringify(deleteChapterFixture).replaceAll(deleteChapterFixture.project.project_id,
         PROJECT)) as typeof deleteChapterFixture;
       return jsonResponse({ ...reply, project: { ...reply.project, open: open() },
@@ -423,12 +424,28 @@ async function openWorkspace(prepare: (server: ReturnType<typeof arrivalServer>[
     pointer(chapterId, false);
     return started;
   };
-  /** Keeps the pointer on a Chapter until the tab has its copy. */
+  /**
+   * Keeps the pointer on a Chapter until the tab has its copy. A copy with no fact "no open suggestion" reads its open
+   * suggestions again at each stay (#1934). Such a read starts only after the copy has text, so then the helper waits
+   * for one such read and its answer.
+   */
   const copy = async (chapterId: string) => {
+    const list = openProposals(chapterId);
+    const lists = (names: readonly string[]) => names.filter((name) => name === list).length;
     pointer(chapterId, true);
     expect(stay()).toBe(1);
     pointer(chapterId, false);
-    await expect.poll(() => stayTimers(chapterId)).toBe(0);
+    await expect.poll(() => [`GET ${P}/chapters/${chapterId}`, list].every((name) => server.answered.includes(name)))
+      .toBe(true);
+    const before = lists(server.requests);
+    await expect.poll(() => {
+      if (stayTimers(chapterId) === 0) return true;
+      pointer(chapterId, true);
+      stay();
+      pointer(chapterId, false);
+      return lists(server.requests) > before;
+    }).toBe(true);
+    await expect.poll(() => lists(server.answered)).toBe(lists(server.requests));
   };
   // Each read of the open answered before a test starts, so no read of the open comes after `requests.length`. A read
   // that the test holds in `prepare` waits until the test releases it.
@@ -534,21 +551,28 @@ it("reads only the open suggestions at the pointer when a copy has text and no l
   expect(workspace.server.requests.slice(before)).toEqual([openProposals(CHAPTER_B)]);
 });
 
-// A list of the open suggestions from before a Proposal change does not give the fact again (#1934).
-it("reads the open suggestions again at the pointer when a Proposal change came after the list of the copy", async () => {
-  const workspace = await openWorkspace((server) => { server.hold(ACTIVITY); });
+// A copy with text and no fact "no open suggestion" reads the open suggestions again at each stay (#1934).
+it.each([
+  { reason: "a Proposal change came after the list of the copy", events: "1" },
+  { reason: "the list of the copy has an open suggestion", events: "0" },
+])("reads the open suggestions again at the pointer when $reason", async ({ reason, events }) => {
+  const workspace = await openWorkspace((server) => {
+    server.hold(ACTIVITY);
+    if (events === "0") server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000474";
+  });
   await workspace.copy(CHAPTER_B);
-  workspace.server.activity = await runEvent();
+  if (events === "1") workspace.server.activity = await runEvent();
   workspace.server.release(ACTIVITY);
   await expect.poll(() => workspace.root.querySelector("[data-activity-processed-through]")
-    ?.getAttribute("data-activity-processed-through")).toBe("1");
+    ?.getAttribute("data-activity-processed-through")).toBe(events);
   const before = workspace.server.requests.length;
+  const answered = workspace.server.answered.length;
 
   workspace.pointer(CHAPTER_B, true);
-  expect(workspace.stay()).toBe(1);
+  expect({ reason, stays: workspace.stay() }).toEqual({ reason, stays: 1 });
   workspace.pointer(CHAPTER_B, false);
 
-  await expect.poll(() => workspace.stayTimers(CHAPTER_B)).toBe(0);
+  await expect.poll(() => workspace.server.answered.length - answered).toBe(1);
   expect(workspace.server.requests.slice(before)).toEqual([openProposals(CHAPTER_B)]);
 });
 
@@ -584,10 +608,13 @@ it.each([
   { source: "contents", during: { title: "Chapter B", body: "Beta", editable: true, alert: undefined, editors: 1 } },
   { source: "a search result", during: { title: "Chapter A", body: "Base", editable: true, alert: undefined,
     editors: 1 } },
+  // A search result has no Arriving Chapter, so its switch reads no open suggestions of a Chapter with no copy (#1934).
+  { source: "a search result with no copy", during: { title: "Chapter A", body: "Base", editable: true,
+    alert: undefined, editors: 1 } },
 ])("shows the selection from $source, and sends the requests of a switch of today in the same order", async ({
   source, during }) => {
   const workspace = await openWorkspace();
-  await workspace.copy(CHAPTER_B);
+  if (source !== "a search result with no copy") await workspace.copy(CHAPTER_B);
   if (source !== "contents") {
     const query = workspace.root.querySelector<HTMLInputElement>('input[name="manuscript-search-query"]')!;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(query, "Beta");
@@ -801,9 +828,10 @@ it("removes the fact of no open suggestion when a list of the same Proposal has 
   // Another tab edits the candidate text of the Proposal in Chapter C. The switch reads the list again, because the
   // copy has no fact, and then the display of Chapter C reads it (#1934).
   workspace.server.lists[CHAPTER_C] = "018f0000-0000-7001-8000-000000000475";
+  const mark = workspace.server.requests.length;
   workspace.button(CHAPTER_C).click();
-  await expect.poll(() => ({ title: workspace.shown().title, listed: workspace.server.requests
-    .filter((name) => name === openProposals(CHAPTER_C)).length })).toEqual({ title: "Chapter C", listed: 3 });
+  await expect.poll(() => ({ title: workspace.shown().title, listed: workspace.server.requests.slice(mark)
+    .filter((name) => name === openProposals(CHAPTER_C)).length })).toEqual({ title: "Chapter C", listed: 2 });
   await expect.poll(() => workspace.root.querySelector("[data-save-state]")?.getAttribute("data-save-state"))
     .toBe("saved");
   // The switch reads the open suggestions of Chapter B again, because its copy has no fact (#1934).
@@ -1736,7 +1764,7 @@ it("accepts input at once in a Chapter that the tab showed read-only, before the
   async () => {
     // The Journal does not open, so the tab opens in read-only local recovery.
     failJournalOpens = 1;
-    const workspace = await openWorkspace(undefined, { editable: false });
+    const workspace = await openWorkspace((server) => { server.deleteChapter = true; }, { editable: false });
     workspace.button(CHAPTER_B).click();
     await expect.poll(() => ({ title: workspace.shown().title,
       listed: workspace.server.answered.includes(openProposals(CHAPTER_B)) })).toEqual({ title: "Chapter B",
@@ -1835,6 +1863,49 @@ it("keeps the focus and the caret of a click in an Arriving Chapter that accepts
       focus: true, offset: clicked.offset, stored: body });
   });
 
+// ADR 0105, section 4: with no Arrival Input, a newer Revision of the Chapter read of the switch replaces the shown
+// text. The editor of the newer text keeps the focus and the caret of the click (#1934).
+it("keeps the focus and the caret of a click when a newer Revision replaces the text of an Arriving Chapter", async () => {
+  const workspace = await openWorkspace((server) => {
+    server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000474";
+  });
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  // The tab keeps the flight of a switch command for each target Revision, so this test has a Revision of its own.
+  workspace.server.texts[CHAPTER_B] = { revision: "018f0000-0000-7001-8000-000000000811", title: "Chapter B",
+    body: "Beta two" };
+  workspace.server.hold(READ_B);
+  workspace.server.hold(openProposals(CHAPTER_B));
+  // The Challenge waits, so that the switch with no Arrival Input does not end before the checks.
+  workspace.server.hold(CHALLENGE);
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => [READ_B, openProposals(CHAPTER_B)].every(workspace.server.isHeld)).toBe(true);
+  await userEvent.click(workspace.editor().querySelector("p")!);
+  const offset = getSelection()!.anchorOffset;
+  const earlier = workspace.editor();
+
+  workspace.server.release(READ_B);
+  await expect.poll(() => ({ body: workspace.shown().body, challenge: workspace.server.isHeld(CHALLENGE) }))
+    .toEqual({ body: "Beta two", challenge: true });
+  const replaced = { editable: workspace.shown().editable, newEditor: !earlier.isConnected,
+    focus: workspace.editor().contains(document.activeElement) };
+  delete workspace.server.lists[CHAPTER_B];
+  workspace.server.release(openProposals(CHAPTER_B));
+  await expect.poll(() => workspace.shown().editable).toBe(true);
+  // A read-only view does not show its selection, so the caret shows when the editor accepts input.
+  const caret = getSelection()!.anchorOffset;
+  await applyTrustedInput({ operation: "insert_text", text: "?" });
+  workspace.server.acceptEdits = true;
+  workspace.server.release(CHALLENGE);
+  await expect.poll(workspace.runIdle).toBe(true);
+
+  const body = `${"Beta two".slice(0, offset)}?${"Beta two".slice(offset)}`;
+  await expect.poll(() => ({ ...workspace.ready(), footer: workspace.footer() }))
+    .toEqual({ ...READY, body, footer: "已保存" });
+  expect({ replaced, caret, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({ replaced: { editable: false,
+    newEditor: true, focus: true }, caret: offset, stored: body });
+});
+
 it("accepts no new input while the switch waits for a Challenge rate limit", async () => {
   const workspace = await openWorkspace();
   await workspace.copy(CHAPTER_B);
@@ -1912,13 +1983,14 @@ it("accepts no more input when the Chapter read of the switch gives another Revi
   await expect.poll(() => workspace.server.isHeld(CHALLENGE)).toBe(true);
   await workspace.typeAtEnd("!");
   // The text of the Arrival Input stays on the screen.
-  const stopped = { ...workspace.shown(), save: workspace.saveState() };
+  const stopped = { ...workspace.shown(), save: workspace.saveState(), footer: workspace.footer() };
   workspace.server.release(CHALLENGE);
 
   await expect.poll(() => ({ ...workspace.ready(), notice: workspace.notice()?.text })).toEqual({ ...READY,
     body: "Beta two", notice: "Beta?" });
   await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY]);
-  expect(stopped).toEqual({ ...READY, body: "Beta?", editable: false, save: "saving" });
+  // While Arrival Input exists, the footer shows the saving state (ADR 0105, section 3).
+  expect(stopped).toEqual({ ...READY, body: "Beta?", editable: false, save: "saving", footer: "保存中" });
 });
 
 it("accepts 240 operations of Arrival Input, refuses the next one, writes none to the Local Edit Journal before the hand-over, and saves them after it",

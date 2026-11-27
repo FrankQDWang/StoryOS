@@ -654,7 +654,8 @@ function ProjectEditorView({
                 if (target === undefined) {
                   // With no fact "no open suggestion", the tab reads the open suggestions together with the Chapter
                   // read, so that the Arriving Chapter can accept input before the switch ends (ADR 0105, section 3).
-                  if (copies.get(chapter)?.noOpenSuggestion !== true) void copies.readSuggestions(chapter);
+                  // Only a selection in the contents has an Arriving Chapter.
+                  if (arrives && copies.get(chapter)?.noOpenSuggestion !== true) void copies.readSuggestions(chapter);
                   const write = copies.chapterRead(chapter);
                   const opened = await openSelectedChapter({
                     baseUrl,
@@ -947,7 +948,9 @@ function ProjectEditorView({
   let input = arrival === undefined || inputRef.current?.chapterId !== arrival ? undefined : inputRef.current;
   if (arrival !== undefined && arriving !== undefined && (input?.chapterId !== arrival
     || (input.revisionId !== arriving.revisionId && !input.hasInput()))) {
-    input = createArrivalInput(arrival, arriving);
+    // A newer Revision replaces the text of the Arriving Chapter. A focused editor keeps the focus and the caret.
+    input = createArrivalInput(arrival, arriving, input?.chapterId === arrival && input.focused() ? input.selection()
+      : undefined);
   }
   inputRef.current = input;
   useSyncExternalStore(input?.subscribe ?? noChanges, () => input?.version());
@@ -987,7 +990,8 @@ function ProjectEditorView({
         key={selectedChapter.chapter.chapter_id}
         arriving={arrival === undefined ? undefined
           : input === undefined ? { key: "earlier", blocks: editorBlocks }
-          : { key: `${arrival}:${input.revisionId}`, blocks: input.blocks(), editable: accepting, input }}
+          : { key: `${arrival}:${input.revisionId}`, blocks: input.blocks(), editable: accepting, input,
+            initialSelection: input.focusAt() }}
         scope={state.project.project_scope}
         chapterId={selectedChapter.chapter.chapter_id}
         authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
@@ -1066,7 +1070,7 @@ function ProjectEditorView({
         data-arrival-no-open-suggestion={arriving !== undefined ? String(arriving.noOpenSuggestion)
           : handOver === undefined ? "" : String(copies.get(currentChapterId)?.noOpenSuggestion === true)}
       >
-        {arrival !== undefined && !accepting ? "正在打开本章…"
+        {arrival !== undefined && !accepting && !hasArrivalInput ? "正在打开本章…"
           : shownSaveState === "saved" ? "已保存"
           : shownSaveState === "saving" ? "保存中"
           : shownSaveState === "needs_attention" ? "需要处理"

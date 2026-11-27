@@ -164,6 +164,8 @@ export function ManuscriptEditor({
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: storyosEditorProps(firstBlockId),
+    onFocus() { arrivalRef.current?.focus(true); },
+    onBlur() { arrivalRef.current?.focus(false); },
     onCreate({ editor: created }) {
       const rendered = readManuscriptParagraphs(created.state.doc);
       if (rendered === undefined || !paragraphsEqual(rendered, blocks)) {
@@ -263,8 +265,7 @@ export function ManuscriptEditor({
 
   useEffect(() => {
     editor?.setEditable(editable);
-    // A read-only Arriving Chapter keeps the focus of a click, so that the caret shows at the click when it accepts
-    // input (#1934).
+    // A read-only Arriving Chapter keeps the focus of a click, for the caret at the start of input (#1934).
     if (editor === null || arrival === undefined) return;
     if (editable) editor.view.dom.removeAttribute("tabindex");
     else editor.view.dom.tabIndex = -1;
@@ -278,7 +279,9 @@ export function ManuscriptEditor({
     const { doc } = editor.state;
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(doc.resolve(clamp(initialSelection.anchor)),
       doc.resolve(clamp(initialSelection.head)))));
-    editor.view.focus();
+    // ProseMirror focuses only an editable view, and a read-only Arriving Chapter keeps the focus too (#1934).
+    if (editor.isEditable) editor.view.focus();
+    else editor.view.dom.focus({ preventScroll: true });
   }, [editor]);
 
   useEffect(() => {

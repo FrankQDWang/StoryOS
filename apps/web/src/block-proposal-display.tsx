@@ -84,7 +84,8 @@ export function BlockProposalDisplay({
    * while `editable` is true. The editor and the Proposal states of this Chapter end. The reads and the state of this
    * display stay for a switch that fails.
    */
-  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink }
+  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink;
+    initialSelection?: ManuscriptEditorProps["initialSelection"] }
     | undefined;
   /**
    * Each answer of the read of the open suggestions of this Chapter: the Proposal heads of a complete list, or
@@ -755,7 +756,7 @@ export function BlockProposalDisplay({
 
   if (arriving !== undefined) {
     return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={arriving.editable === true}
-      arrival={arriving.input} />;
+      arrival={arriving.input} initialSelection={arriving.initialSelection} />;
   }
   return (
     <>

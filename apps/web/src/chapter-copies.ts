@@ -89,8 +89,8 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
   let writes = 0;
   const lastWrite = new Map<string, number>();
   const noSuggestion = new Set<string>();
-  // The Proposals of the last complete list of each Chapter, and the epoch of that list.
-  const lists = new Map<string, { list: string; epoch: number }>();
+  // The Proposals of the last complete list of each Chapter.
+  const lists = new Map<string, string>();
   const listeners = new Set<() => void>();
   let version = 0;
   const changed = () => {
@@ -127,9 +127,9 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
         if (closed || started !== epoch) return;
         const list = heads === undefined ? undefined : [...heads].sort().join("|");
         // A Proposal can have a target in more than one Chapter, so a new list removes the fact from each copy.
-        if (list === undefined || list !== (lists.get(chapterId)?.list ?? "")) copies.proposalsChanged();
+        if (list === undefined || list !== (lists.get(chapterId) ?? "")) copies.proposalsChanged();
         if (list === undefined) lists.delete(chapterId);
-        else lists.set(chapterId, { list, epoch });
+        else lists.set(chapterId, list);
         if (list === "") noSuggestion.add(chapterId);
         changed();
       };
@@ -158,9 +158,9 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
         clearTimeoutImpl(stay);
         stays.delete(chapterId);
       }
-      // A pointer that only moves across the list starts no read. A copy with text and a list of its open suggestions
-      // since the last Proposal change needs no read.
-      const known = () => texts.has(chapterId) && lists.get(chapterId)?.epoch === epoch;
+      // A pointer that only moves across the list starts no read. A copy with text and the fact "no open suggestion"
+      // needs no read.
+      const known = () => texts.has(chapterId) && noSuggestion.has(chapterId);
       if (!inside || closed || known()) return;
       stays.set(chapterId, setTimeoutImpl(() => {
         stays.delete(chapterId);
