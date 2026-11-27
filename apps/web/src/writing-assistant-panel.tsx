@@ -419,13 +419,15 @@ export function WritingAssistantPanel({
   };
 
   /**
-   * Gives each Proposal of the Run to the editor. Gives false when the request record changed during a read. The
-   * Proposal reads go together, and the locators go in their order in one step, so the editor refreshes one time.
+   * Gives each Proposal of the Run to the editor. Gives false and no locator when the request record changed during a
+   * read, or when `selected` became false. The Proposal reads go together, and the locators go in their order in one
+   * step, so the editor refreshes one time.
    */
-  const showProposals = async (current: RequestReference, result: GetAgentRunResponse): Promise<boolean> => {
+  const showProposals = async (current: RequestReference, result: GetAgentRunResponse,
+    selected: () => boolean = () => true): Promise<boolean> => {
     if (context === undefined) return false;
     const stillCurrent = () =>
-      readReference(current.scope)?.correlationId === current.correlationId;
+      selected() && readReference(current.scope)?.correlationId === current.correlationId;
     const shown = shownProposals(result);
     const reads = shown.map((proposal) => proposal.locations.map((location) => location.outcome.kind !== "revised"
       ? undefined : getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
@@ -439,10 +441,7 @@ export function WritingAssistantPanel({
         const read = reads[index]![position];
         if (read !== undefined) {
           const answer = await read;
-          if (!stillCurrent()) {
-            give();
-            return false;
-          }
+          if (!stillCurrent()) return false;
           if ("error" in answer) {
             give();
             throw answer.error;
@@ -515,7 +514,8 @@ export function WritingAssistantPanel({
   /**
    * Opens a Conversation of the Project from the Host (ADR 0094 section 10). From the selection, the panel shows the
    * exchanges of no other Conversation: the author messages come with the Conversation read, and the result of each
-   * Run with its Run read. The Run reads go together. When all answered, the newest Run becomes the current exchange.
+   * earlier Run with its Run read. The Run reads go together. When all answered, the newest Run becomes the current
+   * exchange with its result.
    * A failure shows the panel as it was before the selection. The answers of an earlier selection change nothing.
    */
   const openConversation = async (conversationId: string, failure: string) => {
@@ -558,7 +558,7 @@ export function WritingAssistantPanel({
       setOpening(undefined);
       setReference(next);
       setRun(newest.run);
-      void showProposals(next, newest.run).catch(() => {});
+      void showProposals(next, newest.run, latest).catch(() => {});
     } catch {
       if (!latest()) return;
       setOpening(undefined);
@@ -748,9 +748,11 @@ export function WritingAssistantPanel({
   const opened = opening === undefined ? reference?.opened : opening.read?.opened;
   const earlierHidden = (runId: string | undefined) => opened?.truncated && runId === opened.firstRunId
     ? <p className="assistant-status" data-assistant-earlier-hidden="">更早的消息没有显示。</p> : null;
-  // A Conversation that opens is in place of the current one, with each of its Runs as an earlier exchange.
+  // A Conversation that opens is in place of the current one, with each of its Runs as an earlier exchange. The newest
+  // Run shows its result when it becomes the current exchange, so that its controls are made one time.
   const shownHistory = opening !== undefined
-    ? (opening.read?.rows ?? []).map((row) => openedExchange(row, opening.conversationId, opening.runs[row.run_id]))
+    ? (opening.read?.rows ?? []).map((row, index, rows) => openedExchange(row, opening.conversationId,
+      index === rows.length - 1 ? undefined : opening.runs[row.run_id]))
     : reference === undefined ? []
       : (reference.history ?? []).map((exchange) => ({ ...exchange, chapterId: exchange.chapterId ?? reference.chapterId }));
   const busy = sending || opening !== undefined;
