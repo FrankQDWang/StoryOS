@@ -286,6 +286,23 @@ async function validateSession(
   return session;
 }
 
+/** The binding and the writer of the stored Session `active` when another Session took the writer from it. */
+function lostWriterSession(value: unknown, scope: ProjectScope, active: string | null | undefined,
+  profile: Release1ProtocolProfile): Pick<GetEditorSessionResponse, "editor_session" | "writer"> | undefined {
+  const candidate = value as Partial<GetEditorSessionResponse> | undefined;
+  const writer = candidate?.writer;
+  const binding = candidate?.editor_session;
+  if (writer?.kind !== "read_only" || writer.reason !== "superseded_by_takeover"
+    || "writer_generation" in writer || !positiveU64(writer.observed_writer_generation)
+    || JSON.stringify(candidate?.project_scope) !== JSON.stringify(scope)
+    || !active || binding?.editor_session_id !== active || !binding.client_session_binding_ref
+    || !boundedU64(binding.client_session_generation)
+    || binding.client_contract_revision !== profile.release_identity.web_client_contract_revision
+    || binding.security_policy_revision !== SECURITY_POLICY_REVISION
+    || binding.disposition !== "open") return undefined;
+  return { editor_session: binding, writer };
+}
+
 type EditorWorkspaceOptions = {
   baseUrl: string;
   project: GetProjectResponse;
@@ -403,6 +420,13 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   const { database, active, sessionValue } = start;
   try {
     const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
+    // The Server keeps the earlier base of a Session that lost the writer, so only its binding and writer count. The
+    // tab shows the Chapter read-only, and its Journal keeps the input that the Server did not get (ADR 0106).
+    const lost = lostWriterSession(sessionValue, scope, active, profile);
+    if (lost !== undefined) {
+      database.close();
+      return { editor: { kind: "editor-read-only-recovery", code: "editor_session_read_only", ...lost } };
+    }
     const session = await validateSession(sessionValue, scope, chapter, profile, cryptoImpl);
     const partition = partitionFrom(session, scope, profile);
     const workspace: EditorWorkspace = { database, partition, session, cryptoImpl,

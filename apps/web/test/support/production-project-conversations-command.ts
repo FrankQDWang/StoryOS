@@ -98,7 +98,8 @@ export async function verifyProductionProjectConversations(context: BrowserConte
     assert.deepEqual(continued.map((exchange) => exchange[0]), [MESSAGE_A, MESSAGE_A2]);
     assert.deepEqual(continued[0], [MESSAGE_A, resultA]);
 
-    // 5. A new page, which has its own empty session storage, opens the address of B, and the panel shows B.
+    // 5. A new page, which has its own empty session storage, opens the address of B, and the panel shows B. The page
+    // takes over the writer at its open (ADR 0106 section 1).
     const next = await context.newPage();
     started.push(() => next.close());
     next.on("pageerror", (error) => errors.push(error.message));
@@ -112,7 +113,7 @@ export async function verifyProductionProjectConversations(context: BrowserConte
     assert.deepEqual(errors, []);
 
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 1, createAgentRun: 3 }, authorActions: 2 });
+      createVolume: 1, createChapter: 1, createAgentRun: 3, takeOverProjectWriter: 1 }, authorActions: 2 });
   } finally {
     for (const close of started.reverse()) await close();
   }

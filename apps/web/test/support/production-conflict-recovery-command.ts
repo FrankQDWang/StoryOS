@@ -86,9 +86,8 @@ export async function verifyConflictedProposalRecovery(input: {
   observer.setDefaultTimeout(10_000);
   try {
     assert.equal((await observer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
-    // The observer tab has no locator of its own. It gets the Proposal from the open Proposal list.
-    await observer.locator("[data-manuscript-editor][contenteditable='false']").waitFor();
-    await observer.locator("[data-take-over-writer]").click();
+    // The observer tab has no locator of its own. It gets the Proposal from the open Proposal list. It takes over the
+    // writer at its open (ADR 0106 section 1).
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
     releaseStaleAccept();
     await page.getByText("上次接受因编辑会话失效而被拒绝，候选文字仍保留。").waitFor();

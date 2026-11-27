@@ -142,15 +142,12 @@ it("keeps a taken-over writer editable after structure changes, a readable expor
   expect(Object.values(texts).reduce((total, text) => total + [...text].length, 0)).toBe(30_000);
   await resetCommandChallengeRateWindows();
 
-  // A new Editor Session is a secondary session. Its public takeover makes writer generation 2.
+  // A new Editor Session is a secondary session. Its takeover at the open makes writer generation 2.
   const realm = applicationWindow(frame);
   for (const key of Object.keys(realm.sessionStorage)) {
     if (key.startsWith("active_session:") && key.endsWith(`:${projectId}`)) realm.sessionStorage.removeItem(key);
   }
   await reloadProject(frame, projectId);
-  await expect.poll(() => appRoot(frame).querySelector("[data-take-over-writer]")?.tagName).toBe("BUTTON");
-  appRoot(frame).querySelector<HTMLButtonElement>("[data-take-over-writer]")?.click();
-  await expect.poll(() => appRoot(frame).querySelector("[data-take-over-writer]")).toBeNull();
   await waitWritable(frame);
 
   await createChapter(frame, "Chapter D");

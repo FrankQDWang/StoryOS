@@ -195,8 +195,8 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     assert.equal((await getAgentRun({ ...options, runId: cancelledId })).status, "cancelled");
     const observer = await context.newPage();
     try {
+      // The observer takes over the writer at its open (ADR 0106 section 1).
       await observer.goto(`${origin}/projects/${projectId}`);
-      await observer.locator('[data-take-over-writer]').click();
       await observer.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
       await page.reload();
       await page.locator('[data-manuscript-editor][contenteditable="false"]').waitFor();

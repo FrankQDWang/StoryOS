@@ -265,8 +265,7 @@ export async function verifyProductionStage11Journey(context: BrowserContext): P
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
     // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
-    // released it. So the author takes over the writing, as after each other end of a session.
-    await page.locator("[data-take-over-writer]").click();
+    // released it. So the page takes over the writing at its open (ADR 0106 section 1).
     await page.locator(EDITOR).waitFor();
     await typeInChapter(setup.chapterId, ["雨停了，林舟把船推下了水。"]);
     await expect.poll(() => chapterText(setup.chapterId), { timeout: 10_000 }).toContain("林舟把船推下了水");

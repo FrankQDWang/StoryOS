@@ -204,18 +204,9 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     ).waitFor({ state: "attached" });
     assert.equal(await manuscriptBody(writer), "Saved after replay generation two.");
 
-    assert.equal((await observer.goto(projectUrl))?.status(), 200);
-    await observer.locator(MANUSCRIPT_READONLY).waitFor();
-    await observer.locator("[data-take-over-writer]").waitFor();
-    const observerId = await sessionId(observer, projectId);
-    assert.notEqual(observerId, writerId);
-    const options = { baseUrl: origin, projectId,
-      fetchImpl: takeoverFetch(observer, origin, projectId, writerId, observerId) };
-    const prior = await getEditorSession({ ...options, editorSessionId: writerId });
+    const prior = await getEditorSession({ baseUrl: origin, projectId, editorSessionId: writerId,
+      fetchImpl: takeoverFetch(writer, origin, projectId, writerId, writerId) });
     assert.ok(prior.writer.kind === "current_writer");
-    const secondary = await getEditorSession({ ...options, editorSessionId: observerId });
-    assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session",
-      observed_writer_generation: prior.writer.writer_generation });
     const writerEditsHeld = new Promise<void>((resolve) => {
       releaseWriterEdits = resolve;
     });
@@ -248,8 +239,13 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await writer.keyboard.insertText("Unsettled before takeover.");
     await writer.locator('[data-save-state="saving"]').waitFor();
     await authorEditPosted;
-    await observer.locator("[data-take-over-writer]").click();
+    // The observer page opens a new Editor Session, which takes over the writer at its open (ADR 0106 section 1).
+    assert.equal((await observer.goto(projectUrl))?.status(), 200);
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    const observerId = await sessionId(observer, projectId);
+    assert.notEqual(observerId, writerId);
+    const options = { baseUrl: origin, projectId,
+      fetchImpl: takeoverFetch(observer, origin, projectId, writerId, observerId) };
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
     const winner = await getEditorSession({ ...options, editorSessionId: observerId });
     assert.deepEqual(winner.writer, { kind: "current_writer", writer_generation: generation });
@@ -265,6 +261,7 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
     await writer.locator(MANUSCRIPT_READONLY).waitFor();
     await writer.locator('[data-save-state="needs_attention"]').waitFor();
+    await writer.getByText("已在另一个标签页继续写作。").waitFor();
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     const oldJournal = await readJournal(writer, projectId);
     assert.ok(oldJournal.intents.length > 0 && oldJournal.payload_chains.length > 0);

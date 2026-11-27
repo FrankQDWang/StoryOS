@@ -191,8 +191,7 @@ export async function verifyProductionStage9Journey(context: BrowserContext): Pr
     await expect(page.locator('[data-assistant-availability="unavailable"] .assistant-status').first())
       .toHaveText(EMPTY_LINE);
     // The editor session of the first Server still holds the writer lease, because that Server stopped before the page
-    // released it. So the author takes over the writing, as after each other end of a session.
-    await page.locator("[data-take-over-writer]").click();
+    // released it. So the page takes over the writing at its open (ADR 0106 section 1).
     await page.locator(EDITOR).click();
     await page.keyboard.press("Enter");
     await page.keyboard.insertText("雨停了，林舟把船推下了水。");

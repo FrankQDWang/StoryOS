@@ -36,7 +36,7 @@ import type {
 } from "./editor-types.ts";
 import { createChallengeAdmissionWait, type ChallengeAdmissionTimers, type ChallengeAdmissionWait }
   from "./challenge-admission-wait.ts";
-import { AuthorUndoUnavailableError, InputBoundStopError, createEditorSessionWritingController }
+import { AuthorUndoUnavailableError, InputBoundStopError, WriterFencedError, createEditorSessionWritingController }
   from "./editor-session-writing.ts";
 import {
   BlockProposalDisplay,
@@ -57,7 +57,7 @@ import {
 import { renameOwnedProject } from "./rename-project.ts";
 import { SkippedCurrentChapterError, UnknownCurrentChapterResultError, setOwnedCurrentChapter }
   from "./set-current-chapter.ts";
-import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
+import { TakeOverWriterButton, takeOverWriter } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalDestination, type ProposalFocus, type ProposalNavigation }
   from "./proposal-navigation.ts";
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
@@ -118,12 +118,23 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   handOverStore: { current: ArrivalInput | undefined };
   /** The waiting selection. It stays through the change of the editor part (ADR 0105, section 6). */
   waitingStore: { current: WaitingSelection | undefined };
+  /** True until the first editor part of the open sends the automatic takeover (ADR 0106, section 1). */
+  automaticTakeover: { pending: boolean };
+  onAutomaticTakeoverEnded: () => void;
 }
 
 /** A selection that waits until the switch or the hand-over of Arrival Input ended. */
 type WaitingSelection = { chapterId: string; contents: boolean };
 
 const noChanges = () => () => {};
+
+const LOST_WRITER_SENTENCE = "已在另一个标签页继续写作。";
+const SECONDARY_SESSION_SENTENCE = "另一个标签页正在写作。接管写作后可以编辑。";
+
+/** True when the Server gave the Editor Session of `state` `secondary_session`: another Session holds the writer. */
+const secondarySession = (state: ProjectReadyState) => state.editor.kind === "editor-read-only-recovery"
+  && state.editor.editor_session !== undefined && state.editor.writer?.kind === "read_only"
+  && state.editor.writer.reason === "secondary_session";
 
 /** Resolves when no IME composition is open in the Arrival Input `typed`, after the capture of its end. */
 function compositionEnded(typed: ArrivalInput): Promise<void> {
@@ -181,6 +192,10 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   useEffect(() => () => { copies.close(); }, [copies]);
   const handOverStore = useRef<ArrivalInput | undefined>(undefined);
   const waitingStore = useRef<WaitingSelection | undefined>(undefined);
+  // Only the open takes over the writer with no action of the author, one time. A reopen, a switch, or a decision of
+  // the same open does not (ADR 0106, section 1).
+  const [automaticTakeover] = useState(() => ({ pending: secondarySession(state) }));
+  const [takingOver, setTakingOver] = useState(automaticTakeover.pending);
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
     if (copies.get(state.chapter.chapter.chapter_id) === undefined) {
@@ -228,7 +243,9 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const selectChapter = (chapterId: string) => editor.current?.selectChapter(chapterId) ?? Promise.resolve(false);
   const canChangeCurrentChapter = state.editor.kind === "editor-ready"
     && state.editor.session.writer.kind === "current_writer";
-  const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
+  // The Chapter of the address opens after the automatic takeover, which can give the writer to this tab.
+  const holdAddressConversation = useAddressChapter({ tree: takingOver ? undefined : tree, currentChapterId,
+    open: selectChapter,
     canChangeCurrentChapter,
     onNotFound: () => editor.current?.showRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
   return (
@@ -298,6 +315,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         copies={copies}
         handOverStore={handOverStore}
         waitingStore={waitingStore}
+        automaticTakeover={automaticTakeover}
+        onAutomaticTakeoverEnded={() => { setTakingOver(false); }}
         onStatus={setStatus} />}
     />
   );
@@ -307,12 +326,16 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
   proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
-  handOverStore, waitingStore,
+  handOverStore, waitingStore, automaticTakeover, onAutomaticTakeoverEnded,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const structureInFlightRef = useRef(false);
   const takeOverInFlightRef = useRef(false);
+  // The takeover in flight: the automatic takeover of the open, or a takeover from the button.
+  const [takeover, setTakeover] = useState<"automatic" | "button">();
+  // True after an Author Edit of this tab got `editor_writer_stale`: another tab took the writer.
+  const [fenced, setFenced] = useState(false);
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
@@ -902,6 +925,45 @@ function ProjectEditorView({
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
     : state.editor.writer;
+  const editorSessionId = state.editor.kind === "editor-ready" ? state.editor.session.editor_session.editor_session_id
+    : state.editor.editor_session?.editor_session_id;
+  const readOnlyWriter = state.editor.kind !== "editor-ready" && writer?.kind === "read_only" ? writer : undefined;
+  // Why the tab is read-only: another tab took the writer from this tab, or another tab holds it.
+  const lostWriter = fenced || readOnlyWriter?.reason === "superseded_by_takeover";
+  const otherWriter = !lostWriter && readOnlyWriter?.reason === "secondary_session";
+  const runTakeover = (kind: "automatic" | "button") => {
+    if (takeOverInFlightRef.current || editorSessionId === undefined) return;
+    takeOverInFlightRef.current = true;
+    setTakeover(kind);
+    const shownChapterId = selectedChapterIdRef.current;
+    void (async () => {
+      try {
+        const next = await takeOverWriter({ baseUrl, fetchImpl, cryptoImpl, projectId, editorSessionId,
+          observedWriterGeneration: readOnlyWriter?.observed_writer_generation, reopen: () => reopen() });
+        if (next === undefined) {
+          setSwitchRecovery("无法接管写作。");
+          return;
+        }
+        // The takeover keeps the Chapter on the screen: the next editor part selects it (ADR 0106, section 1).
+        if (next.kind === "project-ready" && next.editor.kind === "editor-ready"
+          && next.chapter.chapter.chapter_id !== shownChapterId) {
+          waitingStore.current = { chapterId: shownChapterId, contents: true };
+        }
+        onReopened(next);
+      } catch {
+        setSwitchRecovery("无法接管写作。");
+      } finally {
+        takeOverInFlightRef.current = false;
+        setTakeover(undefined);
+        if (kind === "automatic") onAutomaticTakeoverEnded();
+      }
+    })();
+  };
+  useEffect(() => {
+    if (!automaticTakeover.pending) return;
+    automaticTakeover.pending = false;
+    runTakeover("automatic");
+  }, []);
   const editorBlocks = handOver !== undefined ? handOver.blocks()
     : selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pendingParagraphs(pending)
@@ -916,6 +978,7 @@ function ProjectEditorView({
       return;
     }
     if (error instanceof InputBoundStopError) setSwitchRecovery(INPUT_BOUND_STOP_MESSAGE);
+    if (error instanceof WriterFencedError) setFenced(true);
     setReadOnly(true);
     setSaveState("needs_attention");
     setEditorFailure(error instanceof Error ? error.message : "Manuscript editor failed");
@@ -1005,6 +1068,12 @@ function ProjectEditorView({
         : (switchRecovery ?? proposalNotice) === undefined ? null : (
           <p role="alert">{switchRecovery ?? proposalNotice}</p>
         )}
+      {takeover === "automatic" || (!lostWriter && !otherWriter) || editorSessionId === undefined ? null : (
+        <div className="writer-read-only">
+          <p data-writer-read-only="">{lostWriter ? LOST_WRITER_SENTENCE : SECONDARY_SESSION_SENTENCE}</p>
+          <TakeOverWriterButton running={takeover === "button"} onClick={() => { runTakeover("button"); }} />
+        </div>
+      )}
       <h2>{arriving?.title ?? selectedChapter.chapter.title}</h2>
       <ArrivalNoticeSlot notice={unsavedNotice} />
       <BlockProposalDisplay
@@ -1090,7 +1159,9 @@ function ProjectEditorView({
         data-arrival-no-open-suggestion={arriving !== undefined ? String(arriving.noOpenSuggestion)
           : handOver === undefined ? "" : String(copies.get(currentChapterId)?.noOpenSuggestion === true)}
       >
-        {shownSaveState === "saved" ? "已保存"
+        {takeover !== undefined ? "正在接管写作…"
+          : lostWriter || otherWriter ? "只读"
+          : shownSaveState === "saved" ? "已保存"
           : shownSaveState === "saving" ? "保存中"
           : shownSaveState === "needs_attention" ? "需要处理"
           : "未保存"}
@@ -1122,23 +1193,6 @@ function ProjectEditorView({
           onLocalRecoveryContinued(next);
         }}
       /> : null}
-      {writer?.kind === "read_only"
-        ? (
-          <TakeOverWriterButton
-            state={state}
-            writer={writer}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            cryptoImpl={cryptoImpl}
-            inFlightRef={takeOverInFlightRef}
-            reopen={() => reopen()}
-            onReopened={onReopened}
-            onRefused={() => {
-              setSwitchRecovery("无法接管写作。");
-            }}
-          />
-        )
-        : null}
     </>
   );
 }

@@ -97,6 +97,9 @@ export class AuthorUndoUnavailableError extends Error {
   }
 }
 
+/** The Server refused an Author Edit with `editor_writer_stale`: another Editor Session holds the writer. */
+export class WriterFencedError extends Error {}
+
 const HARD_INPUT: readonly InputOrigin[] = ["composition_confirmation", "paste", "cut", "drop"];
 const STRUCTURAL_INPUT: readonly InputOrigin[] = ["split_block", "join_blocks", "move_block", "retype_block"];
 
@@ -279,7 +282,7 @@ export function createEditorSessionWritingController({
     // The same frozen group retries after a Challenge rate limit. The retry is a queued operation.
     const attempt = await challengeAdmission.attempt(() => submitGroup({
       workspace, baseUrl, fetchImpl, cryptoImpl,
-      onWriterFenced: () => fail(new Error("Editor Session is read only")),
+      onWriterFenced: () => fail(new WriterFencedError("Editor Session is read only")),
     }), () => {
       void enqueue(async () => {
         const ended = endWait;

@@ -72,7 +72,7 @@ async function deleteJournalDatabase(projectId: string): Promise<void> {
   }
 }
 
-it("synchronizes activity and keeps the editor writable after a takeover with no later command", {
+it("takes over at the open of a new Editor Session with no click, and stores the text typed after it", {
   timeout: 120_000,
 }, async () => {
   const frame = await openApplicationFrame("StoryOS exact-dist takeover activity resume");
@@ -90,7 +90,8 @@ it("synchronizes activity and keeps the editor writable after a takeover with no
   }
   await waitWritableAndSynchronized(frame);
 
-  // A secondary Editor Session with an empty Journal takes over, as a second Server origin does.
+  // A secondary Editor Session with an empty Journal, as a second Server origin has, takes over at its open with no
+  // click (ADR 0106 section 1).
   const realm = applicationWindow(frame);
   for (const key of Object.keys(realm.sessionStorage)) {
     if (key.startsWith("active_session:") && key.endsWith(`:${projectId}`)) realm.sessionStorage.removeItem(key);
@@ -100,10 +101,6 @@ it("synchronizes activity and keeps the editor writable after a takeover with no
   const reloaded = nextFrameLoad(frame);
   frame.src = `/projects/${projectId}`;
   await reloaded;
-  await expect.poll(() => appRoot(frame).querySelector("[data-take-over-writer]")?.tagName, { timeout: 15_000 })
-    .toBe("BUTTON");
-  appRoot(frame).querySelector<HTMLButtonElement>("[data-take-over-writer]")?.click();
-  await expect.poll(() => appRoot(frame).querySelector("[data-take-over-writer]")).toBeNull();
   await waitWritableAndSynchronized(frame);
 
   const root = appRoot(frame);
@@ -118,5 +115,11 @@ it("synchronizes activity and keeps the editor writable after a takeover with no
   const saved = await getChapter({ baseUrl: page.location.origin, projectId, chapterId,
     fetchImpl: page.fetch.bind(page) });
   expect(saved.chapter.current_revision.body).toBe("接管后");
+  // A new load of the tab shows the stored text, and the tab keeps the writer with no second takeover.
+  const loaded = nextFrameLoad(frame);
+  page.location.reload();
+  await loaded;
+  await waitWritableAndSynchronized(frame);
+  expect(manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame)))).toBe("接管后");
   await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { takeOverProjectWriter: 1 } });
 });

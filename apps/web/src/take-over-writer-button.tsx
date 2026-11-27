@@ -1,70 +1,38 @@
-import { useState } from "react";
+import { getEditorSession } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
-import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { ControlledProjectState, ProjectReadyState } from "./editor-types.ts";
+import type { ControlledProjectState } from "./editor-types.ts";
 import { takeOverOwnedProjectWriter } from "./take-over-writer.ts";
 
-export function TakeOverWriterButton({
-  state,
-  writer,
-  baseUrl,
-  fetchImpl,
-  cryptoImpl,
-  inFlightRef,
-  reopen,
-  onReopened,
-  onRefused,
-}: {
-  state: ProjectReadyState;
-  writer: Extract<EditorWriterProjection, { kind: "read_only" }>;
+/**
+ * Takes over the writer for the Editor Session `editorSessionId` and opens the Project again (ADR 0106 section 1). With
+ * no `observedWriterGeneration`, it first reads the Session for it: the refusal of an Author Edit gives no generation.
+ * The result is undefined when the Server applied no takeover.
+ */
+export async function takeOverWriter(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-  inFlightRef: { current: boolean };
-  /** Opens the Project again after the takeover: it reads the Project and the list, then the Chapter and the Session. */
+  projectId: string;
+  editorSessionId: string;
+  observedWriterGeneration: string | undefined;
   reopen: () => Promise<ControlledProjectState>;
-  onReopened: (next: ControlledProjectState) => void;
-  onRefused: () => void;
-}) {
-  // From the click to the new view, the button is disabled and says that the takeover runs.
-  const [running, setRunning] = useState(false);
-  const session = state.editor.kind === "editor-read-only-recovery"
-    ? state.editor.editor_session
-    : undefined;
-  if (writer.reason !== "secondary_session" || session === undefined) return null;
+}): Promise<ControlledProjectState | undefined> {
+  const { baseUrl, fetchImpl, projectId, editorSessionId } = options;
+  let observed = options.observedWriterGeneration;
+  if (observed === undefined) {
+    const read = await getEditorSession({ baseUrl, projectId, editorSessionId, fetchImpl });
+    if (read.project_scope.project_id !== projectId || read.editor_session.editor_session_id !== editorSessionId
+      || read.writer.kind !== "read_only") return undefined;
+    observed = read.writer.observed_writer_generation;
+  }
+  const takeover = await takeOverOwnedProjectWriter({ baseUrl, fetchImpl, cryptoImpl: options.cryptoImpl, projectId,
+    editorSessionId, observedWriterGeneration: observed });
+  return takeover.result.kind === "takeover_applied" ? options.reopen() : undefined;
+}
+
+export function TakeOverWriterButton({ running, onClick }: { running: boolean; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      data-take-over-writer=""
-      disabled={running}
-      onClick={() => {
-        if (inFlightRef.current) return;
-        inFlightRef.current = true;
-        setRunning(true);
-        void (async () => {
-          try {
-            const takeover = await takeOverOwnedProjectWriter({
-              baseUrl,
-              fetchImpl,
-              cryptoImpl,
-              projectId: state.project.project.project_id,
-              editorSessionId: session.editor_session_id,
-              observedWriterGeneration: writer.observed_writer_generation,
-            });
-            if (takeover.result.kind !== "takeover_applied") {
-              onRefused();
-              return;
-            }
-            onReopened(await reopen());
-          } catch {
-            onRefused();
-          } finally {
-            inFlightRef.current = false;
-            setRunning(false);
-          }
-        })();
-      }}
-    >
+    <button type="button" data-take-over-writer="" disabled={running} onClick={onClick}>
       {running ? "正在接管写作…" : "接管写作"}
     </button>
   );
