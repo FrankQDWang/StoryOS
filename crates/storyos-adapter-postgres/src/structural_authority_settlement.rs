@@ -238,8 +238,9 @@ pub(crate) async fn update_session_base(
 }
 
 /// Moves the base Snapshot of each Editor Session of the Project to the Chapter Revision
-/// `revision_id` (ADR 0107: each Editor Session writes). Each base gets a new Snapshot ID of its
-/// own, because the Snapshot ID is the key of a base row.
+/// `revision_id` (ADR 0107: each Editor Session writes). Each base gets a new canonical Snapshot of
+/// its own at `project_activity_position`, because the Snapshot ID is the key of a base row and a
+/// browser with no stored Activity cursor starts the Activity stream from its base Snapshot.
 pub(crate) async fn update_each_session_base(
     client: &Client,
     scope: &ProjectScope,
@@ -259,6 +260,14 @@ pub(crate) async fn update_each_session_base(
     for session in sessions {
         let editor_session_id: String = session.get(/*idx*/ 0);
         let snapshot_id = Uuid::now_v7().to_string();
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            scope,
+            &snapshot_id,
+            project_activity_position,
+        )
+        .await
+        .map_err(unavailable)?;
         update_session_base(
             client,
             scope,

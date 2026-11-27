@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { getChapter, getEditorSession, getManuscriptTree, getProject,
+import { activityStream, getChapter, getEditorSession, getManuscriptTree, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { UUID_V7, assertForeignRefused, createStory, deleteChapterInput, problemOf, serverForFile,
 } from "../support/http-harness.ts";
@@ -141,6 +141,11 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   assert.deepEqual(bases.map((base) => [base.chapter_id, base.authoritative_head_revision_id]),
     [[chapterCId, headC.revision_id], [chapterCId, headC.revision_id]]);
   assert.notEqual(bases[0]?.snapshot_id, bases[1]?.snapshot_id);
+  // Each base names a canonical Snapshot, so a browser with no stored Activity cursor starts the stream from it.
+  for (const base of bases) {
+    assert.equal(await activityStream({ baseUrl, projectId, snapshotId: base.snapshot_id,
+      protocolRelease: "storyos.public.release.1", fetchImpl }), "");
+  }
 
   const removedC = (await story.send("deleteChapter", deleteChapterInput(story, chapterCId, "7"))).response;
   assert.equal(removedC.effect.kind, "authoritative_applied");
