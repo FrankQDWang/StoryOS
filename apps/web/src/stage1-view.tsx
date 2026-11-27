@@ -8,6 +8,7 @@ import {
   createProjectChallenge,
   getManuscriptTree,
   listProjects,
+  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   GetChapterResponse,
@@ -339,7 +340,15 @@ function ProjectEditorView({
     navigationCommandRef.current = value;
     setNavigationCommandState(value);
   };
-  const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
+  // True after a Set Current Chapter command of this part ended with no answer of the Server, until the tab read the
+  // Current Chapter of the Server. Until then, the editor accepts no input (ADR 0105, section 5).
+  const [resultUnknown, setResultUnknownState] = useState(false);
+  const resultUnknownRef = useRef(false);
+  const setResultUnknown = (value: boolean) => {
+    resultUnknownRef.current = value;
+    setResultUnknownState(value);
+  };
+  const [selectedChapter, setSelectedChapter] =useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // The Chapter whose switch waits for the Retry-After of a Command Challenge rate limit (#1679).
   const [switchWaiting, setSwitchWaiting] = useState<string>();
@@ -554,8 +563,9 @@ function ProjectEditorView({
     // A selection waits until the hand-over ended (ADR 0105, section 6).
     if (handOverRef.current !== undefined) return waitFor({ chapterId, contents }, selectedChapterIdRef.current);
     waitingStore.current = undefined;
-    // After a command had an effect, a selection of the Chapter of the editor opens it again on the new base.
-    if (chapterId === selectedChapterIdRef.current && !movedRef.current) {
+    // After a command had an effect, a selection of the Chapter of the editor opens it again on the new base. After an
+    // unknown result, it reads the Current Chapter of the Server.
+    if (chapterId === selectedChapterIdRef.current && !movedRef.current && !resultUnknownRef.current) {
       return Promise.resolve(false);
     }
     // The selection is the latest choice of the author, so an earlier Proposal navigation opens no Chapter after it.
@@ -590,6 +600,10 @@ function ProjectEditorView({
       // the Editor Session of this editor, it is at first the Current Chapter of the Server.
       let reopenAt = movedRef.current ? serverChapterRef.current : undefined;
       let changed = reopenAt !== undefined;
+      // The Chapter of the command of this switch whose result is not known, and the read that gave the Current Chapter
+      // of the Server when it is the goal.
+      let unknownChapter: string | undefined;
+      let learned: ControlledProjectState | undefined;
       try {
         const quiet = await active.wait.retry(() => {
           active.waiting = false;
@@ -601,6 +615,32 @@ function ProjectEditorView({
               revisionId: settled.authoritative_revision_id, blocks: pendingParagraphs(settled) });
             for (;;) {
               const chapter = goal();
+              // After an unknown result, the tab reads the Project to learn the Current Chapter of the Server before it
+              // sends a command. The read is the reopen when the goal is that Chapter (ADR 0105, section 5).
+              if (resultUnknownRef.current) {
+                const next = await reopen(chapter);
+                if (generation !== switchGenerationRef.current) return;
+                const open = next.kind === "project-ready" ? next.project.project.open : undefined;
+                if (open?.kind !== "current_chapter") {
+                  setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
+                  return;
+                }
+                setResultUnknown(false);
+                if (open.current_chapter_id !== serverChapterRef.current) {
+                  // The command had an effect, so the Editor Session has a new base.
+                  reopened = true;
+                  changed = true;
+                  serverChapterRef.current = open.current_chapter_id;
+                  movedRef.current = true;
+                  reopenAt = open.current_chapter_id;
+                } else if (chapter === unknownChapter && chapter === goal()) {
+                  // The command had no effect, so the earlier editor accepts input again.
+                  setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
+                  return;
+                }
+                if (open.current_chapter_id === goal()) learned = next;
+                continue;
+              }
               if (chapter !== serverChapterRef.current) {
                 let target = targets.get(chapter);
                 if (target === undefined) {
@@ -642,7 +682,11 @@ function ProjectEditorView({
                   proceed: () => chapter === goal(),
                 }).catch((error: unknown) => {
                   if (error instanceof SkippedCurrentChapterError) return undefined;
-                  throw error;
+                  // With no answer of the Server to the command and its repeat, the result is not known.
+                  if (error instanceof StoryOSProtocolError) throw error;
+                  unknownChapter = chapter;
+                  setResultUnknown(true);
+                  return undefined;
                 });
                 if (switched === undefined) continue;
                 if (switched.effect.kind !== "authoritative_applied"
@@ -681,7 +725,8 @@ function ProjectEditorView({
                 handedOff = true;
                 return;
               }
-              const next = await reopen(reopenAt);
+              const next = learned ?? await reopen(reopenAt);
+              learned = undefined;
               // No editor mounts for a Chapter that a later selection replaced.
               if (chapter !== goal()) continue;
               // The failure screen has no way back to the workspace, so a waiting selection runs from this editor part.
@@ -856,7 +901,8 @@ function ProjectEditorView({
         // After an effect, the Editor Session has a new base, so this editor accepts no input until a reopen, and the
         // next selection expects the new Current Chapter.
         onCommandEnded: (chapterId) => {
-          if (chapterId !== undefined) {
+          if (chapterId === null) setResultUnknown(true);
+          else if (chapterId !== undefined) {
             serverChapterRef.current = chapterId;
             movedRef.current = true;
             setReadOnly(true);
@@ -900,7 +946,7 @@ function ProjectEditorView({
   }, [hasArrivalInput]);
   const selectedChapterId = selectedChapter.chapter.chapter_id;
   // A message to the assistant targets the Current Chapter, so the author cannot send one during the arrival.
-  const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly
+  const canSubmit = selectedChapterId === currentChapterId && saveState === "saved" && !readOnly && !resultUnknown
     && arrival === undefined && handOver === undefined;
   // From the selection, the contents mark the Arriving Chapter as the selected Chapter.
   const markedChapterId = arrival ?? selectedChapterId;
@@ -959,7 +1005,7 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly && !navigationCommand}
+        editable={!readOnly && !navigationCommand && !resultUnknown}
         startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
           ? () => copies.suggestionRead(currentChapterId) : undefined}
         persistWorkspace={

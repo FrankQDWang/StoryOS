@@ -60,10 +60,11 @@ async function sha256(body: string): Promise<string> {
  * suggestions of a Chapter fails its read. `moveTo` changes the Current Chapter as another tab does. `switches` has the
  * expected and the new Current Chapter of each Set Current Chapter command. As the Server does, the fake refuses a command
  * whose expected Current Chapter is not the Current Chapter with the conflict `stale_current_chapter`. With
- * `lostSwitch`, the next switch applies and its response does not arrive. A repeat with the same idempotency key gets
- * the response of the first one. A switch to a Chapter in `conflicts` has the conflict `wrong_target_head`.
+ * `lostSwitch`, the next `lostSwitch` responses of a switch do not arrive, after the fake answered each one. A repeat
+ * with the same idempotency key gets the response of the first one. The Server does not get the next `unreachableSwitch`
+ * switch requests. A switch to a Chapter in `conflicts` has the conflict `wrong_target_head`.
  * `holdAnswer(name)` holds the response of the next request of that name, after the fake answered it, until
- * `release(name)`. A name in `refuse` of the Activity read fails the read.
+ * `release(name)`. A name in `refuse` of the Activity read or of the Project read fails the read.
  */
 function arrivalServer() {
   const scenario = createBrowserScenario();
@@ -90,7 +91,7 @@ function arrivalServer() {
     effect: undefined as unknown, lostWriter: false, limited: false, emptyAfterSwitch: false,
     answered: [] as string[], acceptEdits: false, editRequests: [] as Record<string, unknown>[], truncated: false,
     run: undefined as ({ run_id: string } & Record<string, unknown>) | undefined, switches: [] as string[][],
-    lostSwitch: false, conflicts: new Set<string>(),
+    lostSwitch: 0, unreachableSwitch: 0, conflicts: new Set<string>(),
     hold(name: string) { holding.add(name); },
     holdAnswer(name: string) { holdingAnswers.add(name); },
     /** Another tab makes `chapterId` the Current Chapter. */
@@ -119,6 +120,7 @@ function arrivalServer() {
         correlation_id: "018f0000-0000-7001-8000-000000000013", owner_user_id: OWNER,
         projects: [{ project_scope: scope, title: "Project A", revision: "1", open: open() }] });
     }
+    if (name === `GET ${P}` && server.refuse.has(name)) throw new TypeError("Failed to fetch");
     if (name === `GET ${P}`) return jsonResponse({ ...scenario.project, project: { ...scenario.project.project, open: open() } });
     const chapterId = Object.keys(texts).find((id) => name === `GET ${P}/chapters/${id}`);
     if (chapterId !== undefined) {
@@ -257,10 +259,6 @@ function arrivalServer() {
           resulting_heads: [revision] } };
       switchReplies.set(requestHeaders(init).get("idempotency-key") ?? "", reply);
       empty = server.emptyAfterSwitch;
-      if (server.lostSwitch) {
-        server.lostSwitch = false;
-        throw new TypeError("Failed to fetch");
-      }
       return jsonResponse(reply);
     }
     // The tests are not about these panels.
@@ -274,7 +272,15 @@ function arrivalServer() {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     server.requests.push(name);
     if (holding.delete(name)) await wait(name);
+    if (name === SWITCH && server.unreachableSwitch > 0) {
+      server.unreachableSwitch -= 1;
+      throw new TypeError("Failed to fetch");
+    }
     const response = await answer(name, init);
+    if (name === SWITCH && server.lostSwitch > 0) {
+      server.lostSwitch -= 1;
+      throw new TypeError("Failed to fetch");
+    }
     if (holdingAnswers.delete(name)) await wait(name);
     server.answered.push(name);
     return response;
@@ -2166,7 +2172,7 @@ it("repeats a command whose response did not arrive with its key after a newer s
     await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
     workspace.button(CHAPTER_C).click();
     await expect.poll(() => workspace.ready().title).toBe("Chapter C");
-    workspace.server.lostSwitch = true;
+    workspace.server.lostSwitch = 1;
     workspace.server.release(SWITCH);
 
     await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ title: "Chapter C",
@@ -2486,4 +2492,154 @@ it.each([
     await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS], [...PANEL_READS, ACTIVITY],
       ...after);
     expectSetup(workspace.server, before, ...copyReads(CHAPTER_B));
+  });
+
+// #1925: a Set Current Chapter command with no answer of the Server has an unknown result (ADR 0105, section 5).
+
+it("reads the Project and ends with the ready editor of the selected Chapter when the responses of a command and of its repeat are lost",
+  async () => {
+    const workspace = await openWorkspace((server) => { server.lostSwitch = 2; });
+    await workspace.copy(CHAPTER_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...READY, save: "saved", notice: undefined });
+    // After the two commands come the reads of the reopen, and no third command.
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, SWITCH, ...REOPEN_STEPS], panelReads(CHAPTER_B));
+    expect(workspace.server.switches).toEqual([[CHAPTER, CHAPTER_B], [CHAPTER, CHAPTER_B]]);
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B));
+  });
+
+/**
+ * The read of the Project after an unknown result, which opens the goal `goal` at once. With another Current Chapter
+ * `current` on the Server, the open reads that Chapter and the Editor Session again.
+ */
+const learnReads = (goal: string, current: string) => [...reopenSteps(goal), `GET ${P}/chapters/${current}`,
+  SESSION_READ];
+const UNKNOWN_NO_EFFECT_READS = learnReads(CHAPTER_B, CHAPTER);
+const STOPPED_UNKNOWN = { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章。" };
+
+it("shows the earlier Chapter with the sentence of today and an editor that accepts input when the command and its repeat do not reach the Server",
+  async () => {
+    const workspace = await openWorkspace((server) => { server.unreachableSwitch = 2; });
+    await workspace.copy(CHAPTER_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...STOPPED_UNKNOWN, save: "saved", notice: undefined });
+    const stopped = workspace.server.requests.length;
+    // The read of the Project shows Chapter A, so the tab forgets the command, and a later selection of Chapter B sends
+    // a new Command Challenge.
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() })).toEqual({ ...READY, save: "saved" });
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, SWITCH, ...UNKNOWN_NO_EFFECT_READS], [],
+      [...SWITCH_STEPS, ...REOPEN_STEPS], { anyOrder: panelReads(CHAPTER_B) });
+    expect({ stopped: stopped - before, switches: workspace.server.switches }).toEqual({
+      stopped: 4 + UNKNOWN_NO_EFFECT_READS.length, switches: [[CHAPTER, CHAPTER_B]] });
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B));
+  });
+
+it.each([
+  { command: "applied", later: CHAPTER_C, shown: { title: "Chapter C", body: "Gamma" } },
+  // A selection of the Chapter of the editor also reads the Project.
+  { command: "applied", later: CHAPTER, shown: { title: "Chapter A", body: "Base" } },
+  // The read shows that the command had no effect, and the later selection sends its command from Chapter A.
+  { command: "had no effect", later: CHAPTER_C, shown: { title: "Chapter C", body: "Gamma" } },
+])("keeps the editor read-only when the command $command and the read after it fails, and a later selection of $shown.title reads the Project before its command",
+  async ({ command, later, shown }) => {
+    const applied = command === "applied";
+    const workspace = await openWorkspace((server) => {
+      if (applied) server.lostSwitch = 2;
+      else server.unreachableSwitch = 2;
+    });
+    await workspace.copy(CHAPTER_B);
+    await workspace.copy(CHAPTER_C);
+    workspace.server.refuse.add(`GET ${P}`);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState() }))
+      .toEqual({ ...STOPPED_UNKNOWN, editable: false, save: "saved" });
+    // The Editor Session read of the failed read goes out after the Journal opens.
+    await expect.poll(() => workspace.server.requests.slice(before).filter((name) => name === SESSION_READ).length)
+      .toBe(1);
+    const stopped = workspace.server.requests.length;
+    workspace.server.refuse.delete(`GET ${P}`);
+    workspace.button(later).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice() }))
+      .toEqual({ ...shown, editable: true, alert: undefined, save: "saved", notice: undefined });
+    // The command of the later selection expects the Current Chapter that the read of the Project shows.
+    const current = applied ? CHAPTER_B : CHAPTER;
+    await expectRequests(workspace.server, before, [...SWITCH_STEPS, SWITCH], REOPEN_STEPS,
+      learnReads(later, current), [`GET ${P}/chapters/${later}`, CHALLENGE, SWITCH, ...reopenSteps(later)],
+      { anyOrder: panelReads(later) });
+    expect({ stopped: stopped - before, switches: workspace.server.switches }).toEqual({ stopped: 8,
+      switches: [...applied ? [[CHAPTER, CHAPTER_B], [CHAPTER, CHAPTER_B]] : [], [current, later]] });
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B), ...copyReads(CHAPTER_C));
+  });
+
+it.each([
+  { end: "the command applied", prepare: (server: Workspace["server"]) => { server.lostSwitch = 2; },
+    shown: { ...READY, body: "Beta?" }, notice: undefined, stored: "Beta?",
+    steps: [...SWITCH_STEPS, SWITCH, ...REOPEN_STEPS], panels: [...PANEL_READS, ACTIVITY], after: SAVE_B },
+  { end: "the command had no effect", prepare: (server: Workspace["server"]) => { server.unreachableSwitch = 2; },
+    shown: STOPPED_UNKNOWN, notice: "Beta?", stored: "Beta",
+    steps: [...SWITCH_STEPS, SWITCH], panels: [], after: [] as (string[] | AnyOrder)[] },
+])("applies section 4 to the Arrival Input with the editor of the read after an unknown result when $end",
+  async ({ prepare, shown, notice, stored, steps, panels, after }) => {
+    const workspace = await openWorkspace(prepare);
+    await workspace.copy(CHAPTER_B);
+    workspace.stopIdle();
+    workspace.server.hold(READ_B);
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+    await workspace.typeAtEnd("?");
+    workspace.server.acceptEdits = true;
+    workspace.server.release(READ_B);
+    if (notice === undefined) await expect.poll(workspace.runIdle).toBe(true);
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice()?.text }))
+      .toEqual({ ...shown, save: "saved", notice });
+    await expectRequests(workspace.server, before, notice === undefined ? steps : [...steps,
+      ...UNKNOWN_NO_EFFECT_READS], panels, ...after);
+    expect({ stored: workspace.server.texts[CHAPTER_B]!.body, edits: workspace.server.editRequests.length,
+      idle: workspace.runIdle() }).toEqual({ stored, edits: notice === undefined ? 1 : 0, idle: false });
+    expectSetup(workspace.server, before, ...copyReads(CHAPTER_B));
+  });
+
+it("keeps the editor read-only after an unknown result of the command of a Proposal navigation until a selection reads the Project",
+  async () => {
+    const workspace = await openWorkspace((server) => { seedRun(server, CHAPTER_C, [RETURN_C]); });
+    await expect.poll(() => workspace.root.querySelector("[data-proposal-return]")?.tagName).toBe("BUTTON");
+    await workspace.copy(CHAPTER_B);
+    const message = workspace.root.querySelector<HTMLTextAreaElement>('textarea[name="assistant-message"]')!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(message, "Help.");
+    message.dispatchEvent(new Event("input", { bubbles: true }));
+    const send = () => workspace.root.querySelector<HTMLButtonElement>("button.send-button")?.disabled;
+    await expect.poll(send).toBe(false);
+    workspace.server.lostSwitch = 2;
+    const before = workspace.server.requests.length;
+    workspace.root.querySelector<HTMLButtonElement>("[data-proposal-return]")!.click();
+    await expect.poll(() => workspace.server.requests.filter((name) => name === SWITCH).length).toBe(2);
+
+    // The editor accepts no input, and no message to the assistant can go out.
+    await expect.poll(() => ({ ...workspace.ready(), disabled: send() })).toEqual({ ...STOPPED_UNKNOWN, editable: false,
+      alert: "Failed to fetch", disabled: true });
+    const stopped = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+
+    await expect.poll(() => ({ ...workspace.ready(), save: workspace.saveState(), disabled: send() })).toEqual({ ...READY,
+      save: "saved", disabled: false });
+    // The read of the Project shows Chapter C, so the command of Chapter B expects Chapter C.
+    await expectRequests(workspace.server, before, [READ_C, "GET /api/v1/protocol", `GET ${P}`,
+      "GET /api/v1/projects", `GET ${P}/chapters/${CHAPTER}`, SESSION_READ, CHALLENGE, SWITCH, SWITCH], [],
+      learnReads(CHAPTER_B, CHAPTER_C), [...SWITCH_STEPS, ...REOPEN_STEPS],
+      { anyOrder: [...panelReads(CHAPTER_B), `GET ${P}/proposals/${PROPOSAL}`] });
+    expect({ stopped: stopped - before, switches: workspace.server.switches }).toEqual({ stopped: 9,
+      switches: [[CHAPTER, CHAPTER_C], [CHAPTER, CHAPTER_C], [CHAPTER_C, CHAPTER_B]] });
+    expectSetup(workspace.server, before, ...RUN_REQUESTS, ...copyReads(CHAPTER_B));
   });

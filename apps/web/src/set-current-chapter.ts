@@ -73,6 +73,12 @@ export async function setOwnedCurrentChapter(options: {
           if (error instanceof StoryOSProtocolError && (retried || endsCommand(error))) {
             sent.delete(command.idempotencyKey);
           }
+          // With no answer after the retry, the result is not known. The caller reads the Current Chapter of the Server,
+          // so a later intent gets a new key, and a replay of this key cannot give an earlier result.
+          if (!(error instanceof StoryOSProtocolError) && retried) {
+            sent.delete(command.idempotencyKey);
+            inFlight.delete(identity);
+          }
           throw error;
         });
       }
