@@ -28,8 +28,9 @@ import {
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
-import { freezeUnsentVersion5Groups, retainVersion5PartitionText, upgradeVersion5Journal }
-  from "./journal-version-5-upgrade.ts";
+import {
+  claimVersion5Session, freezeUnsentVersion5Groups, retainVersion5PartitionText, upgradeVersion5Journal,
+} from "./journal-version-5-upgrade.ts";
 
 export {
   freezeOneIntentSubmission,
@@ -52,7 +53,8 @@ async function openJournalDatabase(
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
-    // A version 5 Journal has the writer fields of before ADR 0107. The upgrade removes them from each row.
+    // A version 5 Journal has the writer fields of before ADR 0107. The upgrade removes them from each row, also from
+    // the partition row, and keeps the frozen requests.
     if (event.oldVersion === 5) {
       upgradeVersion5Journal(request.transaction!);
       request.transaction!.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
@@ -323,12 +325,14 @@ export function startEditorWorkspace({
     let database: IDBDatabase | undefined;
     try {
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
-      const active = globalThis.sessionStorage
+      const stored = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
       // The creation waits for the Chapter read (#1884), and its Challenge starts with that read (#1899).
-      const creation = !active && earlyChallenge
+      const creation = !stored && earlyChallenge
         ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
       database = await openJournalDatabase(indexedDBImpl, scope, cryptoImpl, profile.max_json_string_utf8_bytes);
+      // A tab with no stored Editor Session opens the Session of the rows of an upgraded version 5 Journal.
+      const active = await claimVersion5Session(database, stored);
       // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,

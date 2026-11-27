@@ -1,4 +1,4 @@
-import { RECOVERY_PAGE_SIZE } from "./local-recovery-record.ts";
+import { earlierJournalKey, RECOVERY_PAGE_SIZE } from "./local-recovery-record.ts";
 import { useEffect, useState } from "react";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { readLocalRecovery, retainLocalRecovery, type EarlierJournalText, type LocalRecoveryMaterial }
@@ -42,8 +42,8 @@ export function LocalRecoveryPanel({ workspace, refreshKey, onContinue }: {
       </>;
       // The text of a partition that the upgrade of a version 5 Journal did not change (ADR 0107).
       if (material.disposition === "retained_from_earlier_journal") {
-        return <article key={material.journal_partition_id}>
-          <p>正文修改</p>
+        return <article key={earlierJournalKey(material)}>
+          <p>{material.proposal_target ? "候选修改" : "正文修改"}</p>
           {copy}
           <p>已保留供手动重新输入；原修改未标记为已保存。</p>
         </article>;

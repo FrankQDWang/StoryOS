@@ -267,19 +267,25 @@ recovery. The records stay immutable in each case.
 A version 5 Journal upgrades to version 6 (ADR 0107). A version 5 partition
 identifier has the writer generation after the Editor Session identifier. In
 the version-change transaction, the upgrade changes that identifier in each
-row and removes the writer fields of the partition row. The writer fields of
-the other rows stay, and no reader reads them. Each version 6 identifier gets
-the partition of the highest writer generation that has records or groups.
-The rows of another partition of that Session stay as they are. When that
-partition has work that the Server does not have, its last text goes to the
-retained local recovery rows, which each Editor Session of the Project shows.
+field and key that stores it, and it removes the writer fields from each row.
+It changes no other text, so the text of the author stays. A frozen request
+keeps the form that the client sent, because its digest names that form. Each
+version 6 identifier gets the partition of the highest writer generation that
+has records or groups. The rows of another partition stay as they are, also the
+rows of a partition with an identifier that does not match its fields. When
+such a partition has work that the Server does not have, its last Chapter text
+and the text of each candidate with unsent input go to the retained local
+recovery rows, which each Editor Session of the Project shows. A tab with no
+Editor Session in its session storage opens the Session of the changed rows,
+and each such Session goes to one tab only.
 
 A version 5 group that the client sent keeps its v1 request, its digest, and
 its capsule, because the Server keeps that Admission. The next save asks for
 its outcome as today, and no POST of it goes again. A version 5 group with no
 capsule was never sent. After the open, the Web freezes it again as v2 with a
-new idempotency key, and the next save sends it. A settled group keeps its v1
-request as history. The Web never sends a v1 request.
+new idempotency key, and the next save sends it. When another tab completed
+that freeze first, the group keeps the freeze of that tab. A settled group
+keeps its v1 request as history. The Web never sends a v1 request.
 
 The Web has no upgrade from a Journal version before 5
 ([ADR 0099](../adr/0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md)). When IndexedDB asks for an upgrade from such a version,

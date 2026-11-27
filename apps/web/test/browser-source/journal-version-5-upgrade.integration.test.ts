@@ -3,7 +3,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 
 import { openEditorWorkspace, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
+import { freezeUnsentVersion5Groups } from "../../src/journal-version-5-upgrade.ts";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
+import candidateFixture from "../../../../fixtures/local-edit-journal/version-5-candidate-record.json";
+import identifierFixture from "../../../../fixtures/local-edit-journal/version-5-identifier-text-group.json";
 import inFlightFixture from "../../../../fixtures/local-edit-journal/version-5-in-flight-group.json";
 import sentFixture from "../../../../fixtures/local-edit-journal/version-5-sent-group.json";
 import unsentFixture from "../../../../fixtures/local-edit-journal/version-5-unsent-group.json";
@@ -18,10 +21,12 @@ type Fixture = { version: number; stores: { name: string; keyPath: string | stri
   indexes: { name: string; keyPath: string | string[]; unique: boolean }[]; rows: Record<string, unknown>[] }[] };
 const ACTIVE_KEY = `active_session:${OWNER}:${PROJECT}`;
 const SESSION_READ = `GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`;
+const SESSION_CREATE = `POST /api/v1/projects/${PROJECT}/editor-sessions`;
 const CHALLENGE = `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`;
 const AUTHOR_EDIT = `POST /api/v1/projects/${PROJECT}/manuscript/author-edits`;
 const OUTCOME = `GET /api/v1/projects/${PROJECT}/manuscript/author-edit-outcomes/`;
 const V2 = "storyos.command.apply-author-edit.request.v2";
+const NEW_SESSION = "018f0000-0000-7001-8000-0000000000e1";
 
 const databases = new Set<IDBDatabase>();
 const scenario = createBrowserScenario();
@@ -51,11 +56,12 @@ function rows(fixture: Fixture, store: string) {
 }
 
 /**
- * A fake Server that serves the read of the stored Editor Session, a Challenge, an Author Edit, and an outcome Query, and
- * records each request. It holds the Author Edit and outcome Query responses, so the test reads the request that the
- * save sent. It throws on each other request.
+ * A fake Server that serves only the `allowed` requests of a test and throws on each other request. It serves the read
+ * and the creation of an Editor Session, a Challenge, an Author Edit, and an outcome Query (a name that ends with `/`
+ * allows each outcome Query), and records each request. It holds the Author Edit and outcome Query responses, so the
+ * test reads the request that the save sent.
  */
-function fakeServer() {
+function fakeServer(allowed: readonly string[]) {
   const requests: string[] = [];
   const nonces: (string | null)[] = [];
   const challenges: Record<string, unknown>[] = [];
@@ -63,8 +69,15 @@ function fakeServer() {
   const fetchImpl: typeof fetch = async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     requests.push(name);
+    if (!allowed.some((item) => item === name || (item === OUTCOME && name.startsWith(OUTCOME)))) {
+      throw new Error(`unexpected request: ${name}`);
+    }
     if (name === SESSION_READ) {
       return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
+    }
+    if (name === SESSION_CREATE) {
+      return jsonResponse({ ...scenario.session,
+        editor_session: { ...scenario.session.editor_session, editor_session_id: NEW_SESSION } });
     }
     if (name === CHALLENGE) {
       challenges.push(requireRequestBody(init));
@@ -75,17 +88,15 @@ function fakeServer() {
       edits.push({ body: requireRequestBody(init), key: requestHeaders(init).get("idempotency-key") });
       return new Promise<Response>(() => {});
     }
-    if (name.startsWith(OUTCOME)) {
-      nonces.push(requestHeaders(init).get("x-storyos-anti-forgery"));
-      return new Promise<Response>(() => {});
-    }
-    throw new Error(`unexpected request: ${name}`);
+    nonces.push(requestHeaders(init).get("x-storyos-anti-forgery"));
+    return new Promise<Response>(() => {});
   };
   return { fetchImpl, requests, challenges, edits, nonces };
 }
 
-async function openStored(server: ReturnType<typeof fakeServer>) {
-  sessionStorage.setItem(ACTIVE_KEY, SESSION);
+/** Opens the editor. A null `active` is a tab with no Editor Session in its session storage. */
+async function openStored(server: ReturnType<typeof fakeServer>, active: string | null = SESSION) {
+  if (active !== null) sessionStorage.setItem(ACTIVE_KEY, active);
   const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
     chapter: scenario.chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
   requireEditorReady(state);
@@ -93,15 +104,33 @@ async function openStored(server: ReturnType<typeof fakeServer>) {
   return state;
 }
 
+async function readStore(store: string) {
+  const database = await requestResult(indexedDB.open(scenario.journalName));
+  trackDatabase(database, databases);
+  return requestResult(database.transaction(store).objectStore(store).getAll()) as Promise<Record<string, unknown>[]>;
+}
+
+/** The names of the writer fields in `value`, outside a frozen request, which keeps the form that the client sent. */
+function writerFields(value: unknown, path = ""): string[] {
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([field, item]) => field === "frozen_request_body" ? []
+    : [...(["writer_generation", "partition_disposition", "resulting_writer_generation"].includes(field)
+      ? [`${path}${field}`] : []), ...writerFields(item, `${path}${field}.`)]);
+}
+
 it("shows the unsent text of a version 5 Journal, and the next save sends its group as a v2 request", async () => {
   const fixture = unsentFixture as Fixture;
   await restore(fixture);
   const unsent = rows(fixture, "submission_groups").find((group) =>
     (group.settlement as { kind: string }).kind === "unsettled")!;
-  const server = fakeServer();
+  const server = fakeServer([SESSION_READ, CHALLENGE, AUTHOR_EDIT]);
 
   const state = await openStored(server);
   expect(state.openedProjection.body).toBe("Base!?");
+  // The upgrade removes the writer fields of before ADR 0107 from each row. A frozen request keeps its form.
+  const stored = await Promise.all(["partitions", "intents", "payload_chains", "submission_groups", "metadata"]
+    .map(readStore));
+  expect(writerFields(stored)).toEqual([]);
   void submitOnePendingAuthorEdit({ workspace: state, baseUrl: location.origin, fetchImpl: server.fetchImpl,
     cryptoImpl: crypto });
   await expect.poll(() => server.edits.length).toBe(1);
@@ -114,6 +143,95 @@ it("shows the unsent text of a version 5 Journal, and the next save sends its gr
       units: frozen.author_edit_units, newKey: true });
 });
 
+it("keeps the text of the author that has the partition identifier", async () => {
+  const fixture = identifierFixture as Fixture;
+  await restore(fixture);
+  const [partition] = rows(fixture, "partitions");
+  const [group] = rows(fixture, "submission_groups");
+  const server = fakeServer([SESSION_READ, CHALLENGE, AUTHOR_EDIT]);
+
+  const state = await openStored(server);
+  expect(state.openedProjection.body).toBe(`Base${String(partition!.journal_partition_id)}`);
+  void submitOnePendingAuthorEdit({ workspace: state, baseUrl: location.origin, fetchImpl: server.fetchImpl,
+    cryptoImpl: crypto });
+  await expect.poll(() => server.edits.length).toBe(1);
+
+  expect({ requests: server.requests, units: server.edits[0]!.body.author_edit_units }).toEqual({
+    requests: [SESSION_READ, CHALLENGE, AUTHOR_EDIT],
+    units: (group!.frozen_request_body as Record<string, unknown>).author_edit_units });
+});
+
+it("shows the version 5 text in a tab that has no stored Editor Session, and a second such tab opens a new one", async () => {
+  // A new tab, or a browser that started again, has no Editor Session in its session storage.
+  await restore(unsentFixture as Fixture);
+  const first = fakeServer([CHALLENGE, SESSION_READ]);
+
+  const state = await openStored(first, null);
+  expect({ body: state.openedProjection.body, active: sessionStorage.getItem(ACTIVE_KEY) })
+    .toEqual({ body: "Base!?", active: SESSION });
+  closeTrackedDatabases(databases);
+
+  // The first tab took the Editor Session of the version 5 rows. A second new tab does not take it again.
+  sessionStorage.removeItem(ACTIVE_KEY);
+  const second = fakeServer([CHALLENGE, SESSION_CREATE]);
+  const next = await openStored(second, null);
+  expect({ body: next.openedProjection.body, session: next.session.editor_session.editor_session_id,
+    requests: [first.requests, second.requests] }).toEqual({ body: "Base", session: NEW_SESSION,
+    requests: [[CHALLENGE, SESSION_READ], [CHALLENGE, SESSION_CREATE]] });
+});
+
+// Two tabs opened the version 5 Journal at the same time, and both read the marker of the unsent group. The first tab
+// completed the new freeze before the second tab read the group, or after that read and before the write of the second
+// tab.
+it.each(["before the read", "between the read and the write"] as const)(
+  "accepts the new freeze of a version 5 group that another tab completed %s of this tab", async (order) => {
+  const fixture = unsentFixture as Fixture;
+  await restore(fixture);
+  const state = await openStored(fakeServer([SESSION_READ]));
+  const frozen = (await readStore("submission_groups")).find((group) => group.command_schema === V2)!;
+  const recorded = rows(fixture, "submission_groups").find((group) =>
+    group.journal_submission_group_id === frozen.journal_submission_group_id)!;
+  // The group as the upgrade wrote it, before the new freeze of the first tab.
+  const upgraded = { ...frozen, command_schema: recorded.command_schema, idempotency_key: recorded.idempotency_key,
+    frozen_request_body: recorded.frozen_request_body, frozen_request_digest: recorded.frozen_request_digest };
+  const put = (value: Record<string, unknown>) => requestResult(state.database
+    .transaction(["metadata", "submission_groups"], "readwrite").objectStore("submission_groups").put(value));
+  await requestResult(state.database.transaction("metadata", "readwrite").objectStore("metadata")
+    .put({ key: "version_5_unsent_groups", value: [frozen.journal_submission_group_id] }));
+  let racing = order === "between the read and the write";
+  if (racing) await put(upgraded);
+  // The digest of the new request runs after the read of this tab. In the second order, the first tab commits then.
+  const digest = async (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+    if (racing) {
+      racing = false;
+      await put(frozen);
+    }
+    return crypto.subtle.digest(algorithm, data);
+  };
+  // The proxy gives the same object with one field changed. Each other method keeps its own object as `this`.
+  const replace = <T extends object>(target: T, name: string, value: unknown) => new Proxy(target, {
+    get: (object, field) => field === name ? value : (Reflect.get(object, field) as () => unknown).bind(object),
+  });
+  const cryptoImpl = replace(crypto, "subtle", replace(crypto.subtle, "digest", digest));
+
+  await freezeUnsentVersion5Groups(state.database, cryptoImpl);
+
+  expect((await readStore("submission_groups")).find((group) =>
+    group.journal_submission_group_id === frozen.journal_submission_group_id)).toEqual(frozen);
+});
+
+it("refuses a new freeze of a version 5 group that the client sent", async () => {
+  await restore(sentFixture as Fixture);
+  const state = await openStored(fakeServer([SESSION_READ]));
+  const [sent] = await readStore("submission_groups");
+  await requestResult(state.database.transaction("metadata", "readwrite").objectStore("metadata")
+    .put({ key: "version_5_unsent_groups", value: [sent!.journal_submission_group_id] }));
+
+  await expect(freezeUnsentVersion5Groups(state.database, crypto)).rejects
+    .toThrow("A version 5 group changed before its new freeze");
+  expect(await readStore("submission_groups")).toEqual([sent]);
+});
+
 // The POST of each group got no answer. In the first fixture the outcome Query got no answer too.
 it.each([["an unresolved outcome Query", sentFixture], ["a POST in flight", inFlightFixture]] as const)(
   "shows the text of a version 5 group with %s, and the next save asks for its outcome and sends no POST", async (_,
@@ -122,7 +240,7 @@ it.each([["an unresolved outcome Query", sentFixture], ["a POST in flight", inFl
   await restore(fixture);
   const [sent] = rows(fixture, "submission_groups");
   const [capsule] = rows(fixture, "transport_capsules");
-  const server = fakeServer();
+  const server = fakeServer([SESSION_READ, OUTCOME]);
 
   const state = await openStored(server);
   expect(state.openedProjection.body).toBe("Base!");
@@ -165,31 +283,66 @@ async function partitionRows(partitionId: string) {
     requestResult(transaction.objectStore(store).index("partition").getAll(partitionId))));
 }
 
-it("keeps the rows of a lower writer generation of the same Editor Session, and shows their text in local recovery", async () => {
-  // A takeover and a takeover back gave one Editor Session rows in two partitions. The lower generation has the sent
-  // group "!" of the recording, and the higher generation has the unsent group and the record "?".
-  const lower = sentFixture as Fixture;
-  await restore(bothGenerations(lower, secondGeneration(unsentFixture as Fixture)));
-  const [partition] = rows(lower, "partitions");
-  const server = fakeServer();
-
-  const state = await openStored(server);
+/** Shows the local recovery panel of `state`, and returns the label and the text of each item. */
+async function recoveryItems(state: Awaited<ReturnType<typeof openStored>>, count: number) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   try {
     await act(async () => root.render(createElement(LocalRecoveryPanel, { workspace: state, refreshKey: "0",
       onContinue: async () => {} })));
-
-    expect(state.openedProjection.body).toBe("Base!?");
-    await expect.poll(() => host.querySelector("[data-local-recovery-text]")?.textContent).toBe("Base!");
-    expect(await partitionRows(String(partition!.journal_partition_id)))
-      .toEqual([rows(lower, "intents"), rows(lower, "submission_groups")]);
-    expect(server.requests).toEqual([SESSION_READ]);
+    await expect.poll(() => host.querySelectorAll("[data-local-recovery-text]").length).toBe(count);
+    return [...host.querySelectorAll("article")].map((item) => [item.querySelector("p")?.textContent,
+      item.querySelector("[data-local-recovery-text]")?.textContent]);
   } finally {
     await act(async () => root.unmount());
     host.remove();
   }
+}
+
+it("keeps the rows of a lower writer generation of the same Editor Session, and shows their text in local recovery", async () => {
+  // A takeover and a takeover back gave one Editor Session rows in two partitions. The lower generation has the sent
+  // group "!" of the recording, and the higher generation has the unsent group and the record "?".
+  const lower = sentFixture as Fixture;
+  await restore(bothGenerations(lower, secondGeneration(unsentFixture as Fixture)));
+  const [partition] = rows(lower, "partitions");
+  const server = fakeServer([SESSION_READ]);
+
+  const state = await openStored(server);
+
+  expect(state.openedProjection.body).toBe("Base!?");
+  expect(await recoveryItems(state, 1)).toEqual([["正文修改", "Base!"]]);
+  expect(await partitionRows(String(partition!.journal_partition_id)))
+    .toEqual([rows(lower, "intents"), rows(lower, "submission_groups")]);
+  expect(server.requests).toEqual([SESSION_READ]);
+});
+
+it("shows the unsent candidate text of a lower writer generation in local recovery", async () => {
+  // The lower generation has only the candidate record "!" on the candidate "Candidate". Its Chapter text is the base.
+  await restore(bothGenerations(candidateFixture as Fixture, secondGeneration(unsentFixture as Fixture)));
+  const server = fakeServer([SESSION_READ]);
+
+  const state = await openStored(server);
+
+  expect(await recoveryItems(state, 1)).toEqual([["候选修改", "Candidate!"]]);
+  expect(server.requests).toEqual([SESSION_READ]);
+});
+
+it("keeps the rows of a version 5 partition with an identifier that does not match its fields, and shows their text", async () => {
+  const fixture = sentFixture as Fixture;
+  const [partition] = rows(fixture, "partitions");
+  const changed = { ...fixture, stores: fixture.stores.map((store) => store.name !== "partitions" ? store
+    : { ...store, rows: [{ ...partition!, client_session_generation: "2" }] }) };
+  await restore(changed);
+  const server = fakeServer([SESSION_READ]);
+
+  const state = await openStored(server);
+
+  expect(state.openedProjection.body).toBe("Base");
+  expect(await recoveryItems(state, 1)).toEqual([["正文修改", "Base!"]]);
+  expect(await partitionRows(String(partition!.journal_partition_id)))
+    .toEqual([rows(fixture, "intents"), rows(fixture, "submission_groups")]);
+  expect(server.requests).toEqual([SESSION_READ]);
 });
 
 it("changes the partition with rows when a higher writer generation of the same Editor Session has no rows", async () => {
@@ -200,9 +353,10 @@ it("changes the partition with rows when a higher writer generation of the same 
     rows: store.name === "partitions" ? [{ ...partition!, disposition: "read_only_observer" }]
       : store.name === "metadata" ? store.rows.filter((row) => String(row.key).startsWith("active_base:")) : [] })) });
   await restore(bothGenerations(observer, fixture));
-  const server = fakeServer();
+  const server = fakeServer([SESSION_READ]);
 
   const state = await openStored(server);
 
-  expect(state.openedProjection.body).toBe("Base!");
+  expect({ body: state.openedProjection.body, requests: server.requests })
+    .toEqual({ body: "Base!", requests: [SESSION_READ] });
 });
