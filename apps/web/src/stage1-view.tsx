@@ -950,12 +950,30 @@ function ProjectEditorView({
     takeOverInFlightRef.current = true;
     setTakeover(kind);
     const shownChapterId = selectedChapterIdRef.current;
+    const shown = selectedChapter.chapter.chapter_id === shownChapterId ? selectedChapter : undefined;
+    // With the writer, the takeover first makes the shown Chapter the Current Chapter, and then opens it. Thus no state
+    // of the Current Chapter of the Server goes to the screen (ADR 0106, section 1). A selection during the takeover,
+    // or a command with no effect, keeps the path of a selection: the next editor part selects the Chapter.
+    const reopenShown = async () => {
+      if (shown === undefined || waitingStore.current !== undefined || shownChapterId === serverChapterRef.current) {
+        return reopen();
+      }
+      const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
+        chapterId: shownChapterId, expectedCurrentChapterId: serverChapterRef.current,
+        expectedTargetRevisionId: shown.chapter.current_revision.revision_id, editorSessionId,
+        proceed: () => waitingStore.current === undefined }).catch(() => undefined);
+      if (switched?.effect.kind !== "authoritative_applied" || switched.effect.current_chapter_id !== shownChapterId) {
+        return reopen();
+      }
+      serverChapterRef.current = shownChapterId;
+      return reopen(shownChapterId);
+    };
     void (async () => {
       let reopened = false;
       try {
         const next = await takeOverWriter({ baseUrl, fetchImpl, cryptoImpl, projectId, editorSessionId,
           observedWriterGeneration: generationStaleRef.current ? undefined : readOnlyWriter?.observed_writer_generation,
-          reopen: () => reopen() });
+          reopen: reopenShown });
         if (next === undefined) {
           generationStaleRef.current = true;
           setSwitchRecovery("无法接管写作。");

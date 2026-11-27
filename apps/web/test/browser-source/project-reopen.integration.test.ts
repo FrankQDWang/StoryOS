@@ -149,7 +149,7 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
   reads: string[]; writer?: Writer; commands?: string[]; proposals?: boolean;
   acceptance?: "refused" | "applied" | "late"; takeoverAfterAcceptance?: boolean;
   assistant?: "available" | "unavailable"; unavailable?: string[]; lost?: string[];
-  takeover?: "applied" | "compare_failed"; rejection?: "resolved" | "conflicted" | "refused"; other?: boolean;
+  takeover?: "applied" | "conflict"; rejection?: "resolved" | "conflicted" | "refused"; other?: boolean;
   proposalResult?: boolean; third?: boolean;
 }) {
   const scenario = createBrowserScenario();
@@ -351,15 +351,11 @@ function fakeServer({ reads, writer = { kind: "current_writer", writer_generatio
         receipt: { ...setCurrentChapterFixture.receipt, expected_heads: [REVISION_B], prior_heads: [REVISION_B],
           resulting_heads: [REVISION_B] } });
     }
-    if (name === TAKEOVER && takeover === "compare_failed") {
-      // Another tab took the writer after the admission of this takeover, so the Server changes nothing.
-      return jsonResponse({ ...takeoverFixture,
-        receipt: { ...takeoverFixture.receipt, expected_heads: [REVISION], prior_heads: [REVISION],
-          resulting_heads: [REVISION] },
-        result: { kind: "takeover_compare_failed", observed_writer_generation: "1", current_writer_generation: "2",
-          current_writer_projection: { kind: "read_only", observed_writer_generation: "2", reason: "secondary_session" },
-          current_snapshot_id: state.snapshot.id, current_snapshot_activity_position: state.snapshot.position,
-          current_heads: [REVISION], reason: "writer_generation_advanced_after_admission" } });
+    if (name === TAKEOVER && takeover === "conflict") {
+      // Another tab took the writer first. The Server refuses the old generation before the Admission
+      // (`takeover_problem` of `crates/storyos-server/src/takeover.rs`).
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "idempotency_binding_conflict",
+        message: "The writer takeover binding conflicts." }, 409);
     }
     if (name === TAKEOVER) {
       // The takeover gives this Session the generation after the observed generation.
@@ -1501,8 +1497,8 @@ it("shows that the takeover runs, and sends one takeover for two clicks", async 
 it("shows the sentence of a refused takeover and makes the button usable again", async () => {
   const server = fakeServer({ reads: OPEN_READS,
     writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" },
-    commands: [SESSION_CREATE, TAKEOVER], takeover: "compare_failed" });
-  // The Server refuses the automatic takeover of the open: another tab took the writer after the admission.
+    commands: [SESSION_CREATE, TAKEOVER], takeover: "conflict" });
+  // The Server refuses the automatic takeover of the open: another tab took the writer first.
   const workspace = await openWorkspace(server);
   const button = () => workspace.root.querySelector<HTMLButtonElement>("button[data-take-over-writer]");
 
