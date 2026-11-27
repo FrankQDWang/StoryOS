@@ -763,12 +763,14 @@ it.each([
     const later = server.log.started.slice(before);
     expect({ shown: [...shownChapters], discardedShown: [...discardedShown], journal: discarded,
       // The four reads of each open start at the same time. The panels of the editor part read with no order.
-      later: [...later.slice(0, 3), later.slice(3, 7).sort(), ...later.slice(7, 9), later.slice(9).sort()],
+      later: [...later.slice(0, 4), later.slice(4, 8).sort(), ...later.slice(8, 10), later.slice(10).sort()],
       unexpected: server.log.unexpected }).toEqual({
       // With no copy, the editor part shows the earlier text read-only until the Chapter read of the switch answers.
       shown: [JSON.stringify(["Chapter A", "Base", REVISION]), JSON.stringify(["Chapter B", CHAPTER_B_BODY, REVISION])],
       discardedShown: [], journal,
-      later: [chapterRead(CHAPTER_B), CHALLENGE, SWITCH, reopenReads(CHAPTER_B).sort(), chapterRead(CHAPTER), SESSION_READ,
+      // Chapter B has no copy, so the switch reads its open suggestions together with its Chapter read (#1934).
+      later: [openProposalsRead(CHAPTER_B), chapterRead(CHAPTER_B), CHALLENGE, SWITCH, reopenReads(CHAPTER_B).sort(),
+        chapterRead(CHAPTER), SESSION_READ,
         [openProposalsRead(CHAPTER), TREE, `GET ${P}/activity`, STATISTICS].sort()],
       unexpected: [] });
   });

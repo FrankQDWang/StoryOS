@@ -7,6 +7,7 @@ import {
   parseClientSessionCookieRequest,
   parseClipboardPermissionRequest,
   parseCommandChallengeRateWindowsRequest,
+  parseFrameRequestsRequest,
   parseImeCompositionRequest,
   parseProjectReceiptsRequest,
   parseProductionHostRequest,
@@ -49,6 +50,9 @@ function authorEditCommand(url: URL): boolean {
 function setCurrentChapterCommand(url: URL): boolean {
   return SET_CURRENT_CHAPTER_PATH.test(url.pathname);
 }
+
+// The record of the requests of the application frame, from `start` to `read`.
+let frameRequests: { readonly requests: string[]; readonly listener: (request: Request) => void } | undefined;
 
 let authorEditHold: {
   readonly release: () => void;
@@ -113,6 +117,31 @@ export const storyOSBrowserCommands = {
         await context.page.unroute(hold.route, hold.handler);
       }
       return { kind: "author_edit_submission_hold_updated" } as const;
+    },
+  ),
+  [storyOSBrowserCommandNames.frameRequests]: defineBrowserCommand<[request: unknown]>(
+    async (context, value) => {
+      const request = parseFrameRequestsRequest(value);
+      const earlier = frameRequests;
+      frameRequests = undefined;
+      if (earlier !== undefined) context.page.off("request", earlier.listener);
+      if (request.action === "read") {
+        if (earlier === undefined) throw new Error("the requests of the application frame have no record");
+        return { kind: "frame_requests_recorded", requests: earlier.requests } as const;
+      }
+      // The test frame and the orchestrator also load files, so the record has only the frames that they hold.
+      const orchestrator = context.page.mainFrame();
+      const testFrame = await context.frame();
+      const requests: string[] = [];
+      const listener = (started: Request) => {
+        const frame = started.frame();
+        if (frame !== orchestrator && frame !== testFrame) {
+          requests.push(`${started.method()} ${new URL(started.url()).pathname}`);
+        }
+      };
+      frameRequests = { requests, listener };
+      context.page.on("request", listener);
+      return { kind: "frame_requests_recorded", requests: [] } as const;
     },
   ),
   [storyOSBrowserCommandNames.settleWorkerOnce]: defineBrowserCommand<[request: unknown]>(

@@ -142,8 +142,11 @@ function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode:
         source_snapshot: { ...statisticsFixture.source_snapshot, project_scope: scope,
           project_activity_position: String(position) } });
     }
-    if (route === `GET ${project}/chapters/${current}/open-proposals`) {
-      return jsonResponse({ ...openProposalsFixture, project_scope: scope, chapter_id: current, proposals: [] });
+    // A switch to Chapter B reads its open suggestions before Chapter B is the Current Chapter (#1934).
+    const listed = [current, CHAPTER_B]
+      .find((chapterId) => route === `GET ${project}/chapters/${chapterId}/open-proposals`);
+    if (listed !== undefined) {
+      return jsonResponse({ ...openProposalsFixture, project_scope: scope, chapter_id: listed, proposals: [] });
     }
     if (route === `GET ${project}/assistance`) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     if (route === `GET ${project}/skills`) return jsonResponse({ ...skillsFixture, project_scope: scope, skills: [] });

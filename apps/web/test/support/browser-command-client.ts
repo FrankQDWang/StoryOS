@@ -7,6 +7,7 @@ import {
   type ClipboardPermissionRequest,
   type ClipboardPermissionResult,
   type CommandChallengeRateWindowsResult,
+  type FrameRequestsRequest,
   type ImeCompositionRequest,
   type ImeCompositionResult,
   type ProjectReceiptsRequest,
@@ -18,6 +19,7 @@ import {
   parseClientSessionCookieResult,
   parseClipboardPermissionResult,
   parseCommandChallengeRateWindowsResult,
+  parseFrameRequestsResult,
   parseImeCompositionResult,
   parseProjectReceiptsResult,
   parseProductionHostResult,
@@ -95,6 +97,16 @@ export async function resetCommandChallengeRateWindows(): Promise<CommandChallen
       action: "reset",
     }),
   );
+}
+
+/**
+ * `start` records each request of the application frame when it starts, as its method and its path. `read` ends the
+ * record and gives its requests in their order.
+ */
+export async function recordFrameRequests(request: FrameRequestsRequest): Promise<readonly string[]> {
+  return parseFrameRequestsResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.frameRequests, request),
+  ).requests;
 }
 
 export async function settleWorkerOnce(): Promise<void> {
