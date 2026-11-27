@@ -652,6 +652,9 @@ function ProjectEditorView({
               if (chapter !== serverChapterRef.current) {
                 let target = targets.get(chapter);
                 if (target === undefined) {
+                  // With no fact "no open suggestion", the tab reads the open suggestions together with the Chapter
+                  // read, so that the Arriving Chapter can accept input before the switch ends (ADR 0105, section 3).
+                  if (copies.get(chapter)?.noOpenSuggestion !== true) void copies.readSuggestions(chapter);
                   const write = copies.chapterRead(chapter);
                   const opened = await openSelectedChapter({
                     baseUrl,
@@ -1026,8 +1029,8 @@ function ProjectEditorView({
           tree,
         }}
         editable={!readOnly && !navigationCommand && !resultUnknown}
-        startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
-          ? () => copies.suggestionRead(currentChapterId) : undefined}
+        // The display of each shown Chapter records the fact "no open suggestion", also of a read-only view (#1934).
+        startSuggestionRead={() => copies.suggestionRead(selectedChapter.chapter.chapter_id)}
         persistWorkspace={
           state.editor.kind === "editor-ready"
             && selectedChapter.chapter.chapter_id === currentChapterId
