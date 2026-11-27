@@ -1,8 +1,11 @@
 import type { EditorWorkspace, JournalSnapshot, JournalSubmissionGroup } from "./editor-types.ts";
 import { hasCurrentSubmissionShape, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
-import { readRecoveryDispositions, recoveryKey, recoveryPrefix, recoveryMaterial, recoveryRequest as result, RECOVERY_PAGE_SIZE, type LocalRecoveryMaterial } from "./local-recovery-record.ts";
-export type { LocalRecoveryMaterial } from "./local-recovery-record.ts";
+import { earlierJournalKey, readRecoveryDispositions, recoveryKey, recoveryPrefix, recoveryMaterial, recoveryRequest as result, RECOVERY_PAGE_SIZE, type EarlierJournalText, type LocalRecoveryMaterial } from "./local-recovery-record.ts";
+export type { EarlierJournalText, LocalRecoveryMaterial } from "./local-recovery-record.ts";
+
+type RecoveryItem = LocalRecoveryMaterial | EarlierJournalText;
+const itemKey = (item: RecoveryItem) => item.disposition === "retained_from_earlier_journal" ? earlierJournalKey(item) : recoveryKey(item);
 const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
 /** Keep a terminal local source for manual re-entry without changing its settlement. */
@@ -41,21 +44,26 @@ export async function retainLocalRecovery(workspace: EditorWorkspace, groupId: s
 }
 
 /** Read retained local material across this Project's Editor Sessions. */
-export async function readLocalRecovery(workspace: EditorWorkspace, after?: LocalRecoveryMaterial): Promise<LocalRecoveryMaterial[]> {
+export async function readLocalRecovery(workspace: EditorWorkspace, after?: RecoveryItem): Promise<RecoveryItem[]> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-  const retained: LocalRecoveryMaterial[] = [];
+  const retained: RecoveryItem[] = [];
   for (let cursor = after; retained.length < RECOVERY_PAGE_SIZE;) {
     const limit = RECOVERY_PAGE_SIZE - retained.length;
     const rows = await result(workspace.database.transaction("metadata").objectStore("metadata").getAll(
-      IDBKeyRange.bound(cursor ? recoveryKey(cursor) : recoveryPrefix, recoveryPrefix + "\uffff", cursor !== undefined), limit,
-    )) as { value: LocalRecoveryMaterial }[];
+      IDBKeyRange.bound(cursor ? itemKey(cursor) : recoveryPrefix, recoveryPrefix + "\uffff", cursor !== undefined), limit,
+    )) as { value: RecoveryItem }[];
     const page = rows.map((row) => row.value);
-    if (page.some((item) => item.format_version !== 1 || item.disposition !== "retained_for_manual_reentry"
-      || item.group.settlement.kind !== "outcome_query_requires_reconfirmation"
-      || !equal(item.group.project_scope, workspace.partition.project_scope))) throw new Error("Local recovery record is corrupt");
+    if (page.some((item) => item.format_version !== 1 || (item.disposition === "retained_from_earlier_journal"
+      ? typeof item.text !== "string" || !equal(item.project_scope, workspace.partition.project_scope)
+      : item.disposition !== "retained_for_manual_reentry"
+        || item.group.settlement.kind !== "outcome_query_requires_reconfirmation"
+        || !equal(item.group.project_scope, workspace.partition.project_scope)))) {
+      throw new Error("Local recovery record is corrupt");
+    }
     // A retained record with a shape of a removed path stays in the store, and the page shows no text of it (ADR 0099).
     // The other records of the page stay available.
-    retained.push(...page.filter((item) => hasCurrentSubmissionShape(item.group, item.records)));
+    retained.push(...page.filter((item) => item.disposition === "retained_from_earlier_journal"
+      || hasCurrentSubmissionShape(item.group, item.records)));
     if (page.length < limit) break;
     cursor = page.at(-1);
   }

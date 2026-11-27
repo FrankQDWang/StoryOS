@@ -30,6 +30,7 @@ import {
 } from "./journal-working-set.ts";
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
+import { hasVersion5Request } from "./journal-version-5-upgrade.ts";
 
 export const JOURNAL_DATABASE_VERSION = 6;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
@@ -656,7 +657,7 @@ async function validateCoverage(
       || group.api_major !== 1
       || group.method !== "POST"
       || group.route_template !== "/api/v1/projects/{project_id}/manuscript/author-edits"
-      || group.command_schema !== "storyos.command.apply-author-edit.request.v2"
+      || (group.command_schema !== "storyos.command.apply-author-edit.request.v2" && !hasVersion5Request(group))
       || group.command_kind !== "applyAuthorEdit"
       || group.digest_profile !== "storyos.command.applyAuthorEdit.jcs.v1"
       || !UUID.test(group.idempotency_key ?? "")

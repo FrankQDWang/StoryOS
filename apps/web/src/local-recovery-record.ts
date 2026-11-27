@@ -16,9 +16,19 @@ export interface LocalRecoveryMaterial {
   blocks: ValidatedJournalSnapshot["blocksBySequence"] extends Map<number, infer T> ? T : never;
 }
 
+/** The last text of a version 5 partition that the upgrade did not change (ADR 0107). It has no group. */
+export interface EarlierJournalText {
+  disposition: "retained_from_earlier_journal";
+  format_version: 1;
+  project_scope: JournalSubmissionGroup["project_scope"];
+  journal_partition_id: string;
+  text: string;
+}
+
 export const RECOVERY_PAGE_SIZE = 20;
 export const recoveryPrefix = "local_retained_recovery:";
 export const recoveryKey = (material: LocalRecoveryMaterial) => recoveryPrefix + material.group.journal_partition_id + ":" + material.group.journal_submission_group_id;
+export const earlierJournalKey = (text: EarlierJournalText) => recoveryPrefix + text.journal_partition_id + ":earlier_journal";
 
 export async function readRecoveryDispositions(transaction: IDBTransaction, workspace: EditorWorkspace): Promise<LocalRecoveryMaterial[]> {
   const prefix = recoveryPrefix + workspace.partition.journal_partition_id + ":";
