@@ -1,7 +1,7 @@
 //! The Proposal, Operation, and Chapter facts that one Acceptance classifies.
 
 use storyos_application::{AcceptProposalInput, ProjectCommandError, ProjectScope};
-use storyos_core::ManuscriptBlock;
+use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
 use crate::command_sequence::unavailable;
 
@@ -69,16 +69,23 @@ impl LoadedProposal {
         revision_matches && receipt_matches
     }
 
-    pub(super) fn accepted_body(&self, selected_ids: &[String]) -> String {
+    /// The Chapter after the Acceptance of `selected_ids`. The candidate of each target Block
+    /// replaces its text, and each line feed of the candidate starts a new Block (ADR 0106,
+    /// section 2).
+    pub(super) fn accepted_chapter(&self, selected_ids: &[String]) -> AcceptedChapter {
         let selected: std::collections::BTreeSet<&str> =
             selected_ids.iter().map(String::as_str).collect();
         if self.chapter_blocks.is_empty() {
-            return self
-                .operations
-                .iter()
-                .find(|operation| selected.contains(operation.operation_id.as_str()))
-                .map(|operation| operation.candidate_text.clone())
-                .unwrap_or_else(|| self.candidate_text.clone());
+            // A Chapter Head with no Blocks has no Block identity to keep, so nothing splits.
+            return AcceptedChapter {
+                payload: self
+                    .operations
+                    .iter()
+                    .find(|operation| selected.contains(operation.operation_id.as_str()))
+                    .map(|operation| operation.candidate_text.clone())
+                    .unwrap_or_else(|| self.candidate_text.clone()),
+                split_blocks: None,
+            };
         }
         // The first selected Operation of a Block gives its text.
         let mut candidates = std::collections::BTreeMap::new();
@@ -91,14 +98,44 @@ impl LoadedProposal {
                 .entry(operation.manuscript_block_id.as_str())
                 .or_insert(operation.candidate_text.as_str());
         }
-        let mut blocks = self.chapter_blocks.clone();
-        for block in &mut blocks {
-            if let Some(candidate) = candidates.get(block.manuscript_block_id.as_str()) {
-                block.text = (*candidate).to_owned();
+        let mut blocks = Vec::with_capacity(self.chapter_blocks.len());
+        for block in &self.chapter_blocks {
+            match candidates.get(block.manuscript_block_id.as_str()) {
+                Some(candidate) => blocks.extend(split_candidate(block, candidate)),
+                None => blocks.push(block.clone()),
             }
         }
-        crate::manuscript_block::persist_canonical_bytes(&blocks)
+        let added = blocks.len() > self.chapter_blocks.len();
+        AcceptedChapter {
+            payload: crate::manuscript_block::persist_canonical_bytes(&blocks),
+            split_blocks: added.then_some(blocks),
+        }
     }
+}
+
+/// The payload of the new Revision of an Acceptance, and its Blocks when a split added a Block.
+pub(super) struct AcceptedChapter {
+    pub(super) payload: String,
+    /// `None` keeps the Block members of the expected Chapter Head.
+    pub(super) split_blocks: Option<Vec<ManuscriptBlock>>,
+}
+
+/// The target Block with the first part of `candidate`, and then a new paragraph Block for each
+/// next part. A line feed ends a part, and an empty part makes no Block. When no part has text,
+/// the target Block has empty text.
+fn split_candidate(target: &ManuscriptBlock, candidate: &str) -> Vec<ManuscriptBlock> {
+    let mut parts = candidate.split('\n').filter(|part| !part.is_empty());
+    let first = ManuscriptBlock {
+        text: parts.next().unwrap_or_default().to_owned(),
+        ..target.clone()
+    };
+    std::iter::once(first)
+        .chain(parts.map(|text| ManuscriptBlock {
+            manuscript_block_id: uuid::Uuid::now_v7().to_string(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: text.to_owned(),
+        }))
+        .collect()
 }
 
 pub(super) async fn load_proposal(

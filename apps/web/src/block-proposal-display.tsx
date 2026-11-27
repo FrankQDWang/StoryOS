@@ -514,8 +514,8 @@ export function BlockProposalDisplay({
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(target.proposalId);
           // A reference to the accepted candidate text now refers to the same text in the Chapter (ADR 0062).
-          acceptDraftCandidates(scope, target.proposalId, response.receipt.selected_operation_ids,
-            response.effect.authoritative_revision.revision_id);
+          acceptDraftCandidates(scope, target.proposalId, acceptedCandidates(target.proposalId,
+            response.receipt), response.effect.authoritative_revision.revision_id);
         }
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         if (response.effect.kind === "refused") {
@@ -543,6 +543,15 @@ export function BlockProposalDisplay({
     })();
   };
 
+  /** The candidate text of each accepted Operation, from the displayed read of the accepted Proposal Revision. */
+  const acceptedCandidates = (proposalId: string,
+    receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] }) => {
+    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal;
+    return new Map(displayed?.revision_id !== receipt.proposal_revision_id ? [] : displayed.operations
+      .filter((operation) => receipt.selected_operation_ids.includes(operation.operation_id))
+      .map((operation) => [operation.operation_id, operation.candidate_text]));
+  };
+
   const retryPending = (proposalId: string) => {
     const workspace = editorProps.persistWorkspace;
     if (acceptingRef.current || workspace === undefined) return;
@@ -564,7 +573,7 @@ export function BlockProposalDisplay({
         const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(proposalId);
-          acceptDraftCandidates(scope, proposalId, response.receipt.selected_operation_ids,
+          acceptDraftCandidates(scope, proposalId, acceptedCandidates(proposalId, response.receipt),
             response.effect.authoritative_revision.revision_id);
         }
         if (response.effect.kind === "refused") {

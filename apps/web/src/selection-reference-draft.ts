@@ -227,21 +227,32 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
 
 /**
  * Makes each reference to an accepted candidate a Chapter text reference at the Revision after the
- * acceptance. The accepted text replaces the text of its block, so the offsets do not change.
+ * acceptance. `candidates` gives the accepted candidate text of each Operation. The Server splits the candidate
+ * at each line feed, and only the first part with text stays in its target block (ADR 0106, section 2). Thus only
+ * a reference in that part becomes Chapter text, with the offsets of the part. Each other reference stays a
+ * candidate reference, and it leaves the draft with its candidate.
  */
-export function acceptDraftCandidates(scope: ProjectScope, proposalId: string, operationIds: readonly string[],
-  revisionId: string): void {
+export function acceptDraftCandidates(scope: ProjectScope, proposalId: string,
+  candidates: ReadonlyMap<string, string>, revisionId: string): void {
   const draft = read(scope);
-  const accepted = (entry: DraftReference) => entry.reference.kind === "proposal_candidate_text"
-    && entry.reference.proposal_id === proposalId && operationIds.includes(entry.reference.operation_id)
-    && entry.candidate !== undefined;
-  if (!draft.entries.some(accepted)) return;
+  const firstPart = (entry: DraftReference) => {
+    if (entry.reference.kind !== "proposal_candidate_text" || entry.reference.proposal_id !== proposalId
+      || entry.candidate === undefined) return undefined;
+    const text = candidates.get(entry.reference.operation_id);
+    if (text === undefined) return undefined;
+    const start = Math.max(text.search(/[^\n]/), 0);
+    const end = text.indexOf("\n", start);
+    const part = { start, end: end < 0 ? text.length : end };
+    return part.start <= entry.reference.start_offset && entry.reference.end_offset <= part.end ? part : undefined;
+  };
+  if (!draft.entries.some((entry) => firstPart(entry) !== undefined)) return;
   write(scope, { ...draft, entries: draft.entries.map((entry) => {
-    if (!accepted(entry) || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
+    const part = firstPart(entry);
+    if (part === undefined || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
       return entry;
     }
     const { blockId } = entry.candidate;
-    const point = (offset: number) => ({ manuscript_block_id: blockId, offset });
+    const point = (offset: number) => ({ manuscript_block_id: blockId, offset: offset - part.start });
     return { key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
       reference: { kind: "chapter_text", chapter_id: entry.reference.chapter_id,
         base_authoritative_revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",

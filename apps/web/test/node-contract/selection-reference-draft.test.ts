@@ -141,7 +141,7 @@ test("a candidate reference moves with candidate edits and becomes Chapter text 
   trackDraftReferences(project, CHAPTER, tracked, revised, tree);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [{ ...candidateEntry(2, 4).reference,
     revision_id: NEXT_CANDIDATE }]);
-  acceptDraftCandidates(project, PROPOSAL, [OPERATION!], NEXT);
+  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, "雨停大了。"]]), NEXT);
   assert.deepEqual(draftEntries(project).map(({ reference: value, label, moved, candidate }) =>
     ({ value, label, moved, candidate })), [{ value: reference(FIRST!, 2, 4, NEXT), moved: false, candidate: undefined,
     label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 } } }]);
@@ -152,7 +152,7 @@ test("an accepted candidate reference keeps the accepted Revision when a hydrate
   const tracked = new Set<string>();
   const [key] = addDraftReferences(project, [candidateEntry(1, 3)], tracked)!;
   assert.equal(tracked.size, 0);
-  acceptDraftCandidates(project, PROPOSAL, [OPERATION!], NEXT);
+  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, "雨停了。"]]), NEXT);
   // The Proposals refresh removes the candidate while the editor still shows the Revision before the acceptance.
   const before = withCandidate("雨停了。");
   trackDraftReferences(project, CHAPTER, tracked,
@@ -162,6 +162,21 @@ test("an accepted candidate reference keeps the accepted Revision when a hydrate
     [[reference(FIRST!, 1, 3, NEXT), false]]);
   // The hydrate of the accepted Revision then starts the tracking.
   assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), [key]);
+});
+
+test("an accepted candidate with line feeds makes Chapter text only of a reference in its first part", () => {
+  const project = scope();
+  // The Server splits the candidate at each line feed, and only the first part keeps the target block (ADR 0106).
+  addDraftReferences(project, [candidateEntry(2, 4), candidateEntry(1, 2), candidateEntry(6, 8), candidateEntry(3, 7)]);
+  acceptDraftCandidates(project, PROPOSAL, new Map([[OPERATION!, "\n雨停了。\n风起了。"]]), NEXT);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(FIRST!, 1, 3, NEXT),
+    reference(FIRST!, 0, 1, NEXT), candidateEntry(6, 8).reference, candidateEntry(3, 7).reference]);
+  // A reference to a later part leaves with its candidate, as a candidate reference does.
+  const before = withCandidate("\n雨停了。\n风起了。");
+  trackDraftReferences(project, CHAPTER, new Set(),
+    before.tr.replaceWith(0, before.doc.content.size, state("雨停了。", "风起了。").doc.content), tree);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference),
+    [reference(FIRST!, 1, 3, NEXT), reference(FIRST!, 0, 1, NEXT)]);
 });
 
 test("a candidate reference stays while a replaced document keeps its text, and goes with its candidate", () => {
