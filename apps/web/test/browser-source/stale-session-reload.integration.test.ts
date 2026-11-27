@@ -2,9 +2,11 @@ import { afterEach, expect, it } from "vitest";
 
 import type { GetChapterResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { openEditorWorkspace, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
+import { freezeOneIntentSubmission, openEditorWorkspace, submitOnePendingAuthorEdit }
+  from "../../src/editor-session.ts";
 import type { EditorReadyState } from "../../src/editor-types.ts";
 import { appendAuthorEdit } from "../../src/local-edit-journal.ts";
+import { captureManuscriptChange } from "../../src/manuscript-doc.ts";
 import {
   OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders, requestResult, requireEditorReady,
@@ -17,6 +19,8 @@ const NEW_SESSION = "018f0000-0000-7001-8000-000000000a42";
 const NEW_SNAPSHOT = "018f0000-0000-7001-8000-000000000a43";
 const MOVED_SNAPSHOT = "018f0000-0000-7001-8000-000000000a45";
 const LATER_BODY = "Base, and the text of another tab";
+type Revision = ReturnType<typeof chapterRevision>;
+const REVISIONS = { base: chapterRevision(REVISION, "Base"), later: chapterRevision(LATER_REVISION, LATER_BODY) };
 const EDIT = { from: 4, to: 4, text: "!", resultingBody: "Base!" };
 const UNDO_GROUP = "018f0000-0000-7001-8000-000000000a44";
 // Two inputs of one group that end on the base text, so the Server gives `no_effect`.
@@ -49,15 +53,17 @@ async function sha256(text: string): Promise<string> {
  * `edit`, one Author Edit with that zero-authority result. After `moveBase`, the read gives the base that a deletion
  * moved: a later Snapshot of the same Revision. It records each request and throws on each other request.
  */
-async function fakeServer(edit?: "no_effect" | "conflicted") {
+async function fakeServer(edit?: "no_effect" | "conflicted", { base, later } = REVISIONS) {
   const requests: string[] = [];
-  let stored = scenario.session;
+  const snapshot = async (revision: Revision) => ({ authoritative_head_revision_id: revision.revision_id,
+    materialized_revision: revision, materialized_payload_digest: {
+      ...scenario.session.base_snapshot.materialized_payload_digest, value_hex_lowercase: await sha256(revision.body) } });
+  const first = { ...scenario.session, base_snapshot: { ...scenario.session.base_snapshot, ...await snapshot(base) } };
+  let stored = first;
   const created = { ...scenario.session,
     editor_session: { ...scenario.session.editor_session, editor_session_id: NEW_SESSION },
     base_snapshot: { ...scenario.session.base_snapshot, snapshot_id: NEW_SNAPSHOT, project_activity_position: "1",
-      authoritative_head_revision_id: LATER_REVISION, materialized_revision: chapterRevision(LATER_REVISION, LATER_BODY),
-      materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
-        value_hex_lowercase: await sha256(LATER_BODY) } } };
+      ...await snapshot(later) } };
   const fetchImpl: typeof fetch = async (input, init) => {
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     requests.push(name);
@@ -82,22 +88,30 @@ async function fakeServer(edit?: "no_effect" | "conflicted") {
     throw new Error(`unexpected request: ${name}`);
   };
   const moveBase = () => {
-    stored = { ...scenario.session, base_snapshot: { ...scenario.session.base_snapshot, snapshot_id: MOVED_SNAPSHOT,
+    stored = { ...first, base_snapshot: { ...first.base_snapshot, snapshot_id: MOVED_SNAPSHOT,
       project_activity_position: "1" } };
   };
-  return { fetchImpl, requests, moveBase };
+  return { fetchImpl, requests, moveBase, revisions: { base, later } };
 }
 
-const laterChapter: GetChapterResponse = { ...scenario.chapter, project_activity_position: "1",
-  chapter: { ...scenario.chapter.chapter, current_revision: chapterRevision(LATER_REVISION, LATER_BODY) } };
+const chapterAt = (revision: Revision, position: string): GetChapterResponse => ({ ...scenario.chapter,
+  project_activity_position: position, chapter: { ...scenario.chapter.chapter, current_revision: revision } });
 
 async function openStored(server: Awaited<ReturnType<typeof fakeServer>>) {
   await deleteJournal(scenario.journalName);
   sessionStorage.setItem(ACTIVE_KEY, SESSION);
   const first = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-    chapter: scenario.chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+    chapter: chapterAt(server.revisions.base, "0"), profile: scenario.profile, fetchImpl: server.fetchImpl });
   requireEditorReady(first);
   return first;
+}
+
+/** Opens the Chapter of the later Revision at a new load. */
+async function load(server: Awaited<ReturnType<typeof fakeServer>>) {
+  const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
+    chapter: chapterAt(server.revisions.later, "1"), profile: scenario.profile, fetchImpl: server.fetchImpl });
+  if (state.kind === "editor-ready") trackDatabase(state.database, databases);
+  return state;
 }
 
 async function submit(workspace: EditorReadyState, server: Awaited<ReturnType<typeof fakeServer>>) {
@@ -120,13 +134,15 @@ type Leave = (workspace: EditorReadyState, server: Awaited<ReturnType<typeof fak
  * Opens the stored Editor Session on the Chapter of its base, leaves the Journal work of `leave`, and proves that the
  * Author Edit of `edit` settled with that result. With `moved`, the Server then gives the base that a deletion moved.
  */
-async function prepare(edit: "no_effect" | "conflicted" | undefined, moved: boolean, leave: Leave) {
-  const server = await fakeServer(edit);
+async function prepare(edit: "no_effect" | "conflicted" | undefined, moved: boolean, leave: Leave,
+  revisions = REVISIONS) {
+  const server = await fakeServer(edit, revisions);
   const first = await openStored(server);
   await leave(first, server);
   first.database.close();
   const settlements = (await journalRows("submission_groups") as { settlement: { kind: string;
-    effect?: { kind: string } } }[]).map(({ settlement }) => [settlement.kind, settlement.effect?.kind]);
+    effect?: { kind: string } } }[]).filter(({ settlement }) => settlement.kind !== "unsettled")
+    .map(({ settlement }) => [settlement.kind, settlement.effect?.kind]);
   expect({ edits: server.requests.filter((request) => request === AUTHOR_EDIT).length, settlements })
     .toEqual(edit === undefined ? { edits: 0, settlements: [] }
       : { edits: 1, settlements: [["zero_authority_receipt_settled", edit]] });
@@ -148,18 +164,16 @@ it.each([
   moved, leave) => {
   const server = await prepare(edit, moved, leave);
 
-  const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-    chapter: laterChapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+  const state = await load(server);
 
   requireEditorReady(state);
-  trackDatabase(state.database, databases);
   expect({ session: state.session.editor_session.editor_session_id,
     revision: state.session.base_snapshot.authoritative_head_revision_id, stored: sessionStorage.getItem(ACTIVE_KEY),
     requests: server.requests }).toEqual({ session: NEW_SESSION, revision: LATER_REVISION, stored: NEW_SESSION,
     requests: [SESSION_READ, CHALLENGE, CREATION] });
 });
 
-// Each case leaves work in the Journal of the stored Session that the Server does not have.
+// Each case leaves Author Edit text in the Journal of the stored Session that the Server does not have.
 it.each([
   ["a record that is not settled", undefined, false, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, EDIT);
@@ -173,21 +187,65 @@ it.each([
     await appendAuthorEdit(workspace, EDIT);
     await submit(workspace, server);
   }],
-  ["an unresolved Withdrawal", undefined, false, async (workspace: EditorReadyState) => {
+] as const)("puts the text on the current Chapter in a new Editor Session at a load when its Journal has %s",
+  async (_, edit, moved, leave) => {
+    const server = await prepare(edit, moved, leave);
+    const records = await journalRows("intents");
+
+    const state = await load(server);
+
+    requireEditorReady(state);
+    // The later edit of the block wins. The new partition has it, and the Session changes after it is there.
+    expect({ session: state.session.editor_session.editor_session_id, stored: sessionStorage.getItem(ACTIVE_KEY),
+      requests: server.requests, text: state.openedProjection.body, save: state.openedProjection.save_state,
+      records: (await journalRows("intents")).length - records.length }).toEqual({ session: NEW_SESSION,
+      stored: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, CREATION], text: "Base!", save: "saving", records: 1 });
+  });
+
+it("keeps a changed block that the current Chapter does not have as a paragraph at its place", async () => {
+  const [first, second] = ["018f0000-0000-7001-8000-000000000a46", "018f0000-0000-7001-8000-000000000a47"];
+  const revisions = { base: { revision_id: REVISION, body: "雨夜。\n渡口。", blocks: [
+    { manuscript_block_id: first, block_kind: "paragraph" as const, text: "雨夜。" },
+    { manuscript_block_id: second, block_kind: "heading" as const, text: "渡口。" }] },
+  later: chapterRevision(LATER_REVISION, "雨夜，风起。", first) };
+  const server = await prepare(undefined, false, async (workspace) => {
+    const edit = captureManuscriptChange(revisions.base.blocks, [
+      { manuscript_block_id: first, block_kind: "paragraph", text: "雨夜。" },
+      { manuscript_block_id: second, block_kind: "heading", text: "渡口无人。" }]);
+    await appendAuthorEdit(workspace, { ...edit!, inputOrigin: "typing", undoGroupId: UNDO_GROUP,
+      createdAt: "2026-08-15T08:00:00.000Z" });
+  }, revisions);
+
+  const state = await load(server);
+
+  requireEditorReady(state);
+  // The steps of the catch-up go out as one Author Edit.
+  const group = await freezeOneIntentSubmission(state);
+  expect(group.ordered_coverage.length).toBe(state.openedProjection.unsettled_intent_count);
+  const blocks = state.openedProjection.blocks;
+  expect({ blocks: blocks.map(({ block_kind, text }) => [block_kind, text]), kept: blocks[0]?.manuscript_block_id,
+    added: [first, second].includes(blocks[1]?.manuscript_block_id ?? first), requests: server.requests })
+    .toEqual({ blocks: [["paragraph", "雨夜，风起。"], ["paragraph", "渡口无人。"]], kept: first, added: false,
+      requests: [SESSION_READ, CHALLENGE, CREATION] });
+});
+
+// Each case leaves work in the Journal of the stored Session that the catch-up cannot put on the current Chapter.
+it.each([
+  ["a group that is not settled", async (workspace: EditorReadyState) => {
+    await appendAuthorEdit(workspace, EDIT);
+    await freezeOneIntentSubmission(workspace);
+  }],
+  ["an unresolved Withdrawal", async (workspace: EditorReadyState) => {
     await requestResult(workspace.database.transaction("metadata", "readwrite").objectStore("metadata").put({
       key: `withdraw:${workspace.partition.journal_partition_id}:${LATER_REVISION}:${NEW_SNAPSHOT}`,
       settlement: "unresolved" }));
   }],
-] as const)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, edit,
-  moved, leave) => {
-  const server = await prepare(edit, moved, leave);
+] as const)("keeps the stored Editor Session and its input at a load when its Journal has %s", async (_, leave) => {
+  const server = await prepare(undefined, false, leave);
   const records = await journalRows("intents");
 
-  const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-    chapter: laterChapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+  const state = await load(server);
 
-  if (state.kind === "editor-ready") trackDatabase(state.database, databases);
-  // The interim state of ADR 0107 stays until a tab with an earlier base catches up (#1945).
   expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests })
     .toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ] });
   // The load does not remove or change the input of the stored Session.

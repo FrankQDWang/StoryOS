@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   createProject,
   createProjectChallenge,
+  getChapter,
   getManuscriptTree,
   listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -50,6 +51,7 @@ import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
+import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
@@ -402,11 +404,13 @@ function ProjectEditorView({
   };
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
+  const onEarlierBaseRef = useRef<(shown: readonly ManuscriptParagraph[]) => void>(() => {});
   const editorState = state.editor;
   // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
   const writing = useMemo(() => editorState.kind === "editor-ready"
     ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl, ...writingTimers,
-      onFailure: (error) => { onEditorFailureRef.current(error); } })
+      onFailure: (error) => { onEditorFailureRef.current(error); },
+      onEarlierBase: (shown) => { onEarlierBaseRef.current(shown); } })
     : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
   // Ends the hand-over: each held edit goes to the normal capture entry in its order, or the notice shows the input.
@@ -462,8 +466,33 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string) => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { profile: state.profile, project: state.project }, chapterId });
+  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[]) => reopenControlledProject({ baseUrl,
+    fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project }, chapterId, shown });
+
+  // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107).
+  onEarlierBaseRef.current = (shown) => {
+    if (structureInFlightRef.current) {
+      onEditorFailureRef.current(new Error("Author Edit requires attention"));
+      return;
+    }
+    void reopen(undefined, shown).then(onReopened);
+  };
+  // When the tab comes to the front, it saves its input and reads the Chapter one time. A later Revision opens the tab
+  // again on it. A save on an earlier base catches up through `onEarlierBase`.
+  useEffect(() => {
+    if (writing === undefined) return undefined;
+    const front = () => {
+      if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
+        || selectedChapterIdRef.current !== currentChapterId) return;
+      void writing.runAfterQuiesce("settled", async (projection) => (await getChapter({ baseUrl, fetchImpl,
+        projectId: state.project.project.project_id, chapterId: currentChapterId })).chapter.current_revision
+        .revision_id !== projection.authoritative_revision_id).then((quiet) => {
+        if (quiet.kind === "ran" && quiet.result && !structureInFlightRef.current) void reopen().then(onReopened);
+      }, () => {});
+    };
+    document.addEventListener("visibilitychange", front);
+    return () => { document.removeEventListener("visibilitychange", front); };
+  }, [writing]);
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",

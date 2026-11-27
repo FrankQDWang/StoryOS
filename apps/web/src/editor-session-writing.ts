@@ -121,6 +121,13 @@ async function candidateOutcome(workspace: EditorWorkspace, key: string)
     : { kind: "other" };
 }
 
+/** True when a group of the partition settled with `stale_authoritative_head`: the base is earlier than the Server. */
+async function hasEarlierBase(workspace: EditorWorkspace): Promise<boolean> {
+  return (await readJournalSnapshot(workspace)).groups.some(({ settlement }) =>
+    settlement.kind === "zero_authority_receipt_settled" && settlement.effect.kind === "conflicted"
+    && settlement.effect.reason === "stale_authoritative_head");
+}
+
 export function createEditorSessionWritingController({
   workspace,
   baseUrl,
@@ -128,6 +135,7 @@ export function createEditorSessionWritingController({
   cryptoImpl = globalThis.crypto,
   submitGroup = submitOnePendingAuthorEdit,
   onFailure,
+  onEarlierBase,
   now = Date.now,
   setTimeoutImpl = (callback, timeout) => globalThis.setTimeout(callback, timeout),
   clearTimeoutImpl = (timer) => globalThis.clearTimeout(timer),
@@ -138,6 +146,12 @@ export function createEditorSessionWritingController({
   cryptoImpl?: Crypto;
   submitGroup?: typeof submitOnePendingAuthorEdit;
   onFailure: (error: unknown) => void;
+  /**
+   * Receives the text that the editor shows, with captured input that is not in the Journal, when a save finds a later
+   * Revision on the Server. The controller then accepts no input, and the caller catches up (ADR 0107, section 2).
+   * Without it, the save requires attention.
+   */
+  onEarlierBase?: (shown: readonly ManuscriptParagraph[]) => void;
   now?: () => number;
   setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
   clearTimeoutImpl?: (timer: TimerHandle) => void;
@@ -315,6 +329,12 @@ export function createEditorSessionWritingController({
         enterAttention();
         return;
       }
+    }
+    if (projection.save_state === "needs_attention" && onEarlierBase !== undefined && await hasEarlierBase(workspace)) {
+      attention = true;
+      submissionClosed = true;
+      onEarlierBase(state.projection.blocks);
+      return;
     }
     if (projection.save_state === "saved") await collectEligibleJournalPayload(workspace);
     install(projection, projection.save_state === "saved");

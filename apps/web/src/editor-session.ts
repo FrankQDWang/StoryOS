@@ -22,9 +22,14 @@ import type {
 import {
   JOURNAL_DATABASE_VERSION,
   JOURNAL_OBJECT_STORES,
+  appendAuthorEdit,
   journalHasOpenWork,
+  readJournalSnapshot,
   rebuildPendingProjection,
+  validateJournalSnapshot,
 } from "./local-edit-journal.ts";
+import { blocksOnCurrent, stepsOnCurrent, type EarlierBaseText } from "./earlier-base-catch-up.ts";
+import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
@@ -288,7 +293,8 @@ type EditorWorkspaceOptions = {
  * the start.
  */
 export interface EditorWorkspaceOpening {
-  finish(chapter: GetChapterResponse, project?: GetProjectResponse): Promise<OpenedEditorWorkspace>;
+  finish(chapter: GetChapterResponse, project?: GetProjectResponse, shown?: readonly ManuscriptParagraph[])
+    : Promise<OpenedEditorWorkspace>;
   /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
   abandon(): Promise<void>;
 }
@@ -302,6 +308,32 @@ type EditorSessionStart =
     creation: SessionCreation | undefined }
   | { kind: "failed"; database: IDBDatabase | undefined; error: unknown };
 
+// The Editor Session that this page writes with, and the end of its lock.
+let heldSession: { editorSessionId: string; release: () => void } | undefined;
+
+/**
+ * Takes the lock of an Editor Session for this page, and ends the lock of the earlier Editor Session of the page. It is
+ * false when another page holds the lock: the browser command "Duplicate tab" copies `sessionStorage`, and two pages
+ * of one Editor Session would freeze and settle the Journal records of each other.
+ */
+async function lockEditorSession(editorSessionId: string): Promise<boolean> {
+  const locks = globalThis.navigator?.locks;
+  if (heldSession?.editorSessionId === editorSessionId || locks === undefined) return true;
+  return new Promise<boolean>((resolve, reject) => {
+    locks.request(`storyos-editor-session:${editorSessionId}`, { ifAvailable: true }, (lock) => {
+      if (lock === null) {
+        resolve(false);
+        return undefined;
+      }
+      heldSession?.release();
+      return new Promise<void>((release) => {
+        heldSession = { editorSessionId, release };
+        resolve(true);
+      });
+    }).catch(reject);
+  });
+}
+
 /** Opens the Journal and reads the stored Editor Session at once, so that the read is in flight with the Chapter read. */
 export function startEditorWorkspace({
   baseUrl, project, profile, fetchImpl = globalThis.fetch,
@@ -312,8 +344,10 @@ export function startEditorWorkspace({
     let database: IDBDatabase | undefined;
     try {
       const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
-      const active = globalThis.sessionStorage
+      const stored = globalThis.sessionStorage
         ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
+      // A Session that another page writes with is not this page's Session, so the open creates one.
+      const active = stored && !await lockEditorSession(stored) ? null : stored;
       // The creation waits for the Chapter read (#1884), and its Challenge starts with that read (#1899).
       const creation = !active && earlyChallenge
         ? prepareSessionCreation({ baseUrl, project, profile, fetchImpl, cryptoImpl }) : undefined;
@@ -329,8 +363,8 @@ export function startEditorWorkspace({
     }
   })();
   return {
-    finish: (chapter, read = project) => finishEditorWorkspace(started, { baseUrl, project: read, chapter, profile,
-      fetchImpl, cryptoImpl }),
+    finish: (chapter, read = project, shown) => finishEditorWorkspace(started, { baseUrl, project: read, chapter,
+      profile, fetchImpl, cryptoImpl, shown }),
     abandon: () => started.then((start) => { start.database?.close(); }),
   };
 }
@@ -349,27 +383,27 @@ function baseIsNotChapter(value: unknown, chapter: GetChapterResponse): boolean 
     || base?.materialized_revision?.revision_id !== chapter.chapter.current_revision.revision_id;
 }
 
-/**
- * Tells if the Journal partition of the stored Editor Session has work that the Server does not have: Author Edit work
- * that the rule of the working set keeps open (`journalHasOpenWork`), a decision flight, an unresolved Withdrawal, or
- * a retained recovery row. Work that this check counts as open keeps the stored Editor Session.
- */
-async function partitionHasOpenWork(database: IDBDatabase, value: unknown, scope: ProjectScope,
-  profile: Release1ProtocolProfile, cryptoImpl: Crypto): Promise<boolean> {
+/** The workspace of the stored Editor Session. A deletion moves its Server base (ADR 0107), so it has the Journal base. */
+async function storedWorkspace(database: IDBDatabase, value: unknown, scope: ProjectScope,
+  profile: Release1ProtocolProfile, cryptoImpl: Crypto): Promise<EditorWorkspace> {
   const served = value as GetEditorSessionResponse;
   const partition = partitionFrom(served, scope, profile);
-  const partitionId = partition.journal_partition_id;
   const stored = (await requestResult(database.transaction("metadata", "readonly").objectStore("metadata")
-    .get(`active_base:${partitionId}`)) as { value?: GetEditorSessionResponse["base_snapshot"] } | undefined)?.value;
-  // A deletion moves the base of each Editor Session on the Server (ADR 0107). The Journal then has the earlier base,
-  // which the check of its rows uses. Another earlier base is corrupt, and the check counts it as open work.
+    .get(`active_base:${partition.journal_partition_id}`)) as { value?: GetEditorSessionResponse["base_snapshot"] }
+    | undefined)?.value;
+  // The Journal then has the earlier base, which the check of its rows uses. Another earlier base is corrupt, and the
+  // check counts it as open work.
   const moved = stored !== undefined && boundedU64(stored.project_activity_position)
     && boundedU64(served.base_snapshot.project_activity_position)
     && BigInt(stored.project_activity_position) < BigInt(served.base_snapshot.project_activity_position);
   const session = moved ? { ...served, base_snapshot: stored } : served;
-  if (await journalHasOpenWork({ database, partition, session, cryptoImpl,
-    maxJsonStringUtf8Bytes: profile.max_json_string_utf8_bytes })) return true;
-  const metadata = database.transaction("metadata", "readonly").objectStore("metadata");
+  return { database, partition, session, cryptoImpl, maxJsonStringUtf8Bytes: profile.max_json_string_utf8_bytes };
+}
+
+/** Tells if the partition of `workspace` has a decision flight, an unresolved Withdrawal, or a retained recovery row. */
+async function partitionHasDecisionWork(workspace: EditorWorkspace): Promise<boolean> {
+  const partitionId = workspace.partition.journal_partition_id;
+  const metadata = workspace.database.transaction("metadata", "readonly").objectStore("metadata");
   const rows = (prefix: string) => requestResult(metadata.getAll(IDBKeyRange.bound(
     `${prefix}${partitionId}:`, `${prefix}${partitionId}:\uffff`)));
   const [acceptances, rejections, withdrawals, retained] = await Promise.all([rows("acceptance:"),
@@ -379,8 +413,39 @@ async function partitionHasOpenWork(database: IDBDatabase, value: unknown, scope
     || withdrawals.some((row) => row.settlement === "unresolved");
 }
 
+/**
+ * Tells if the Journal partition of the stored Editor Session has work that the Server does not have: Author Edit work
+ * that the rule of the working set keeps open (`journalHasOpenWork`), a decision flight, an unresolved Withdrawal, or
+ * a retained recovery row. Work that this check counts as open keeps the stored Editor Session.
+ */
+async function partitionHasOpenWork(workspace: EditorWorkspace): Promise<boolean> {
+  return await journalHasOpenWork(workspace) || partitionHasDecisionWork(workspace);
+}
+
+/**
+ * The text of the stored Editor Session that a catch-up can put on the current Chapter (ADR 0107, section 2), or
+ * `undefined` when its open work is not only Author Edit text of the Chapter. A group that went out with no known
+ * result, input in a Proposal candidate, and decision work keep the stored Session, because the catch-up cannot know
+ * if they applied. `shown` is the text that a live tab shows, with its input that is not in the Journal.
+ */
+async function earlierBaseText(workspace: EditorWorkspace, chapter: GetChapterResponse,
+  shown: readonly ManuscriptParagraph[] | undefined): Promise<EarlierBaseText | undefined> {
+  const base = workspace.session.base_snapshot;
+  if (base.chapter_id !== chapter.chapter.chapter_id || await partitionHasDecisionWork(workspace)) return undefined;
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const revisedCandidate = new Set(snapshot.groups.flatMap((group) => group.settlement.kind
+    === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised"
+    ? group.ordered_coverage.map((item) => item.local_intent_sequence) : []));
+  if (snapshot.groups.some((group) => group.settlement.kind !== "applied_receipt_settled"
+    && group.settlement.kind !== "zero_authority_receipt_settled")
+    || snapshot.records.some((record) => record.proposal_target !== undefined
+      && !revisedCandidate.has(record.local_intent_sequence))) return undefined;
+  return { base: base.materialized_revision.blocks,
+    shown: shown ?? (await rebuildPendingProjection(workspace)).blocks };
+}
+
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
-  baseUrl, project, chapter, profile, fetchImpl, cryptoImpl,
+  baseUrl, project, chapter, profile, fetchImpl, cryptoImpl, shown,
 }: {
   baseUrl: string;
   project: GetProjectResponse;
@@ -388,19 +453,30 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   profile: Release1ProtocolProfile;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  shown?: readonly ManuscriptParagraph[] | undefined;
 }): Promise<OpenedEditorWorkspace> {
   const scope = project.project_scope;
   let start = await started;
+  // The edits that put the text of the stored Session on the current Chapter (ADR 0107, section 2).
+  let catchUp: ReturnType<typeof stepsOnCurrent> | undefined;
   // ADR 0107: another Editor Session can write, so the stored Session can have an earlier base than the Chapter read.
-  // When its Journal partition has no open work, the load opens a new Editor Session, as a new tab does.
+  // When its Journal partition has no open work, the load opens a new Editor Session, as a new tab does. When its open
+  // work is Author Edit text, the new Editor Session gets that text on the current Chapter.
   if (start.kind === "started" && start.active && baseIsNotChapter(start.sessionValue, chapter)) {
-    let open = true;
     try {
-      open = await partitionHasOpenWork(start.database, start.sessionValue, scope, profile, cryptoImpl);
+      const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
+      if (!await partitionHasOpenWork(stored)) {
+        start = { ...start, active: null };
+      } else {
+        const text = await earlierBaseText(stored, chapter, shown);
+        const current = chapter.chapter.current_revision.blocks;
+        catchUp = text && stepsOnCurrent(current, blocksOnCurrent(text, current, () => uuidV7(cryptoImpl)));
+        if (catchUp !== undefined) start = { ...start, active: null };
+      }
     } catch {
-      // An unreadable Journal keeps the stored Session, so its recovery runs.
+      // An unreadable Journal, or text with no Author Edit form, keeps the stored Session, so its recovery runs.
+      catchUp = undefined;
     }
-    if (!open) start = { ...start, active: null };
   }
   if (start.kind === "started" && !start.active) {
     try {
@@ -459,6 +535,16 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       metadata.put({ key: activeBaseKey, value: session.base_snapshot });
     }
     await transactionResult(transaction);
+    if (!await lockEditorSession(session.editor_session.editor_session_id)) {
+      throw new Error("Another page writes with the Editor Session");
+    }
+    // The tab changes to the new Session only after its Journal has the text, so a stop keeps the stored Session.
+    const undoGroupId = uuidV7(cryptoImpl);
+    const createdAt = new Date().toISOString();
+    for (const edit of catchUp ?? []) {
+      await appendAuthorEdit(workspace, { ...edit, inputOrigin: "selection_replacement", undoGroupId, createdAt },
+        cryptoImpl);
+    }
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
     const pending = await rebuildPendingProjection(workspace);
     return { editor: { kind: "editor-ready", ...workspace, openedProjection: pending } };
