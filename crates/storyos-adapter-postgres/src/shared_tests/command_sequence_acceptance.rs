@@ -40,6 +40,16 @@ pub(crate) async fn acceptable_proposal(
     admin: &Client,
     base: u16,
 ) -> (ProjectScope, AcceptProposalInput, String) {
+    acceptable_proposal_with(store, admin, base, "Accepted text").await
+}
+
+/// The `acceptable_proposal` fixture with `candidate` as the candidate text.
+pub(crate) async fn acceptable_proposal_with(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    candidate: &str,
+) -> (ProjectScope, AcceptProposalInput, String) {
     let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
         two_chapter_writer(store, base).await;
     let block_id: String = admin
@@ -72,7 +82,7 @@ pub(crate) async fn acceptable_proposal(
                (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
                 closure, candidate_text, base_authoritative_revision_id)
              VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', 'valid',
-                     'open', 'Accepted text', '{base_revision}');
+                     'open', '{candidate}', '{base_revision}');
              INSERT INTO storyos.proposal_heads
                (owner_user_id, project_id, proposal_id, current_revision_id)
              VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
@@ -80,13 +90,13 @@ pub(crate) async fn acceptable_proposal(
                (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
                 resolution, reservation_state, candidate_text)
              VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
-                     'pending', 'unresolved', 'Accepted text');
+                     'pending', 'unresolved', '{candidate}');
              INSERT INTO storyos.validation_receipts
                (owner_user_id, project_id, validation_receipt_id, proposal_id,
                 proposal_revision_id, result, base_authoritative_revision_id,
                 manuscript_block_id, candidate_text, reservation_state)
              VALUES ('{owner}', '{project}', '{validation}', '{proposal}', '{revision}',
-                     'valid', '{base_revision}', '{block}', 'Accepted text', 'unresolved');
+                     'valid', '{base_revision}', '{block}', '{candidate}', 'unresolved');
              COMMIT;",
             owner = scope.owner_user_id.as_ref(),
             project = scope.project_id.as_ref(),
@@ -99,6 +109,7 @@ pub(crate) async fn acceptable_proposal(
             base_revision = input.expected_authoritative_revision_id,
             operation = input.selected_operation_ids[0],
             validation = input.validation_receipt_id,
+            candidate = candidate.replace('\'', "''"),
         ))
         .await
         .unwrap();
