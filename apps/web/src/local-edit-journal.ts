@@ -969,6 +969,24 @@ function closedJournalGroup(snapshot: ValidatedJournalSnapshot, base: EditorBase
   };
 }
 
+/**
+ * Tells if the partition of `workspace` has Author Edit work that the Server does not have, by the rule of the working
+ * set (ADR 0036): a group that has no payload collection and is not closed, or a record that no other group covers. A
+ * load keeps the stored Editor Session when its partition has such work (ADR 0107).
+ */
+export async function journalHasOpenWork(workspace: EditorWorkspace): Promise<boolean> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const closed = closedJournalGroup(snapshot, workspace.session.base_snapshot);
+  const covered = new Set<number>();
+  for (const group of snapshot.groups) {
+    const later = snapshot.records.filter((record) =>
+      record.local_intent_sequence > group.covered_sequence_range.last);
+    if (group.payload_collection === undefined && !closed(group, later)) return true;
+    for (const item of group.ordered_coverage) covered.add(item.local_intent_sequence);
+  }
+  return snapshot.records.some((record) => !covered.has(record.local_intent_sequence));
+}
+
 async function prepareJournalAppend(workspace: EditorWorkspace) {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   if (await retireCollectedJournalPrefix(workspace, snapshot,

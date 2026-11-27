@@ -18,11 +18,11 @@ import type {
   EditorState,
   EditorWorkspace,
   JournalPartition,
-  JournalSubmissionGroup,
 } from "./editor-types.ts";
 import {
   JOURNAL_DATABASE_VERSION,
   JOURNAL_OBJECT_STORES,
+  journalHasOpenWork,
   rebuildPendingProjection,
 } from "./local-edit-journal.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
@@ -91,9 +91,18 @@ async function openJournalDatabase(
   };
   let database: IDBDatabase;
   try {
-    database = await requestResult(request) as IDBDatabase;
+    database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
+      // A page of an earlier version keeps its connection, so the upgrade waits for that page. The load enters local
+      // recovery now, and the connection that opens later closes at once.
+      request.onblocked = () => {
+        request.onsuccess = () => request.result.close();
+        reject(new Error("Local Edit Journal upgrade waits for another page"));
+      };
+    });
   } catch (error) {
-    request.result?.close();
+    if (request.readyState === "done") request.result?.close();
     throw error;
   }
   if (JOURNAL_OBJECT_STORES.some((name) => !database.objectStoreNames.contains(name))) {
@@ -340,38 +349,26 @@ function baseIsNotChapter(value: unknown, chapter: GetChapterResponse): boolean 
     || base?.materialized_revision?.revision_id !== chapter.chapter.current_revision.revision_id;
 }
 
-/** The settlements that leave no local work: an applied Author Edit, and a settled or refused decision. */
-const CLOSED_SETTLEMENTS = new Set(["applied_receipt_settled", "settled", "refused", "pre_admission_problem"]);
-
 /**
- * Tells if the Journal partition of the stored Editor Session has work that is not settled: a record that no closed
- * group covers, a group that is not closed, a decision flight, an unresolved Withdrawal, or a retained recovery row.
- * A zero-authority Author Edit, for example a conflicted one, is open unless it revised a Proposal, because the
- * Server does not have its text. Work that this check counts as open keeps the stored Editor Session.
+ * Tells if the Journal partition of the stored Editor Session has work that the Server does not have: Author Edit work
+ * that the rule of the working set keeps open (`journalHasOpenWork`), a decision flight, an unresolved Withdrawal, or
+ * a retained recovery row. Work that this check counts as open keeps the stored Editor Session.
  */
 async function partitionHasOpenWork(database: IDBDatabase, value: unknown, scope: ProjectScope,
-  profile: Release1ProtocolProfile): Promise<boolean> {
-  const partitionId = partitionFrom(value as GetEditorSessionResponse, scope, profile).journal_partition_id;
-  const transaction = database.transaction(["metadata", "intents", "submission_groups"], "readonly");
-  const working = (store: string) => requestResult(transaction.objectStore(store).index("working_partition")
-    .getAll(partitionId));
-  const rows = (prefix: string) => requestResult(transaction.objectStore("metadata").getAll(IDBKeyRange.bound(
+  profile: Release1ProtocolProfile, cryptoImpl: Crypto): Promise<boolean> {
+  const session = value as GetEditorSessionResponse;
+  const partition = partitionFrom(session, scope, profile);
+  if (await journalHasOpenWork({ database, partition, session, cryptoImpl,
+    maxJsonStringUtf8Bytes: profile.max_json_string_utf8_bytes })) return true;
+  const partitionId = partition.journal_partition_id;
+  const metadata = database.transaction("metadata", "readonly").objectStore("metadata");
+  const rows = (prefix: string) => requestResult(metadata.getAll(IDBKeyRange.bound(
     `${prefix}${partitionId}:`, `${prefix}${partitionId}:\uffff`)));
-  const [records, groups, acceptances, rejections, withdrawals, retained] = await Promise.all([working("intents"),
-    working("submission_groups"), rows("acceptance:"), rows("rejection:"), rows("withdraw:"), rows(recoveryPrefix),
-  ]) as [{ local_intent_sequence: number }[], JournalSubmissionGroup[], unknown[], unknown[],
+  const [acceptances, rejections, withdrawals, retained] = await Promise.all([rows("acceptance:"),
+    rows("rejection:"), rows("withdraw:"), rows(recoveryPrefix)]) as [unknown[], unknown[],
     { settlement?: unknown }[], unknown[]];
-  await transactionResult(transaction);
-  const closed = groups.filter((group) => {
-    const settlement = group.settlement as { kind?: string; effect?: { kind?: string } };
-    return group.reconciliation === undefined && (CLOSED_SETTLEMENTS.has(settlement.kind ?? "")
-      || (settlement.kind === "zero_authority_receipt_settled" && settlement.effect?.kind === "proposal_revised"));
-  });
-  const covered = new Set(closed.flatMap((group) => (group.ordered_coverage ?? [])
-    .map((item) => item.local_intent_sequence)));
-  return acceptances.length + rejections.length + retained.length > 0 || closed.length !== groups.length
-    || withdrawals.some((row) => row.settlement === "unresolved")
-    || records.some((record) => !covered.has(record.local_intent_sequence));
+  return acceptances.length + rejections.length + retained.length > 0
+    || withdrawals.some((row) => row.settlement === "unresolved");
 }
 
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
@@ -391,7 +388,7 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   if (start.kind === "started" && start.active && baseIsNotChapter(start.sessionValue, chapter)) {
     let open = true;
     try {
-      open = await partitionHasOpenWork(start.database, start.sessionValue, scope, profile);
+      open = await partitionHasOpenWork(start.database, start.sessionValue, scope, profile, cryptoImpl);
     } catch {
       // An unreadable Journal keeps the stored Session, so its recovery runs.
     }

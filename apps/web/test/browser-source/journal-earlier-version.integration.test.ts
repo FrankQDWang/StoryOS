@@ -251,6 +251,39 @@ it("upgrades a version 5 Journal, opens the editor, and keeps the earlier rows u
   }
 });
 
+it("enters local recovery while a page of version 5 keeps the Journal open, and upgrades after that page closes",
+  async () => {
+    const scenario = createBrowserScenario();
+    const server = journalServer(scenario);
+    const options = { baseUrl: location.origin, project: scenario.project, chapter: scenario.chapter,
+      profile: scenario.profile, fetchImpl: server.fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto };
+    const openDatabases = new Set<IDBDatabase>();
+    await deleteJournal(scenario.journalName);
+    try {
+      const writing = await openEditorWorkspace(options);
+      requireEditorReady(writing);
+      trackDatabase(writing.database, openDatabases);
+      await restoreJournalVersion(writing.database, 5);
+      // The page of version 5 keeps its connection and does not close it at a version change.
+      const earlier = await requestResult(indexedDB.open(scenario.journalName, 5));
+      trackDatabase(earlier, openDatabases);
+
+      expect(await openEditorWorkspace(options)).toMatchObject({ kind: "editor-read-only-recovery",
+        code: "local_journal_unavailable" });
+      earlier.close();
+      await expect.poll(async () => (await indexedDB.databases())
+        .find((database) => database.name === scenario.journalName)?.version).toBe(6);
+      const upgraded = await openEditorWorkspace(options);
+      requireEditorReady(upgraded);
+      trackDatabase(upgraded.database, openDatabases);
+      expect(server.unserved).toEqual([]);
+    } finally {
+      closeTrackedDatabases(openDatabases);
+      sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+      await deleteJournal(scenario.journalName);
+    }
+  });
+
 it("does not serve a request with another method, on another Project, or for another target", async () => {
   const server = journalServer(createBrowserScenario());
   const otherProject = "018f0000-0000-7001-8000-000000000819";
