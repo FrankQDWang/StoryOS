@@ -7,6 +7,9 @@ mod structure;
 #[path = "command_sequence_tests/acceptance_tests.rs"]
 mod acceptance;
 
+#[path = "command_sequence_tests/accepted_candidate_split_tests.rs"]
+mod accepted_candidate_split;
+
 #[path = "command_sequence_tests/project_session_tests.rs"]
 mod project_session;
 

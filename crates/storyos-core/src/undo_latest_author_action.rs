@@ -31,6 +31,9 @@ pub enum AuthorUndoFrontierKind {
     ReversibleAcceptance {
         resulting_revision_id: String,
         prior_evidence_usable: bool,
+        /// The Acceptance split its candidate into new Blocks (ADR 0106, section 2). A Reversal Proposal changes
+        /// the text of Blocks and cannot remove them.
+        split_added_blocks: bool,
     },
     ReversibleStructureTransition,
     Barrier,
@@ -98,6 +101,7 @@ pub fn undo_latest_author_action(
         AuthorUndoFrontierKind::ReversibleAcceptance {
             resulting_revision_id,
             prior_evidence_usable,
+            split_added_blocks,
         } => {
             if command.current_head_revision_id != command.expected_head_revision_id {
                 return TransitionOutcome::Conflicted(
@@ -110,7 +114,7 @@ pub fn undo_latest_author_action(
                 TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
                     source_sequence: frontier.sequence,
                 })
-            } else if !restores_acceptance && *prior_evidence_usable {
+            } else if !restores_acceptance && *prior_evidence_usable && !*split_added_blocks {
                 TransitionOutcome::Applied(UndoLatestAuthorActionApplied::ReversalRequired {
                     source_sequence: frontier.sequence,
                 })

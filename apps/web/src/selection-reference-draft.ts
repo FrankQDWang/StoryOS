@@ -19,6 +19,25 @@ export type DraftReference = {
   label: ReferenceLabel;
   /** The range of a Chapter text reference moved with author edits that its base Revision does not have yet. */
   moved: boolean;
+  /** The parts of an accepted candidate that the Server split into new Blocks, for a range after its first part. */
+  split?: AcceptedSplit;
+};
+
+/** A point in one part of an accepted candidate. Part 0 is the target block, and each next part is a new block. */
+type PartPoint = { part: number; offset: number };
+
+/**
+ * A reference to an accepted candidate whose range is after the first part. The draft does not know the new
+ * blocks yet, so the reference becomes Chapter text when the editor shows the target block and the next blocks
+ * with the texts of the parts.
+ */
+export type AcceptedSplit = {
+  revisionId: string;
+  /** The Chapter Revisions before the acceptance, which an editor can still show after it. */
+  priorRevisionIds: string[];
+  parts: string[];
+  start: PartPoint;
+  end: PartPoint;
 };
 
 /** The clipboard type of the references that a copy from the editor gives to the composer. */
@@ -73,6 +92,14 @@ export function useReferenceDraft(scope: ProjectScope | undefined): Draft {
 /** The references that the author added to the next message. */
 export function draftEntries(scope: ProjectScope): DraftReference[] {
   return read(scope).entries;
+}
+
+/**
+ * The references that a message sends. A reference that waits for the new blocks of an accepted candidate is not
+ * sent: its candidate is decided, and the Host refuses a reference to it (ADR 0106, section 2).
+ */
+export function sentDraftEntries(entries: readonly DraftReference[]): DraftReference[] {
+  return entries.filter((entry) => entry.split === undefined);
 }
 
 /**
@@ -146,6 +173,46 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
 }
 
 /**
+ * Gives each reference of one Chapter that waits for the new blocks of an accepted candidate the blocks of the
+ * editor document at `revisionId`. Only the document of the accepted Revision names the new blocks:
+ * - The target block and the next blocks have the texts of the parts: the reference becomes Chapter text of them.
+ * - Else the reference leaves the draft, because the accepted Revision does not have the parts.
+ * - A document of the Revision before the acceptance changes nothing: the editor can show it before it loads the
+ *   accepted Revision.
+ * - A document of another Revision shows first: the reference leaves with no sentence, as for deleted text
+ *   (ADR 0062, ADR 0106 section 2).
+ */
+export function showAcceptedSplits(scope: ProjectScope, chapterId: string, revisionId: string,
+  blocks: readonly { manuscript_block_id: string; text: string }[], tree: ChapterOrder | undefined): void {
+  const draft = read(scope);
+  const shownSplit = (entry: DraftReference, split: AcceptedSplit): DraftReference | undefined => {
+    const target = entry.candidate === undefined ? -1
+      : blocks.findIndex((block) => block.manuscript_block_id === entry.candidate!.blockId);
+    const shown = target < 0 ? [] : blocks.slice(target, target + split.parts.length);
+    if (shown.length !== split.parts.length || shown.some((block, index) => block.text !== split.parts[index])) {
+      return undefined;
+    }
+    const point = ({ part, offset }: PartPoint) => ({ manuscript_block_id: shown[part]!.manuscript_block_id, offset });
+    const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: chapterId,
+      base_authoritative_revision_id: split.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      start: point(split.start), end: point(split.end) };
+    const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference });
+    return { key: entry.key, moved: false, reference,
+      label: label ?? { chapter: entry.label.chapter, part: entry.label.part } };
+  };
+  let changed = false;
+  const entries: DraftReference[] = [];
+  for (const entry of draft.entries) {
+    const next = entry.reference.chapter_id !== chapterId || entry.split === undefined ? entry
+      : entry.split.revisionId === revisionId ? shownSplit(entry, entry.split)
+        : entry.split.priorRevisionIds.includes(revisionId) ? entry : undefined;
+    changed ||= next !== entry;
+    if (next !== undefined) entries.push(next);
+  }
+  if (changed) write(scope, { ...draft, entries });
+}
+
+/**
  * Moves the references of one Chapter with an editor change.
  * - A Chapter text reference moves only while the editor tracks it. A reference whose text is all deleted
  *   disappears. A change that the editor cannot map keeps the reference and stops its tracking. Its base
@@ -153,6 +220,7 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
  * - A candidate reference moves while the editor shows its candidate, and takes the newest Proposal
  *   Revision. It disappears when its text is deleted or when its candidate goes from the document, for
  *   example after a rejection or a withdrawal.
+ * - A reference that waits for the new blocks of an accepted candidate does not change (see `showAcceptedSplits`).
  */
 export function trackDraftReferences(scope: ProjectScope, chapterId: string, tracked: Set<string>,
   transaction: Transaction, tree: ChapterOrder | undefined): void {
@@ -217,36 +285,103 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
     const next = entry.reference.chapter_id !== chapterId ? entry
-      : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
-        : candidateEntry(entry, entry.reference);
+      : entry.split !== undefined ? entry
+        : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
+          : candidateEntry(entry, entry.reference);
     changed ||= next !== entry;
     if (next !== undefined) entries.push(next);
   }
   if (changed) write(scope, { ...draft, entries });
 }
 
+/** The Proposal of a read response, or undefined when the response is of another Project or another Proposal. */
+export function proposalOfRead<P extends { proposal_id: string }>(
+  response: { project_scope: ProjectScope; proposal: P } | undefined, scope: ProjectScope, proposalId: string,
+): P | undefined {
+  return response?.project_scope.owner_user_id === scope.owner_user_id
+    && response.project_scope.project_id === scope.project_id && response.proposal.proposal_id === proposalId
+    ? response.proposal : undefined;
+}
+
+/**
+ * The candidate text of each accepted Operation, from a read of the accepted Proposal Revision. A read of another
+ * Proposal Revision gives no text (`undefined`), because its candidates can differ from the accepted candidates.
+ */
+export function acceptedCandidateTexts(
+  read: { revision_id: string; operations: readonly { operation_id: string; candidate_text: string }[] }
+    | undefined,
+  receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] },
+): Map<string, string | undefined> {
+  const exact = read?.revision_id === receipt.proposal_revision_id ? read : undefined;
+  return new Map(receipt.selected_operation_ids.map((operationId) => [operationId,
+    exact?.operations.find((operation) => operation.operation_id === operationId)?.candidate_text]));
+}
+
+/**
+ * The parts of a candidate that the Server makes into blocks: the text between line feeds that is not empty
+ * (ADR 0106, section 2). Each part has its start offset in the candidate.
+ */
+function candidateParts(text: string): { start: number; text: string }[] {
+  const parts: { start: number; text: string }[] = [];
+  let start = 0;
+  for (const part of text.split("\n")) {
+    if (part.length > 0) parts.push({ start, text: part });
+    start += part.length + 1;
+  }
+  return parts;
+}
+
 /**
  * Makes each reference to an accepted candidate a Chapter text reference at the Revision after the
- * acceptance. The accepted text replaces the text of its block, so the offsets do not change.
+ * acceptance (ADR 0062). `candidates` gives the accepted candidate text of each Operation. The Server splits the
+ * candidate at each line feed: the first part with text stays in the target block, and each next part is a new
+ * block after it (ADR 0106, section 2).
+ * - A reference in the first part becomes Chapter text at once, with the offsets of the part.
+ * - A reference that ends after the first part waits for the new blocks (see `AcceptedSplit`).
+ * - A start in a line feed moves to the next part, and an end in a line feed moves to the end of the part before
+ *   it. A reference that then has no text leaves the draft.
+ * - A reference to an accepted Operation with no known text (`undefined`), or a reference of another Proposal
+ *   Revision than the Receipt, leaves the draft, because the draft cannot name its Chapter text.
  */
-export function acceptDraftCandidates(scope: ProjectScope, proposalId: string, operationIds: readonly string[],
-  revisionId: string): void {
+export function acceptDraftCandidates(scope: ProjectScope,
+  receipt: { proposal_id: string; proposal_revision_id: string; prior_authoritative_revision_ids: readonly string[] },
+  candidates: ReadonlyMap<string, string | undefined>, revisionId: string): void {
+  const proposalId = receipt.proposal_id;
   const draft = read(scope);
   const accepted = (entry: DraftReference) => entry.reference.kind === "proposal_candidate_text"
-    && entry.reference.proposal_id === proposalId && operationIds.includes(entry.reference.operation_id)
-    && entry.candidate !== undefined;
+    && entry.reference.proposal_id === proposalId && entry.candidate !== undefined
+    && candidates.has(entry.reference.operation_id);
   if (!draft.entries.some(accepted)) return;
-  write(scope, { ...draft, entries: draft.entries.map((entry) => {
+  const entries: DraftReference[] = [];
+  for (const entry of draft.entries) {
     if (!accepted(entry) || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
-      return entry;
+      entries.push(entry);
+      continue;
     }
-    const { blockId } = entry.candidate;
-    const point = (offset: number) => ({ manuscript_block_id: blockId, offset });
-    return { key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
+    const text = candidates.get(entry.reference.operation_id);
+    // The offsets of a reference are offsets of its Proposal Revision. Only the accepted Revision has the text.
+    if (text === undefined || entry.reference.revision_id !== receipt.proposal_revision_id) continue;
+    const parts = candidateParts(text);
+    const { start_offset: from, end_offset: to } = entry.reference;
+    const startPart = parts.findIndex((part) => part.start + part.text.length > from);
+    const endPart = parts.filter((part) => part.start < to).length - 1;
+    if (startPart < 0 || endPart < startPart) continue;
+    const start = { part: startPart, offset: Math.max(from - parts[startPart]!.start, 0) };
+    const end = { part: endPart, offset: Math.min(to - parts[endPart]!.start, parts[endPart]!.text.length) };
+    if (start.part === end.part && start.offset >= end.offset) continue;
+    const label = { chapter: entry.label.chapter, part: entry.label.part };
+    if (end.part > 0) {
+      entries.push({ ...entry, split: { revisionId, priorRevisionIds: [...receipt.prior_authoritative_revision_ids],
+        parts: parts.map((part) => part.text), start, end } });
+      continue;
+    }
+    const point = (offset: number) => ({ manuscript_block_id: entry.candidate!.blockId, offset });
+    entries.push({ key: entry.key, moved: false, label,
       reference: { kind: "chapter_text", chapter_id: entry.reference.chapter_id,
         base_authoritative_revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        start: point(entry.reference.start_offset), end: point(entry.reference.end_offset) } };
-  }) });
+        start: point(start.offset), end: point(end.offset) } });
+  }
+  write(scope, { ...draft, entries });
 }
 
 /** Gives the moved references of one Chapter the saved Revision of the editor document. */

@@ -118,6 +118,7 @@ pub use accept_proposal::{
     AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
     AcceptanceValidation, ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionFacts,
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
+    split_accepted_candidate,
 };
 pub use agent_run_control::{
     AgentRunStatus, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,
