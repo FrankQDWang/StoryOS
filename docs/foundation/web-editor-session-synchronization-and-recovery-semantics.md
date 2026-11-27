@@ -110,9 +110,8 @@ Editor Session to a later Snapshot. When the Server base of the stored Session
 has a later Project Activity Position than the base that the Journal stores,
 the check uses the stored base, because the Journal proves its groups against
 that base. When open work exists, the load keeps the stored Session and its
-recovery state, and the load does not remove or change its records. A load does
-not know the text of a live tab, so until #1953 only a live tab catches up
-(section 2.2.1).
+recovery state, and the load does not remove or change its records, unless the
+catch-up of section 2.2.1 applies.
 
 A command of an Editor Session moves only the base Snapshot of that Editor
 Session. An applied Author Edit or Undo moves that base to the new Revision
@@ -137,8 +136,8 @@ Editor Session, so a record cannot get a new base in its partition. The tab
 catches up in a new Editor Session on the current Chapter:
 
 1. The open reads the text of the stored Editor Session: the blocks of its base,
-   and the blocks that the live tab shows, with its captured input that is not
-   in the Journal.
+   and the blocks that the tab shows (a live tab gives them with its captured
+   input that is not in the Journal; a load takes the Pending Edit Projection).
 2. It puts that text on the current Chapter block by block. A block that the tab
    changed replaces the current block, so the later edit of a block wins. A
    block that only the other tab changed keeps its current text. A block that
@@ -155,8 +154,8 @@ catches up in a new Editor Session on the current Chapter:
    read, and the open uses that base. The open appends the edits from the blocks
    of that base to the result to the new partition as one replacement in one
    undo group, and only then writes the new Editor Session to `sessionStorage`.
-   A stop before that point keeps the stored Editor Session and its records, and
-   until #1953 the next load shows its recovery state. Each edit has the input origin
+   A stop before that point keeps the stored Editor Session and its records, so
+   the next load catches up again. Each edit has the input origin
    `selection_replacement`, also a split, a join, or a move step, so no step
    ends the group (section 4), and the edits go out as one Author Edit with one
    Revision and one Author Undo. A changed block with the blocks after it that
@@ -164,18 +163,29 @@ catches up in a new Editor Session on the current Chapter:
    start goes in after the first block and then moves to the start, and the
    first block leaves after it moves after the second block.
 
-The catch-up runs when a save gets `stale_authoritative_head`. The tab waits for
-the end of an open IME composition, then ends input: the editor is read-only,
-and the controller starts no submission and no Author Undo, but captured input
-still enters the Journal. After the submission in flight ends, the tab takes the
+The catch-up runs at a load, when a save gets `stale_authoritative_head`, and
+when the tab comes to the front (`visibilitychange`). At the front, the tab
+saves its input, then reads the Chapter one time. A live tab waits for the end
+of an open IME composition, then ends input: the editor is read-only, and the
+controller starts no submission and no Author Undo, but captured input still
+enters the Journal. After the submission in flight ends, the tab takes the
 blocks that the editor shows, closes the controller, and opens again. The close
 abandons an Author Undo, and an abandoned Undo is never sent. An Undo that went
 out before has an effect only when the Server takes it before the stale save, so
-the Chapter read of the reopen has that effect. The quiet step of a Chapter
-switch or a deletion refuses with `earlier_base`: the tab catches up, a Chapter
-switch runs again on the new editor, and the author can delete again. The tab
-shows no sentence and no button. #1953 adds the catch-up at a load and when the
-tab comes to the front.
+the Chapter read of the reopen has that effect. A front read that finds a later
+Revision gives the read to the reopen. A save that gets
+`stale_authoritative_head` during the front read also starts the catch-up, and
+the reopen uses the front read, so one return to the front reads the Chapter one
+time in both orders. The quiet step of a Chapter switch or a deletion refuses
+with `earlier_base`: the tab catches up, a Chapter switch runs again on the new
+editor, and the author can delete again. The tab shows no sentence and no
+button.
+
+When another tab set another Chapter current and the stored Editor Session has
+text that can catch up on the Chapter of its base, the open (a load or a
+reopen) sets that Chapter current again with that Editor Session, and then
+catches up on it. The later action wins, as for a block. With no such text, the
+open opens the Chapter that the other tab set current.
 
 The catch-up does not run when the stored partition has a group that went out
 with no known result, a refused Author Edit, an Author Edit that conflicted for
@@ -1678,7 +1688,7 @@ attempt with a new Admission.
 | applied convergence or zero-authority result visibility proven before payload collection | group becomes GC-eligible only if section 11's exact successor proof also holds |
 | payload collected before reload | reconstruct from the recorded durable successor and retained collection fence; never from missing bytes |
 | reload while another Editor Session of the Project is open | the editor accepts input as soon as it shows the Chapter; no other Editor Session makes it read-only (ADR 0107) |
-| reload of a stored Editor Session with an earlier base and unsent Author Edit text | until #1953, the load keeps the stored Editor Session and its recovery state (section 2.2.1) |
+| reload of a stored Editor Session with an earlier base and unsent Author Edit text | a new Editor Session shows the current Chapter with the text of the tab on it (section 2.2.1) |
 
 Server or PostgreSQL process interruption uses this same section 10 matrix. It
 does not create a different first browser action.

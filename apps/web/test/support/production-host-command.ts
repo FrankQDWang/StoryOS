@@ -222,6 +222,51 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await observer.reload();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(observer), afterSameBlock);
+
+    // #1953: page 3 has unsent text on the Chapter, and page 2 writes it and then selects another Chapter. A new load
+    // of page 3 sets its Chapter current again, puts its text on the later Revision, and sends it. Page 3 has its own
+    // browser context, so the paused clock that keeps its text unsent stops no timer of page 2.
+    const late = await browser.newContext();
+    await late.clock.install();
+    const third = await late.newPage();
+    third.setDefaultTimeout(10_000);
+    third.on("pageerror", (error) => errors.push(error.message));
+    third.on("request", (request) => requests.push(new URL(request.url())));
+    assert.equal((await third.goto(projectUrl))?.status(), 200);
+    await third.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(third), afterSameBlock);
+    await late.clock.pauseAt(Date.now() + 60_000);
+    await third.locator(MANUSCRIPT_EDITABLE).focus();
+    await third.locator(MANUSCRIPT_EDITABLE).evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    });
+    await third.keyboard.insertText(" Unsent on page three.");
+    await third.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
+    await typeAndSave(observer, "start", "Three: ");
+    await observer.locator("[data-add-chapter]").click();
+    await observer.locator('[data-chapter-placement="append"]').click();
+    await observer.locator('input[name="chapter-title"]').fill("Second Chapter");
+    await observer.locator('input[name="chapter-title"]').press("Enter");
+    await observer.locator("button[data-chapter-id]", { hasText: "Second Chapter" }).click();
+    await observer.waitForFunction(() => document.querySelector("[data-manuscript-editor]")?.textContent === "");
+    await third.reload();
+    await late.clock.resume();
+    const afterLoad = `Three: ${afterSameBlock} Unsent on page three.`;
+    await third.waitForFunction((expected) => {
+      const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+      const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+        .map((block) => block.textContent ?? "").join("\n");
+      return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
+    }, afterLoad);
+    await typeAndSave(third, "end", " Typed after the load.");
+    await third.reload();
+    await third.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(third), `${afterLoad} Typed after the load.`);
+    await late.close();
     // The editor can send a typed line feed and the text after it in one or two Author Edits, so the count of that
     // kind comes from the store. Each applied Author Edit, the Volume, and the Chapter is one author action. Each save
     // on an earlier base also has a conflicted Receipt, which is no author action.
@@ -231,7 +276,7 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("= 'conflicted'")];
     assert.ok(applied >= 5 && conflicted === 2);
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
-      createChapter: 1, applyAuthorEdit: applied + conflicted }, authorActions: applied + 2 });
+      createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: applied + conflicted }, authorActions: applied + 5 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
