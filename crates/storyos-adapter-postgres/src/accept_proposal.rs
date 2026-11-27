@@ -245,11 +245,10 @@ impl ProjectCommand for AcceptProposal {
             Err(error) => return unavailable(error).into(),
         };
         RefusableCommandError::RefusedBeforeAdmission(match session {
-            None => AcceptanceRefusalReason::InvalidChallenge,
-            Some(session) if session.get::<_, bool>(/*idx*/ 0) => {
-                AcceptanceRefusalReason::StaleWriter
+            Some(session) if !session.get::<_, bool>(/*idx*/ 0) => {
+                AcceptanceRefusalReason::SessionChanged
             }
-            Some(_) => AcceptanceRefusalReason::SessionChanged,
+            _ => AcceptanceRefusalReason::InvalidChallenge,
         })
     }
 

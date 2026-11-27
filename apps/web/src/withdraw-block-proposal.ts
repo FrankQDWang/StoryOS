@@ -17,7 +17,6 @@ type WithdrawRecord = {
   proposal_id: string;
   revision_id: string;
   journal_partition_id: string;
-  writer_generation: string;
   idempotency_key: string;
   nonce?: string;
   request: WithdrawProposalRequest;
@@ -146,10 +145,6 @@ export async function withdrawDisplayedBlockProposal(options: WithdrawTarget): P
   return navigator.locks.request(
     `storyos-decision:${workspace.partition.journal_partition_id}:${options.proposalId}`,
     async () => {
-      if (workspace.partition.disposition !== "current_writer_open"
-        || workspace.session.writer.kind !== "current_writer") {
-        throw new Error("请先恢复写作会话。");
-      }
       const key = withdrawKey(workspace.partition.journal_partition_id, options.proposalId,
         options.proposalRevisionId);
       const existing = await readRecord(workspace.database, key);
@@ -177,7 +172,6 @@ export async function withdrawDisplayedBlockProposal(options: WithdrawTarget): P
         proposal_id: options.proposalId,
         revision_id: options.proposalRevisionId,
         journal_partition_id: workspace.partition.journal_partition_id,
-        writer_generation: workspace.partition.writer_generation,
         idempotency_key: uuidV7(options.cryptoImpl),
         request,
         digest,
@@ -204,10 +198,7 @@ async function retryPendingDisplayedWithdraw(options: Pick<WithdrawTarget, "base
         && row.settlement === "unresolved");
       const record = pending.length === 1 ? pending[0] : undefined;
       if (record === undefined) throw new Error("Withdrawal recovery is not available");
-      if (workspace.partition.disposition !== "current_writer_open"
-        || workspace.session.writer.kind !== "current_writer"
-        || record.writer_generation !== workspace.partition.writer_generation
-        || record.journal_partition_id !== workspace.partition.journal_partition_id) {
+      if (record.journal_partition_id !== workspace.partition.journal_partition_id) {
         throw new Error("请先恢复写作会话。");
       }
       return sendWithdraw(options, record);

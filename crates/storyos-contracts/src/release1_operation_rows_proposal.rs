@@ -36,7 +36,7 @@ pub(super) const ACCEPT_PROPOSAL_ROW: OperationRow = OperationRow {
         &[
             "server_derived_project_scope",
             "project_active",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "current_open_ready_proposal_revision",
             "valid_validation_receipt",
             "selected_pending_operations",
@@ -144,7 +144,7 @@ pub(super) const REJECT_PROPOSAL_OPERATIONS_ROW: OperationRow = OperationRow {
         &[
             "server_derived_project_scope",
             "project_active",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "current_open_ready_proposal_revision",
             "selected_pending_operations",
             "expected_target_revisions",

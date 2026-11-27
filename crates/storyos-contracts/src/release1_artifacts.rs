@@ -41,7 +41,7 @@ const RELEASE_PROFILE_MODULE_PATH: &str =
 const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:a9a00d44a324bb656982136a1bbcbadff1a068a153e22dc3ef96fa91f17a9dba";
+    "sha256:352369b1c505114aab1de9ad4b2e272beb44e046e29a8145a3ed509c2946ca4d";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -288,13 +288,10 @@ fn contract_graph_bytes() -> Vec<u8> {
 fn contract_graph_bytes_of(operations: &[&RegisteredOperation]) -> Vec<u8> {
     let operations = operations
         .iter()
-        .filter_map(|registered| match registered.graph {
-            ContractGraphEntry::Preconditions(preconditions) => Some(operation_graph(
-                registered.operation,
-                registered.kind,
-                preconditions,
-            )),
-            ContractGraphEntry::Absent(_) => None,
+        .map(|registered| match registered.graph {
+            ContractGraphEntry::Preconditions(preconditions) => {
+                operation_graph(registered.operation, registered.kind, preconditions)
+            }
         })
         .collect::<Vec<_>>();
     serde_json::to_vec(&json!({

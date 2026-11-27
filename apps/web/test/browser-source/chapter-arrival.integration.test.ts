@@ -51,7 +51,7 @@ async function sha256(body: string): Promise<string> {
  * `assistance`, the writing assistant is available. With `undo`, the Editor Session has an Author Action to undo, and
  * the Server refuses the Undo. `lists` gives, for a Chapter, the Revision of the one open Proposal `PROPOSAL` in its
  * list. The Server does not find the Proposal itself. `effect` is the effect of each switch, which then changes nothing.
- * With `lostWriter`, the Editor Session after a switch names another writer. With `limited`, the Server refuses the next
+ * With `limited`, the Server refuses the next
  * Challenge with a Challenge rate limit. With `emptyAfterSwitch`, the switch response names its Chapter, and each later
  * read of the Project gives a Project with no Current Chapter. With `truncated`, each list of open suggestions is not
  * complete.
@@ -89,7 +89,7 @@ function arrivalServer() {
   const switchReplies = new Map<string, unknown>();
   const server = { requests: [] as string[], unexpected: [] as string[], texts, refuse: new Set<string>(),
     activity: undefined as unknown, assistance: false, undo: false, editKeys, lists: {} as Record<string, string>,
-    effect: undefined as unknown, lostWriter: false, limited: false, emptyAfterSwitch: false,
+    effect: undefined as unknown, limited: false, emptyAfterSwitch: false,
     answered: [] as string[], acceptEdits: false, editRequests: [] as Record<string, unknown>[], truncated: false,
     run: undefined as ({ run_id: string } & Record<string, unknown>) | undefined, switches: [] as string[][],
     lostSwitch: 0, unreachableSwitch: 0, conflicts: new Set<string>(),
@@ -106,8 +106,6 @@ function arrivalServer() {
       materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
         value_hex_lowercase: await sha256(text.body) } };
     return { ...scenario.session, ...(server.undo ? { author_undo_frontier_sequence: "1" } : {}),
-      ...(server.lostWriter && current !== CHAPTER
-        ? { writer: { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } } : {}),
       base_snapshot: { ...base, snapshot_id: snapshot.id, project_activity_position: snapshot.position } };
   };
   // With `emptyAfterSwitch`, the Project becomes empty after the response of the switch.
@@ -163,7 +161,7 @@ function arrivalServer() {
     }
     if (name === CHALLENGE) {
       const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+      if (request.command_schema === "storyos.command.apply-author-edit.request.v2") {
         editDigest = requireDigestValue(request.canonical_command_digest, "command digest");
       }
       return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-09-12T00:00:00.000Z",
@@ -175,7 +173,7 @@ function arrivalServer() {
     }
     if (name === SESSION_READ && server.refuse.has(name)) throw new TypeError("Failed to fetch");
     if (name === SESSION_READ) {
-      return jsonResponse({ ...await session(), schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...await session(), schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === ACTIVITY && server.refuse.has(name)) throw new TypeError("Failed to fetch");
     if (name === ACTIVITY) {
@@ -860,16 +858,10 @@ it.each([
     shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章。" } },
   { end: "the Chapter read fails", refuse: READ_B, hold: READ_B, steps: [READ_B], panels: [],
     shown: { title: "Chapter A", body: "Base", editable: true, alert: "无法打开这一章：快照已过期。" } },
-  // The Server applies the switch also for a tab that lost the writer, so the switch of today reaches the editor of the
-  // Chapter, read-only. A tab with no writer reads no Activity.
-  { end: "the reopen finds that another tab holds the writer", lostWriter: true, hold: READ_B, steps: [...SWITCH_STEPS, ...REOPEN_STEPS],
-    panels: PANEL_READS,
-    shown: { title: "Chapter B", body: "Beta", editable: false, alert: undefined } },
 ])("sends no Author Edit of the Arrival Input and shows it in a notice that stays when $end", async ({
-  hold, effect, refuse, lostWriter, steps, panels, shown }) => {
+  hold, effect, refuse, steps, panels, shown }) => {
   const workspace = await openWorkspace((server) => {
     server.effect = effect;
-    server.lostWriter = lostWriter === true;
   });
   await workspace.copy(CHAPTER_B);
   if (hold === "outcome") {

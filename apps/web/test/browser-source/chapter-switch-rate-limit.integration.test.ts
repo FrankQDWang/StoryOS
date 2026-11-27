@@ -108,7 +108,7 @@ function fakeServer(chapters: string[]) {
     }
     if (name === `POST ${P}/editor-sessions`) return jsonResponse(session());
     if (name === `GET ${P}/editor-sessions/${SESSION}`) {
-      return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === `GET ${P}/activity`) return emptyActivityStream();
     if (name === CURRENT_CHAPTER && !server.switchRefused) {

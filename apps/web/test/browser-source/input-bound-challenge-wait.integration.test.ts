@@ -34,7 +34,7 @@ import {
   trackDatabase,
 } from "./scenario.ts";
 
-const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v1";
+const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v2";
 const INPUT_BOUND_MESSAGE = "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
 
 type Timer = { callback: () => void; timeout: number; cleared: boolean };
@@ -67,7 +67,7 @@ async function journalIntentCount(name: string): Promise<number> {
  */
 function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>,
   mode: "rate_limit" | "unknown_outcome" = "rate_limit") {
-  let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   let head = session.base_snapshot.authoritative_head_revision_id;
   let body = session.base_snapshot.materialized_revision.body;
   const challengeKeys: string[] = [];

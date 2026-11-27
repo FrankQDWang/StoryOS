@@ -4,7 +4,6 @@ import type { EditorBaseSnapshot }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   EditorWorkspace,
-  JournalPartition,
   JournalSubmissionGroup,
   OutcomeQueryAttempt,
   OutcomeQueryReconciliation,
@@ -147,31 +146,6 @@ function putStrongerGroup(
   return committed;
 }
 
-function takeoverFencePartitionConverges(
-  durablePartition: unknown,
-  nextPartition: JournalPartition,
-): boolean {
-  if (JSON.stringify(durablePartition) === JSON.stringify(nextPartition)) return true;
-  if (!durablePartition || !nextPartition) return false;
-  const { disposition: durableDisposition, ...durableRest } =
-    durablePartition as Record<string, unknown>;
-  const { disposition: nextDisposition, ...nextRest } = nextPartition;
-  // Takeover may fence the still-open partition in the same settlement write.
-  // Generation, session binding, and journal identity must stay unchanged.
-  return durableDisposition === "current_writer_open"
-    && nextDisposition === "read_only_observer"
-    && JSON.stringify(durableRest) === JSON.stringify(nextRest);
-}
-
-function putTakeoverFencePartition(
-  transaction: IDBTransaction,
-  durablePartition: unknown,
-  nextPartition: JournalPartition,
-): void {
-  if (JSON.stringify(durablePartition) === JSON.stringify(nextPartition)) return;
-  transaction.objectStore("partitions").put(nextPartition);
-}
-
 function assertMatchingDurableGroup(
   durable: unknown,
   next: JournalSubmissionGroup,
@@ -196,23 +170,12 @@ async function commitGroupEvidence(
 ): Promise<JournalSubmissionGroup> {
   const stores = [
     ...(activeBase === undefined ? [] : ["metadata"]),
-    ...(workspace.partition.disposition === "read_only_observer" ? ["partitions"] : []),
     "submission_groups",
   ];
   const transaction = workspace.database.transaction(stores, "readwrite");
   const groups = transaction.objectStore("submission_groups");
   const durable = await requestResult(groups.get(group.journal_submission_group_id));
   assertMatchingDurableGroup(durable, group, transaction);
-  if (workspace.partition.disposition === "read_only_observer") {
-    const durablePartition = await requestResult(
-      transaction.objectStore("partitions").get(workspace.partition.journal_partition_id),
-    );
-    if (!takeoverFencePartitionConverges(durablePartition, workspace.partition)) {
-      transaction.abort();
-      throw new Error("Author Edit acknowledgement does not converge");
-    }
-    putTakeoverFencePartition(transaction, durablePartition, workspace.partition);
-  }
   const committed = putStrongerGroup(
     transaction, durable, nextFromDurable(durable), activeBase, workspace.partition.journal_partition_id,
   );
@@ -294,7 +257,7 @@ export async function commitOutcomeQueryWithGroup(
   const storedAttempt = stored as OutcomeQueryAttempt | undefined;
   const availableCapsule = storedCapsule as TransportCapsule | undefined;
   if (schemaRecord?.version !== JOURNAL_DATABASE_VERSION
-    || !takeoverFencePartitionConverges(partition, workspace.partition)
+    || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || next.journal_submission_group_id !== group.journal_submission_group_id
     || storedAttempt?.outcome?.kind !== "in_flight"
     || storedAttempt.journal_submission_group_id !== group.journal_submission_group_id
@@ -306,7 +269,6 @@ export async function commitOutcomeQueryWithGroup(
     transaction.abort();
     throw new Error("Author Edit acknowledgement does not converge");
   }
-  putTakeoverFencePartition(transaction, partition, workspace.partition);
   const committed = putStrongerGroup(
     transaction, durable, next, activeBase, workspace.partition.journal_partition_id,
   );

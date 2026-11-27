@@ -251,7 +251,6 @@
     "DomainReceiptCommandKind": {
       "enum": [
         "applyAuthorEdit",
-        "takeOverProjectWriter",
         "createProject",
         "updateProject",
         "createVolume",

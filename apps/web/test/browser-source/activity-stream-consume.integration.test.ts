@@ -144,7 +144,7 @@ it("resumes a retained cursor and resynchronizes from an authorized Snapshot aft
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       });
     }
     if (path.endsWith("/manuscript/tree")) {
@@ -251,7 +251,7 @@ it("does not treat an unrecoverable expired cursor as an empty successful replay
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       });
     }
     if (path.endsWith("/activity")) return problemResponse(409, "activity_cursor_too_old");
@@ -369,7 +369,7 @@ it("ingests assistance, Run, and Memory Activity without disabling manual writin
     });
     if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
     if (path.endsWith(`/editor-sessions/${SESSION}`)) return jsonResponse({
-      ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
+      ...scenario.session, schema_id: "storyos.query.editor-session.response.v2",
     });
     if (path.endsWith("/activity")) {
       cursors.push(new Headers(init?.headers).get("last-event-id"));

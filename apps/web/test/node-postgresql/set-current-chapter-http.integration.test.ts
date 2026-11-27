@@ -110,7 +110,6 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   const { baseUrl, projectId, fetchImpl } = story;
   const [chapterAId = "", chapterBId = "", chapterCId = ""] = story.chapterIds;
   const session = await story.openEditorSession();
-  assert.equal(session.writer.kind, "current_writer");
   assert.equal(session.base_snapshot.chapter_id, chapterAId);
 
   const removedB = (await story.send("deleteChapter", deleteChapterInput(story, chapterBId, "5"))).response;

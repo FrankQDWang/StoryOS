@@ -58,6 +58,10 @@ fn event_description(schema_id: &str) -> &'static str {
         "storyos.event.agent-run-steering-retained.v1" => {
             "Ordered author input retained for the next safe decision."
         }
+        "storyos.event.writer-takeover-applied.v1"
+        | "storyos.event.writer-takeover-compare-failed.v1" => {
+            "Historical Activity of a writer takeover from before ADR 0107. No operation writes it now."
+        }
         "storyos.event.human-readable-manuscript-export-settled.v1" => {
             "Human-readable manuscript export settled from a deterministic volume/chapter source order; unavailable content is represented by the export profile."
         }

@@ -61,9 +61,8 @@ export async function undoOwnedLatestAuthorAction(options: {
   challengeAdmission: ChallengeAdmissionWait;
   onChallengeWait: () => void;
 }): Promise<UndoLatestAuthorActionResponse | undefined> {
-  if (options.workspace.partition.disposition !== "current_writer_open"
-    || options.projection.save_state !== "saved") {
-    throw new Error("Author Undo requires a settled current writer");
+  if (options.projection.save_state !== "saved") {
+    throw new Error("Author Undo requires a settled Editor Session");
   }
   const canonical = await getEditorSession({
     baseUrl: options.baseUrl,
@@ -77,8 +76,6 @@ export async function undoOwnedLatestAuthorAction(options: {
       !== options.workspace.partition.project_scope.project_id
     || canonical.editor_session.editor_session_id
       !== options.workspace.partition.editor_session_id
-    || canonical.writer.kind !== "current_writer"
-    || canonical.writer.writer_generation !== options.workspace.partition.writer_generation
     || canonical.base_snapshot.chapter_id
       !== options.workspace.session.base_snapshot.chapter_id
     || canonical.base_snapshot.authoritative_head_revision_id

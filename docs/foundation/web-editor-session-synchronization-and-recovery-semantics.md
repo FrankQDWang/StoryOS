@@ -19,7 +19,7 @@
 This specification is the sole owner of Web Editor Session identity and
 lifecycle, browser-local edit continuity, immediate pending projection,
 submission queueing, branch-shaped HTTP settlement and Project Activity
-convergence, Snapshot resynchronization, writer takeover, browser recovery, and
+convergence, Snapshot resynchronization, browser recovery, and
 Local Edit Journal payload collection.
 
 StoryOS Core and PostgreSQL remain authoritative for manuscript and Proposal
@@ -35,7 +35,7 @@ A Local Edit Journal intent record/group, local sequence, browser checkpoint,
 Pending Edit Projection, DOM state, clipboard content, network response, or
 cached Event is never evidence that a Core effect committed or did not commit.
 
-## 2. Web Editor Session identity and writer lifecycle
+## 2. Web Editor Session identity and lifecycle
 
 ### 2.1 Editor Session identity
 
@@ -57,8 +57,7 @@ EditorSessionBinding {
 All fields are immutable for that Editor Session. A reload may recover the
 same session only while the Server still validates the exact binding; a new
 or invalid Client Session Binding creates a new `EditorSessionId`. An Editor
-Session is not a User, Project, browser tab authority, Admission, or writer
-lease.
+Session is not a User, Project, browser tab authority, or Admission.
 
 The session disposition is the closed lifecycle:
 
@@ -72,104 +71,41 @@ Connection loss, backgrounding, reload, and process death do not close or
 reopen the durable identity. They are observations resolved against the
 Server-held binding.
 
-### 2.2 One current writer generation per Project
+### 2.2 Each Editor Session writes
 
-Each Project has one monotonically increasing `writer_generation` and at most
-one open Editor Session holding that generation as current writer. Every other
-open Editor Session is a read-only observer. A local sequence or earlier
-writer grant never establishes current writer status.
+ADR 0107 section 1 removes the writer lock of the Project. Each open Editor
+Session of a Project can send each writer command: Author Edit, Set Current
+Chapter, the structural commands, Acceptance, rejection, withdrawal, and
+Author Undo. No Editor Session is a read-only observer. The Server keeps no
+writer generation, and no request form or Editor Session read carries a
+writer state. No takeover command exists.
 
-```text
-EditorWriterProjection =
-  CurrentWriter { writer_generation }
-  | ReadOnly {
-      observed_writer_generation
-      reason: secondary_session | superseded_by_takeover | binding_invalid
-    }
-```
+These checks stay: the Command Challenge and its rate classes, idempotency,
+the exact Project Scope, the protected Client Session binding, the exact
+Revision compare of an Author Edit (`stale_authoritative_head`), and the head
+compares of Acceptance, rejection, and Author Undo. When two Editor Sessions
+each name the current Revision, both Author Edits apply in their order. An
+Author Edit that names an earlier Revision gets `stale_authoritative_head`.
+Until a tab with an earlier base catches up (ADR 0107), such a save shows the
+state of today.
 
-The Server derives this projection from the exact Project Scope, Editor
-Session, protected Client Session generation, and current Project writer
-generation. It is not a client-selected role.
+At a load, the stored Editor Session of a tab can have a base that is not the
+Chapter that the Server reads now, because another Editor Session wrote. When
+the Journal partition of the stored Session has no open work, the load opens a
+new Editor Session, as a new tab does. Open work is a record that no settled
+group covers, a group with no settlement or with an outcome query, or a
+decision flight. When open work exists, the load keeps the stored Session and
+its recovery state.
 
-Writer takeover is the explicit browser/session command
-`TakeOverProjectWriter`. It is durably journaled and submitted as one
-`explicit_editor_command` group under sections 3 and 4. Its final request
-binds the requesting Editor Session, protected Client Session generation,
-observed current writer generation, current Project Scope, request contract,
-idempotency key, and final body/digest. Its exact-retry material is held only
-in the protected short-lived capsule described in section 3.5. A valid
-admitted attempt receives an Author Command Admission. After that Admission
-exists, an uncertain explicit takeover is never automatically invoked by
-recovery.
+A command of an Editor Session moves only the base Snapshot of that Editor
+Session. A Delete Chapter or a Delete Volume that changes the Current Chapter
+moves the base of each Editor Session of the Project to the head of the new
+Current Chapter.
 
-The Server compares the observed generation and performs one closed transition:
-
-```text
-TakeOverProjectWriterResult =
-  TakeoverApplied {
-    prior_editor_session_id
-    prior_writer_generation
-    resulting_editor_session_id
-    resulting_writer_generation
-    resulting_snapshot_id
-    resulting_snapshot_activity_position
-    resulting_heads
-  }
-  | TakeoverCompareFailed {
-      observed_writer_generation
-      current_writer_generation
-      current_writer_projection
-      current_snapshot_id
-      current_snapshot_activity_position
-      current_heads
-      reason:
-        writer_generation_advanced_after_admission
-        | requester_became_current_after_admission
-    }
-```
-
-The result is carried only by the existing `DomainReceipt` /
-`DomainReceiptRef` selected by the protocol's closed `ReceiptRef` union; #70
-creates no takeover-specific Receipt identity or reference.
-
-Before Admission issuance, the Server validates that the takeover's observed
-writer generation is still current. A stale or already-changed observation
-fails as a pre-admission Problem with no Admission or Receipt.
-`TakeoverApplied` atomically advances the generation, grants it to the
-requester, fences every older generation before another author-command
-Admission can be issued, and returns the canonical Snapshot from which the
-writer reconciles. Only a takeover that passed that issuance check but loses
-the later Core/domain compare—because another already-admitted takeover
-advanced the generation or made this requester current—returns
-`TakeoverCompareFailed`. It is the typed Receipt-backed no-change result of the
-admitted compare-and-set and advances no generation.
-Both results settle through their existing `OtherEditorReceiptSettled {
-receipt_ref: DomainReceiptRef, project_activity_position, settled_at }`; their
-transaction commits the required Project Activity row even when no writer
-state changes.
-The returned Snapshot must project at or beyond that settlement position and
-never replaces it. Pre-admission validation failure has no Admission or
-Receipt.
-`RequiresReconfirmation` has an Admission but no Receipt or takeover effect.
-Missing acknowledgement first permits only exact transport replay from the
-protected capsule; a settlement query exists only when the received
-`outcome_unknown` variant supplies it. An unexpected takeover `Accepted` is
-retained only as protocol-incompatibility evidence. Neither takeover result
-creates a manuscript Core effect or Author Action.
-
-After `TakeoverApplied`, the prior session becomes read-only. The winner opens
-a new Local Edit Journal partition bound to the resulting generation; neither
-the winner's nor the prior session's older partition is rebound. Their complete
-local payload remains non-authoritative and must not be deleted or resubmitted
-merely because takeover occurred. If StoryOS must preserve that payload outside
-the local journal, it remains local-only until a future wire owner adds an
-explicit ingress; takeover carries no hidden recovery-payload channel.
-
-A stale writer fails closed before Admission issuance. If an Admission was
-already issued, the client follows the Admission reconciliation matrix in
-section 6; it never treats a takeover response as proof that the earlier
-command did not commit.
+The Admissions, Receipts, and Activity of a writer takeover from before ADR
+0107 stay in the store, and the Activity stream replays them. The migration
+`0003_each_editor_session_writes.sql` removes the writer table and the writer
+column of an Admission.
 
 ### 2.3 Ordering domains remain separate
 
@@ -177,8 +113,7 @@ The following orders are not interchangeable:
 
 | Order | Scope and owner | Permitted use |
 | --- | --- | --- |
-| `local_intent_sequence` | one Project-scoped IndexedDB allocator shared by exact Editor Session/writer-generation journal partitions | preserve browser-local intent and deterministic reconciliation order |
-| `writer_generation` | one Project, Server-owned | fence stale writers and identify the current writer |
+| `local_intent_sequence` | one Project-scoped IndexedDB allocator shared by exact Editor Session journal partitions | preserve browser-local intent and deterministic reconciliation order |
 | `AuthorActionSequence` | one Project Scope, Core-owned | order successful author-owned Core Transitions and undo |
 | Project Activity position | one Project Scope, protocol/Core-owned | order public committed activity and resume projection |
 | Authoritative and Proposal Heads | exact durable objects, Core-owned | prove current state and command preconditions |
@@ -192,7 +127,7 @@ SSE arrival never establish Project authority order.
 
 The Protected Web Client maintains one Project Scope-bound IndexedDB database.
 It owns the one atomic `local_intent_sequence` allocator shared by same-origin
-tabs, but it does not turn all tabs or generations into one Local Edit Journal.
+tabs, but it does not turn all tabs into one Local Edit Journal.
 
 One canonical Local Edit Journal is an immutable-identity partition:
 
@@ -201,16 +136,13 @@ LocalEditJournalPartition {
   journal_partition_id
   project_scope
   editor_session_id
-  writer_generation
   client_session_binding_ref
   client_session_generation
   client_contract_revision
   security_policy_revision
   created_at
   disposition:
-    CurrentWriterOpen
-    | ReadOnlyObserver { observed_current_writer_generation }
-    | ReadOnlyFenced { resulting_writer_generation }
+    Open
     | Closed {
         reason:
           editor_session_closed
@@ -220,14 +152,13 @@ LocalEditJournalPartition {
 }
 ```
 
-Every intent and submission group binds exactly one partition. Takeover creates
-a new partition for the new generation and fences older partitions; it never
-rewrites their Editor Session or writer generation. This preserves the
-ubiquitous-language definition of Local Edit Journal as one Project Scope,
-Editor Session, and writer generation while retaining one Project-wide local
-order for deterministic cross-tab reconciliation. Only
-`CurrentWriterOpen` admits a `CompletedIntentRecord`; a read-only observer may
-record only the explicit takeover decision needed to request writer status.
+Every intent and submission group binds exactly one partition. A partition
+never rewrites its Editor Session. This preserves the ubiquitous-language
+definition of Local Edit Journal as one Project Scope and Editor Session while
+retaining one Project-wide local order for deterministic cross-tab
+reconciliation. Each open partition admits a `CompletedIntentRecord`.
+IndexedDB version 6 removes the writer generation from the partition, the
+records, and the groups (ADR 0107).
 
 ### 3.2 Immutable intent records
 
@@ -242,7 +173,6 @@ CompletedIntentRecord {
   journal_partition_id
   project_scope
   editor_session_id
-  writer_generation
 
   chapter_object_id
   base_snapshot_id
@@ -277,7 +207,6 @@ ExplicitEditorCommandRecord {
   journal_partition_id
   project_scope
   editor_session_id
-  writer_generation
 
   command_kind
   exact_semantic_payload_ref
@@ -324,7 +253,7 @@ version and each row. The editor enters read-only local recovery with
 not show the text of that Journal, and the readable export of the Server text
 stays available.
 
-An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
+An `ExplicitEditorCommandRecord` durably represents Acceptance,
 rejection, withdrawal, supersede, continuation, completion,
 Author Undo, or another explicit editor command before network
 submission. It is never coalesced. Before Admission, its protected transport
@@ -424,7 +353,6 @@ JournalSubmissionGroup {
   journal_partition_id
   project_scope
   editor_session_id
-  writer_generation
 
   ordered_coverage: NonEmptyList {
     local_intent_sequence
@@ -983,7 +911,7 @@ evidence that is available. No `Rejected` or `StillUnknown` branch releases
 the dependent queue, collects the capsule or payload, invokes or replays the
 command, or silently succeeds.
 This client-first bootstrap applies only to `ApplyAuthorEdit`. It does not add
-the outcome route to takeover or another command lifecycle.
+the outcome route to another command lifecycle.
 
 The client-observable versus Server-only audit is closed:
 
@@ -1193,7 +1121,6 @@ may be coalesced only while:
   target, ownership observation, Authoritative and Proposal Head, Anchor,
   reservation, editor-contract revision, and author-visible undo-group
   binding—is equal;
-- the current writer generation remains current;
 - none of the candidate records belongs to a frozen group; and
 - the applicable idle, intent, operation, and payload bounds remain proven.
 
@@ -1274,13 +1201,13 @@ authority.
 
 Each chapter projection is rebuilt from its own Snapshot/Head facts plus the
 applicable partition's intent records and groups targeting that chapter. The
-Project retains one writer generation and one Project-local sequence allocator;
-switching chapters does not create another writer, reorder the queue, merge
-groups across chapters, or imply Core settlement. Returning to a chapter
+Project retains one Project-local sequence allocator; switching chapters does
+not create another partition, reorder the queue, merge groups across chapters,
+or imply Core settlement. Returning to a chapter
 restores its exact pending or attention surfaces from journal and durable
 Server facts.
 
-A tab that holds the writer shows the selected chapter at once as an Arriving
+A tab shows the selected chapter at once as an Arriving
 Chapter, from a copy in the memory of the tab, while the switch above runs with
 no change
 ([ADR 0105](../adr/0105-let-the-author-type-in-a-selected-chapter-before-the-chapter-switch-settles-and-hold-that-input-in-the-tab.md)).
@@ -1292,28 +1219,18 @@ shows it to the author as text that is not saved.
 
 ### 5.3 Submission scheduler
 
-The current-writer partition owns one serialized author-command queue ordered
+Each open partition owns one serialized author-command queue ordered
 by each frozen group's first covered `local_intent_sequence`. It contains
-direct-edit groups and every single-record explicit-command group except
-takeover. Release 1 begins submission of a later queued command only after the
-earlier command reaches a terminal Admission settlement and the current Heads
-needed by the later command have been revalidated. An earlier
-`OutcomeQueryUnresolved`, `outcome_unknown`, gap, stale writer, or required
-resync pauses this queue.
-
-A read-only observer submits its one-record takeover group through the
-Project-local takeover coordination lane, not through the queue it is asking
-to fence. Same-origin takeover requests retain local-sequence order, but the
-Server's observed-generation checks and admitted Core/domain compare-and-set
-choose the winner. On
-`TakeoverApplied`, the old writer queue is fenced immediately: already-admitted
-groups reconcile independently, frozen/unsubmitted groups and their payloads
-remain retained, and a new writer queue opens only after the returned Snapshot
-is installed. A takeover whose observed generation is stale before Admission
-receives a pre-admission Problem and no Receipt. A concurrently admitted
-takeover that passed issuance bindings but loses the later domain compare
-receives `TakeoverCompareFailed`. A terminal pre-admission refusal releases no
+direct-edit groups and every single-record explicit-command group. Release 1
+begins submission of a later queued command only after the earlier command
+reaches a terminal Admission settlement and the current Heads needed by the
+later command have been revalidated. An earlier
+`OutcomeQueryUnresolved`, `outcome_unknown`, gap, or required
+resync pauses this queue. A terminal pre-admission refusal releases no
 dependent group until its current bindings are explicitly rebuilt.
+
+The queues of two Editor Sessions do not wait for each other. The Revision
+and head compares of section 2.2 decide which of their commands apply.
 
 While an Author Edit of one Proposal candidate is in progress, the controller
 holds later input in that candidate in memory. When the earlier edit settles
@@ -1372,7 +1289,6 @@ by this contract:
 | Editor command class | Owning execution shape | Permitted first terminal/nonterminal response |
 | --- | --- | --- |
 | `ApplyAuthorEdit` | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
-| `TakeOverProjectWriter` | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
 | explicit editor decisions, including Proposal, undo, and reversal controls | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
 
 This is the protocol's existing rule that work able to settle in its owning
@@ -1427,8 +1343,8 @@ The explicit-command original-submission/recovery boundary is:
 | author visibly reconfirms after `RequiresReconfirmation` | form and submit a new command | new key, nonce, Command, and Admission |
 
 The Server-side automatic branch requires equality of Project Scope, protected Client
-Session binding/generation, client/security contracts, Editor Session, writer
-generation, action class, request contract, final digest/profile and covered
+Session binding/generation, client/security contracts, Editor Session,
+action class, request contract, final digest/profile and covered
 fields, targets/Heads/Revisions, idempotency and nonce records, complete
 `ApplyAuthorEdit` intent/selections/retry source/ownership/Anchors/reservations,
 editor contract, undo group, and complete persisted Admission `command_payload`.
@@ -1436,7 +1352,7 @@ Equality of a subset is failure.
 
 A visible reconfirmation creates a new idempotency key, anti-forgery challenge,
 Command, Admission, and eventual Receipt. Once an Admission exists,
-Acceptance, rejection, withdrawal, Author Undo, takeover, and
+Acceptance, rejection, withdrawal, Author Undo, and
 other explicit commands are never automatically invoked by no-Receipt
 recovery; they settle `RequiresReconfirmation`. Before Admission, exact
 transport replay, or one fresh-challenge attempt after positive no-Admission
@@ -1491,8 +1407,7 @@ Applied manuscript convergence additionally requires no unresolved earlier
 Activity gap. Zero-authority result visibility neither clears nor creates an
 unrelated Activity gap. A no-Receipt refusal/reconfirmation surface may
 converge while an unrelated manuscript projection remains in resync, but it
-cannot label that manuscript surface `saved`. Every branch rejects an
-incompatible writer generation for the surface being shown. `AuthorAttention`
+cannot label that manuscript surface `saved`. `AuthorAttention`
 is evaluated separately: a visible zero-authority conflict or refusal, or a
 converged reconfirmation, normally remains `Required`.
 
@@ -1561,7 +1476,7 @@ The result consumer is likewise closed:
 | exact retry of any settled explicit command | replay the same Receipt, event identities, Heads, and controls; create no duplicate transition or surface |
 
 No old control survives merely because it was rendered before the Receipt,
-Snapshot, takeover, or resync. In particular, a Proposal Recovery Conflict
+Snapshot, or resync. In particular, a Proposal Recovery Conflict
 retains `withdraw`, while a Proposal Conflict does not acquire it unless the
 current Core state independently permits withdrawal.
 
@@ -1616,19 +1531,19 @@ The ingress matrix is closed:
 | --- | --- |
 | admitted `ApplyAuthorEdit` body reaches terminal `RequiresReconfirmation` | the browser keeps its complete local copy beside the reconfirmation controls; no Host Artifact |
 | frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission uncertainty | local journal/capsule only; no Host Artifact ingress |
-| takeover, fenced-writer journal payload, journal schema/persistence recovery, or explicit local preservation | local-only; takeover does not carry those bytes |
+| journal schema/persistence recovery or explicit local preservation | local-only; no command carries those bytes |
 | DOM, clipboard, or surviving in-memory text | copyable local material only; no Artifact |
 
 A complete local journal group may still enter the ordinary
 author-confirmed/current-binding `ApplyAuthorEdit` flow. That is a normal edit
 attempt with a new Admission.
 
-## 10. Reload, crash, and takeover recovery matrix
+## 10. Reload and crash recovery matrix
 
 | Last durable boundary | Reload/recovery result |
 | --- | --- |
 | before intent-record transaction commit | no durable record; any surviving in-memory text is copyable local payload, not saved or a Draft |
-| intent record committed, before group freeze/Admission | rebuild complete intent; current writer may freeze a new group after all bindings revalidate |
+| intent record committed, before group freeze/Admission | rebuild complete intent; the open partition may freeze a new group after all bindings revalidate |
 | group frozen, before capsule transaction commit | no send was permitted; obtain a challenge, commit the capsule, and append the initial attempt |
 | capsule committed, no attempt appended or send started | local atomic order positively proves no delivery/Admission; if the challenge remains valid append/send the initial attempt, otherwise collect the unused capsule and obtain a fresh challenge for the same frozen group |
 | send may have occurred, crash before response observation commits, `ApplyAuthorEdit`, capsule available, Client Session binding still exact | reopen the exact capsule; enter `OutcomeQueryUnresolved { NoOutcomeObserved }` if not already there; call `getApplyAuthorEditOutcome` first with the stored key and nonce; do not replay the command, obtain a new challenge, or send again |
@@ -1646,13 +1561,7 @@ attempt with a new Admission.
 | pre-admission refusal or `RequiresReconfirmation` observed | converge through the applicable no-Receipt branch without requiring Activity/Heads; retain author attention and payload |
 | applied convergence or zero-authority result visibility proven before payload collection | group becomes GC-eligible only if section 11's exact successor proof also holds |
 | payload collected before reload | reconstruct from the recorded durable successor and retained collection fence; never from missing bytes |
-| reload in stale writer generation | read-only; reconcile admitted groups, preserve unsubmitted payload, and require explicit takeover for new writing |
-| `TakeoverApplied` during unsettled work | open the exact new-generation partition; older partitions remain read-only; every group follows its own observed response/query/capsule state; unsubmitted or browser-only payload remains local |
-| stale/changed takeover generation detected before Admission | retain the current read-only projection and exact pre-admission Problem; no Admission, Receipt, takeover Activity, or generation change exists |
-| `TakeoverCompareFailed` after issuance bindings passed | retain the current read-only projection, `DomainReceiptRef`, canonical settlement Activity position, and returned Snapshot at or beyond it; do not advance generation, rebind a partition, or retry automatically |
-| takeover delivery unknown | exact transport replay is allowed only with its available capsule and current binding; never obtain a fresh challenge until positive no-Admission proof |
-| takeover `outcome_unknown` or `RequiresReconfirmation` | use only the actually supplied query or visible reconfirmation fields; after Admission exists, never invoke the explicit takeover automatically |
-| takeover unexpectedly returns `Accepted` | enter `ProtocolIncompatibleAccepted`; preserve evidence and fail closed rather than assuming an asynchronous takeover terminal |
+| reload while another Editor Session of the Project is open | the editor accepts input as soon as it shows the Chapter; no other Editor Session makes it read-only (ADR 0107) |
 
 Server or PostgreSQL process interruption uses this same section 10 matrix. It
 does not create a different first browser action.
@@ -1691,15 +1600,10 @@ dependencies are eligible for collection only when all of these are proven:
 4. no unsettled group, intent record, checkpoint, retry, undo candidate,
    reconciliation record, or visible recovery surface depends on the bytes;
    and
-5. the collector reads the current Project writer generation and revalidates
-   the exact owning partition disposition. `CurrentWriterOpen` must still match
-   the current generation; `ReadOnlyFenced` may collect under its immutable old
-   generation only when its recorded resulting generation and all other
-   successor/dependency proofs match; `ReadOnlyObserver` must still be
-   non-writer under the current Server projection; and `Closed` must retain one
-   exact closed reason plus the corresponding closed Client/Editor/Project
-   binding evidence. An old partition is never required to become current
-   again.
+5. the collector revalidates the exact owning partition disposition. `Open`
+   must still match the exact Editor Session binding, and `Closed` must retain
+   one exact closed reason plus the corresponding closed Client/Editor/Project
+   binding evidence. A closed partition is never required to open again.
 
 Exact durable successors include the resulting Authoritative or Proposal
 Revision, or another
@@ -1707,7 +1611,7 @@ typed retained Core payload that contains the complete intent. A
 zero-authority Receipt alone is not a successor. `NoEffect` may use the exact
 digest-equal current durable Revision. A conflict, refusal, or
 `RequiresReconfirmation` with only one local complete copy is never eligible.
-Local-only takeover, journal, or in-memory payload is never a durable successor
+Local-only journal or in-memory payload is never a durable successor
 (section 9).
 Clipboard copy, DOM text, cached response, Event payload, and an author-visible
 label are not durable successors.
@@ -1717,7 +1621,7 @@ label are not durable successors.
 Collection is a batched IndexedDB transaction. It:
 
 1. revalidates terminal settlement, reconciliation, convergence, successor
-   digest, current Project writer generation, exact partition disposition, and
+   digest, exact partition disposition, and
    dependency closure;
 2. marks the exact groups, intent records, and patch/checkpoint ranges
    `Eligible`;
@@ -1764,8 +1668,8 @@ Browser integration and the deterministic oracle cover:
   composition/paste/cut/drop/`SplitBlock`/`JoinBlocks`/`MoveBlock`/
   `RetypeBlock`/explicit-command group flush boundary; and no post-Admission
   merge;
-- exact Protected Web Client, Client Session, Editor Session, writer
-  generation, Project Scope, request, digest, Head/Anchor, nonce/idempotency,
+- exact Protected Web Client, Client Session, Editor Session,
+  Project Scope, request, digest, Head/Anchor, nonce/idempotency,
   capsule, and challenge-expiry substitutions;
 - pre-admission refusal, unexpected `Accepted`, `Committed`,
   `RequiresReconfirmation`, post-admission `outcome_unknown`, validated
@@ -1786,8 +1690,8 @@ Browser integration and the deterministic oracle cover:
   public outcomes; `QueryUnavailable` strongest-state preservation; same-expiry
   and same-Admission progress; terminal immutability; and cross-channel exact
   deduplication;
-- the Release-1 editor acknowledgement-route matrix: `ApplyAuthorEdit`,
-  `TakeOverProjectWriter`, and explicit editor decisions settle in their
+- the Release-1 editor acknowledgement-route matrix: `ApplyAuthorEdit`
+  and explicit editor decisions settle in their
   owning short transaction, while unexpected `Accepted` enters
   `ProtocolIncompatibleAccepted` without assumed query convergence;
 - applied HTTP-before-Activity, Activity-before-applied-HTTP, zero-authority
@@ -1802,16 +1706,15 @@ Browser integration and the deterministic oracle cover:
   Client Session fail-closed behavior; the `ApplyAuthorEdit` GET-first path from
   delivery unknown to committed, rejected, or inspectable unknown, including
   after reload, crash, or process restart; and no second command invocation;
-- chapter switching with pending records/groups, one current-writer queue, and
-  the separately fenced takeover coordination lane;
-- secondary read-only sessions; exact `TakeoverApplied`,
-  post-issuance `TakeoverCompareFailed`, pre-admission stale-generation
-  refusal, acknowledgement loss, and `RequiresReconfirmation`; stale-writer
-  fencing; new-generation partition creation; closed `DomainReceiptRef`;
-  canonical Project Activity allocation only when the owning tagged result
-  permits it—`ApplyAuthorEdit` permits it only for `AuthoritativeApplied`, while
-  takeover retains its separate owner-defined applied/compare-failed rule—and
-  preservation without automatic Draft
+- chapter switching with pending records/groups and one queue for each open
+  partition;
+- two Editor Sessions of one Project that both write: Author Edits that name
+  the current Revision apply in their order, an Author Edit that names an
+  earlier Revision gets `stale_authoritative_head`, and a command of one
+  Editor Session moves only the base of that Editor Session;
+- closed `DomainReceiptRef`; canonical Project Activity allocation only when
+  the owning tagged result permits it—`ApplyAuthorEdit` permits it only for
+  `AuthoritativeApplied`—and preservation without automatic Draft
   fabrication;
 - every `ApplyAuthorEdit`, explicit decision, exact retry, undo,
   reversal, and stale-control row in section 8;
@@ -1819,7 +1722,7 @@ Browser integration and the deterministic oracle cover:
   Receipts, Draft Artifacts, Proposal conditions, local payload, projections,
   and authority;
 - the Release-1 local recovery ingress matrix: no source creates a Host
-  Artifact, and journal, takeover, and in-memory sources remain local-only; and
+  Artifact, and journal and in-memory sources remain local-only; and
 - applied Activity-backed convergence, zero-authority Receipt-only result
   visibility, and no-Receipt refusal/reconfirmation convergence, including
   proof that `ApplyAuthorEdit` `ProposalRevised`, `NoEffect`,
@@ -1830,7 +1733,7 @@ Browser integration and the deterministic oracle cover:
   evidence fences; and
   `OutcomeQueryUnresolved/TransportOrAdmissionUnknown/KnownSettlementQuery/
   ProvenNoAdmission -> TerminalResolved -> eligible` reconciliation across both
-  current and correctly fenced old partitions, while unresolved states and
+  open and closed partitions, while unresolved states and
   `ProtocolIncompatibleAccepted` remain fail-closed and ineligible.
 
 Passing evidence uses the virtual clock, explicit interleaving schedule,
@@ -1841,13 +1744,14 @@ advisory until their numerical values are accepted by the appropriate owner.
 
 ## 13. Normative invariants
 
-1. One exact Project has one current writer generation and at most one current
-   writer; every stale session is read-only and cannot obtain a new Admission.
+1. Each open Editor Session of an exact Project can obtain an Admission for
+   each writer command. No Editor Session is read-only because another Editor
+   Session exists (ADR 0107).
 2. Every completed direct-edit intent and explicit editor command has one
    immutable partition-bound record before submission and remains exactly
    reconstructable until safe collection.
-3. Local order, Project Activity order, Author Action order, Heads, and writer
-   generation are distinct typed orders and never substitute for one another.
+3. Local order, Project Activity order, Author Action order, and Heads are
+   distinct typed orders and never substitute for one another.
 4. One frozen submission group owns ordered non-overlapping complete record
    coverage plus one action class, request contract, idempotency key, final
    body/digest, transport-attempt, settlement, and reconciliation lifecycle.
@@ -1890,13 +1794,11 @@ advisory until their numerical values are accepted by the appropriate owner.
 12. Every Core result, explicit decision, undo, and reversal projects
     only its exact permitted controls, and no result fabricates Proposal
     Acceptance.
-13. Takeover is one non-auto-recoverable explicit-command group whose applied
-    or compare-failed result is carried only by the existing
-    `DomainReceiptRef`; both results settle with canonical Project Activity,
-    and an applied result opens a new generation partition without rebinding an
-    old one.
+13. A command of an Editor Session moves only the base Snapshot of that
+    Editor Session. A Delete Chapter or a Delete Volume that changes the
+    Current Chapter moves the base of each Editor Session of the Project.
 14. StoryOS creates no Recovery Draft ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)).
-    Browser-only journal, takeover, and in-memory bytes have no Release-1 Host
+    Browser-only journal and in-memory bytes have no Release-1 Host
     ingress.
 15. Journal payload collection requires terminal settlement, the applicable
     applied convergence or zero-authority result-visible proof, an exact durable
@@ -1912,8 +1814,8 @@ advisory until their numerical values are accepted by the appropriate owner.
     explicit command.
 17. Journal GC requires `TerminalResolved` with its exact
     pre-admission, Committed, outcome Query rejected, or reconfirmation
-    observation. A fenced old partition may collect after exact successor and
-    disposition proof without pretending its generation is current.
+    observation. A closed partition may collect after exact successor and
+    disposition proof without pretending that it is open.
 
 ### Local terminal recovery and manual re-entry
 

@@ -109,8 +109,6 @@ export function navigateProposal(options: {
       const next = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id });
       if (!latest()) return;
       if (next.kind !== "project-ready" || next.editor.kind !== "editor-ready"
-        || next.editor.session.writer.kind !== "current_writer"
-        || next.editor.partition.disposition !== "current_writer_open"
         || next.chapter.chapter.chapter_id !== destination.chapterId
         || next.project.project_scope.owner_user_id !== scope.owner_user_id
         || next.project.project_scope.project_id !== scope.project_id) throw new Error("无法打开写作会话。");

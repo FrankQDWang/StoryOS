@@ -118,7 +118,7 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
   const { createBrowserScenario, createAppliedAuthorEditResponse } = await import("./scenario.ts");
   const { digestApplyAuthorEdit } = await import("../../../../generated/typescript/storyos-public-release-1/client.mjs");
   const scenario = createBrowserScenario();
-  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   let reached!: () => void, release!: () => void;
   const requested = new Promise<void>((resolve) => { reached = resolve; });
   const responseGate = new Promise<void>((resolve) => { release = resolve; });
@@ -185,7 +185,7 @@ it("keeps input that the author types before the effects of a settled projection
   const { createBrowserScenario, createAppliedAuthorEditResponse } = await import("./scenario.ts");
   const { digestApplyAuthorEdit } = await import("../../../../generated/typescript/storyos-public-release-1/client.mjs");
   const scenario = createBrowserScenario();
-  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   let submissions = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = String(input);
@@ -296,7 +296,7 @@ it("shows a changed Journal projection before its install completes", async () =
   const { createBrowserScenario, createAppliedAuthorEditResponse } = await import("./scenario.ts");
   const { digestApplyAuthorEdit } = await import("../../../../generated/typescript/storyos-public-release-1/client.mjs");
   const scenario = createBrowserScenario();
-  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = String(input);
     if (path.endsWith("/anti-forgery-challenges")) return Response.json({ nonce: "a".repeat(64),

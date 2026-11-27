@@ -25,7 +25,7 @@ it.each(["multi_block", "candidate"] as const)("keeps complete %s recovery visib
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-12-13T08:05:00.000Z", limit_profile_revision: "storyos.foundation.absolute.v1" });
     if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
-    if (path.endsWith(`/editor-sessions/${SESSION}`)) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+    if (path.endsWith(`/editor-sessions/${SESSION}`)) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     if (path.endsWith("/manuscript/author-edits")) { posts += 1; throw new Error("Acknowledgement lost"); }
     if (path.includes("/manuscript/author-edit-outcomes/")) return jsonResponse({
       schema_id: "storyos.query.apply-author-edit-outcome.response.v1", correlation_id: "018f0000-0000-7001-8000-000000000082",

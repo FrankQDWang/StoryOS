@@ -29,7 +29,7 @@ fn challenge_binding(idempotency_key: &str) -> ProjectCommandChallengeBinding {
             storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
         method: "POST".to_owned(),
         route_template: "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned(),
-        command_schema: "storyos.command.apply-author-edit.request.v1".to_owned(),
+        command_schema: "storyos.command.apply-author-edit.request.v2".to_owned(),
         command_kind: CommandKind::ApplyAuthorEdit.as_str().to_owned(),
         canonical_command_digest:
             "sha256:storyos.command.applyAuthorEdit.jcs.v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

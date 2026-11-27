@@ -50,7 +50,7 @@ const JOURNAL_PAYLOAD = "storyos.local-edit-journal.payload.sha256.v1";
 const JOURNAL_COVERAGE = "storyos.local-edit-journal.submission-coverage.sha256.v1";
 const CANONICAL_PAYLOAD = "storyos.canonical-payload.sha256.v1";
 const COMMAND_DIGEST = "storyos.command.applyAuthorEdit.jcs.v1";
-const COMMAND_SCHEMA = "storyos.command.apply-author-edit.request.v1";
+const COMMAND_SCHEMA = "storyos.command.apply-author-edit.request.v2";
 const PARTITION = [
   USER_A,
   PROJECT_A,
@@ -235,7 +235,6 @@ function intentRecord(index: number, retainedUnit = false) {
     working_set_partition_id: PARTITION,
     project_scope: SCOPE,
     editor_session_id: "editor-session",
-    writer_generation: "1",
     limit_profile_revision: LIMIT_PROFILE,
     batch_policy_revision: BATCH_POLICY,
     input_origin: requiredAt(ORIGINS, index, "input origin"),
@@ -292,7 +291,6 @@ function collectedGroup(index: number) {
     working_set_partition_id: PARTITION,
     project_scope: SCOPE,
     editor_session_id: "editor-session",
-    writer_generation: "1",
     batch_policy_revision: BATCH_POLICY,
     ordered_coverage: orderedCoverage,
     covered_sequence_range: { first: sequence, last: sequence },
@@ -310,7 +308,6 @@ function collectedGroup(index: number) {
       security_policy_revision: SECURITY_POLICY,
       correlation_id: slot("correlation", sequence),
       editor_session_id: "editor-session",
-      writer_generation: "1",
       chapter_id: CHAPTER,
       expected_authoritative_revision_id: priorRevision(index),
       expected_proposal_head_revision_ids: [],
@@ -353,7 +350,6 @@ function collectedFence(index: number) {
     collection_fence_id: slot("fence", sequence),
     journal_partition_id: PARTITION,
     project_scope: SCOPE,
-    writer_generation: "1",
     partition_disposition: "current_writer_open",
     collected_groups: [{
       journal_submission_group_id: slot("group", sequence),

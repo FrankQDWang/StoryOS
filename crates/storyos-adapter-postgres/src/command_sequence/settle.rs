@@ -27,8 +27,6 @@ const REQUIRES_RECONFIRMATION: &str = "requires_reconfirmation";
 pub(crate) enum AdmittedRefusal {
     /// The Admission expired before its settlement.
     Expired,
-    /// The Editor Session of the Admission is no longer the current writer.
-    StaleWriter,
 }
 
 /// One project command that the admit step admits and the settle step settles.
@@ -235,7 +233,7 @@ async fn replay_recorded<C: ProjectCommand>(
     replay_receipt(store, envelope, command, receipt_id).await
 }
 
-/// Reads the settlement, expiry, and writer facts of the Admission of `envelope`. The settlement
+/// Reads the settlement and expiry facts of the Admission of `envelope`. The settlement
 /// row is unique, so two settle steps cannot both settle one Admission.
 async fn admitted_state(
     client: &Client,
@@ -244,23 +242,7 @@ async fn admitted_state(
     let Some(row) = client
         .query_opt(
             "SELECT settlement.settlement_kind, settlement.receipt_id::text,
-                    admission.challenge_expires_at > clock_timestamp(),
-                    admission.writer_generation < (
-                      SELECT max(current_writer.writer_generation)
-                        FROM storyos.project_writer_generations AS current_writer
-                       WHERE (current_writer.owner_user_id, current_writer.project_id) =
-                             (admission.owner_user_id, admission.project_id)),
-                    EXISTS (
-                      SELECT 1 FROM storyos.project_writer_generations AS writer
-                       WHERE (writer.owner_user_id, writer.project_id,
-                              writer.current_editor_session_id, writer.writer_generation) =
-                             (admission.owner_user_id, admission.project_id,
-                              admission.editor_session_id, admission.writer_generation)
-                         AND writer.writer_generation = (
-                           SELECT max(current_writer.writer_generation)
-                             FROM storyos.project_writer_generations AS current_writer
-                            WHERE (current_writer.owner_user_id, current_writer.project_id) =
-                                  (admission.owner_user_id, admission.project_id)))
+                    admission.challenge_expires_at > clock_timestamp()
                FROM storyos.author_command_admissions AS admission
           LEFT JOIN storyos.author_command_admission_settlements AS settlement
                  ON (settlement.owner_user_id, settlement.project_id,
@@ -287,19 +269,13 @@ async fn admitted_state(
         return Ok(AdmittedState::Settled { receipt_id });
     }
     let unexpired = row.get::<_, bool>(/*idx*/ 2);
-    let stale_writer = row.get::<_, Option<bool>>(/*idx*/ 3) == Some(true);
-    let current_writer = row.get::<_, bool>(/*idx*/ 4);
-    Ok(
-        if settlement_kind.is_none() && unexpired && current_writer {
-            AdmittedState::Open
-        } else if !unexpired {
-            AdmittedState::Refused(AdmittedRefusal::Expired)
-        } else if stale_writer {
-            AdmittedState::Refused(AdmittedRefusal::StaleWriter)
-        } else {
-            AdmittedState::BindingConflict
-        },
-    )
+    Ok(if settlement_kind.is_none() && unexpired {
+        AdmittedState::Open
+    } else if !unexpired {
+        AdmittedState::Refused(AdmittedRefusal::Expired)
+    } else {
+        AdmittedState::BindingConflict
+    })
 }
 
 /// The Receipt of the settled Admission of `envelope`, read in a new connection.

@@ -18,7 +18,7 @@ test("the real Server refuses Author Edit Challenge requests with HTTP 429 and R
       request: {
         method: "POST",
         route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: "storyos.command.apply-author-edit.request.v1",
+        command_schema: "storyos.command.apply-author-edit.request.v2",
         canonical_command_digest: { algorithm: "sha256", profile: "storyos.command.applyAuthorEdit.jcs.v1",
           value_hex_lowercase: (index % 16).toString(16).repeat(64) },
         idempotency_key: id(`b7c${index.toString(16).padStart(5, "0")}`),

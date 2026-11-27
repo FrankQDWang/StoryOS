@@ -21,7 +21,6 @@ export type AcceptanceFlight = {
   journal_partition_id: string;
   project_scope: ProjectScope;
   editor_session_id: string;
-  writer_generation: string;
   command_kind: "acceptProposal";
   author_visible_decision_ref: { proposal_id: string; operation_id: string; revision_id: string; operation_ids?: string[] };
   frozen_request_digest: DigestValue;
@@ -223,8 +222,6 @@ async function validateAcceptanceJournal(workspace: EditorWorkspace, transaction
       || JSON.stringify(group.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || record.editor_session_id !== workspace.partition.editor_session_id
       || group.editor_session_id !== workspace.partition.editor_session_id
-      || record.writer_generation !== workspace.partition.writer_generation
-      || group.writer_generation !== workspace.partition.writer_generation
       || group.action_class !== "explicit_editor_command"
       || group.batch_policy_revision !== "storyos.explicit-command-batch.release-1.v1"
       || group.command_schema !== decisionSchema(flight.command_kind)
@@ -361,17 +358,13 @@ export async function acceptanceSessionBlocked(workspace: EditorWorkspace,
     && (item.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
     .sort((left, right) => (right.local_intent_sequence as number)
       - (left.local_intent_sequence as number))[0];
-  if (record === undefined || record.writer_generation !== workspace.partition.writer_generation) {
-    return false;
-  }
+  if (record === undefined) return false;
   const group = journal.groups.find((item) =>
     (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
       === record.explicit_command_record_id);
   const settlement = group?.settlement as { kind?: string; refusal?: { reason?: string };
     problem?: { code?: string } } | undefined;
-  return (settlement?.kind === "refused"
-      && (settlement.refusal?.reason === "stale_writer"
-        || settlement.refusal?.reason === "session_changed"))
+  return (settlement?.kind === "refused" && settlement.refusal?.reason === "session_changed")
     || (settlement?.kind === "pre_admission_problem"
       && settlement.problem?.code === "acceptance_session_ineligible");
 }
@@ -434,8 +427,7 @@ export async function reconcileDisplayedAcceptance(workspace: EditorReadyState,
   if (flight === undefined) return "none";
   if (flight.project_scope.owner_user_id !== workspace.partition.project_scope.owner_user_id
     || flight.project_scope.project_id !== workspace.partition.project_scope.project_id
-    || flight.editor_session_id !== workspace.partition.editor_session_id
-    || flight.writer_generation !== workspace.partition.writer_generation) return "pending";
+    || flight.editor_session_id !== workspace.partition.editor_session_id) return "pending";
   if (proposal.revision_id === flight.request.accept_proposal_input.proposal_revision_id
     && decisionMembers(flight.author_visible_decision_ref).every((id) => proposal.operations.some((operation) => operation.operation_id === id && operation.resolution === "applied"))) {
     return flight.request.accept_proposal_input.expected_authoritative_revision_id === shownRevisionId
@@ -570,18 +562,11 @@ async function commitFlight(workspace: EditorReadyState,
     throw new Error("Journal sequence changed");
   }
   const input = decisionInput(flight as DecisionFlight);
-  const storedDisposition = (partition as { disposition?: string } | undefined)?.disposition;
-  if (storedDisposition !== "current_writer_open"
-    || workspace.partition.disposition !== "current_writer_open") {
-    transaction.abort();
-    throw new Error("Acceptance session is closed");
-  }
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || flight.journal_partition_id !== workspace.partition.journal_partition_id
     || JSON.stringify(flight.project_scope) !== JSON.stringify(workspace.partition.project_scope)
     || flight.editor_session_id !== workspace.partition.editor_session_id
-    || flight.writer_generation !== workspace.partition.writer_generation
     || input.editor_session_id !== workspace.partition.editor_session_id
     || input.client_contract_revision !== workspace.partition.client_contract_revision
     || input.security_policy_revision !== workspace.partition.security_policy_revision) {
@@ -601,7 +586,6 @@ async function commitFlight(workspace: EditorReadyState,
     project_scope: flight.project_scope,
     proposal_id: flight.proposalId,
     editor_session_id: flight.editor_session_id,
-    writer_generation: flight.writer_generation,
     command_kind: flight.command_kind,
     exact_semantic_payload_ref: flight.journal_submission_group_id,
     semantic_payload_digest: flight.frozen_request_digest,
@@ -622,7 +606,6 @@ async function commitFlight(workspace: EditorReadyState,
     project_scope: flight.project_scope,
     proposal_id: flight.proposalId,
     editor_session_id: flight.editor_session_id,
-    writer_generation: flight.writer_generation,
     ordered_coverage: [{ local_intent_sequence: sequence,
       intent_record_ref: flight.explicit_command_record_id,
       payload_digest: flight.frozen_request_digest }],

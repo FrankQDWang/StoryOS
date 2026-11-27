@@ -40,14 +40,12 @@ async function addProse(command: { baseUrl: string; projectId: string; fetchImpl
     await digestCreateEditorSession(sessionRequest), sessionKey,
     (antiForgery) => createEditorSession({ ...command, request: sessionRequest, idempotencyKey: sessionKey,
       antiForgery }));
-  if (session.writer.kind !== "current_writer") throw new Error("Recovery Chapter has no current writer");
   const from = session.base_snapshot.materialized_revision.body.length;
   const editRequest: ApplyAuthorEditRequest = {
-    command_schema: "storyos.command.apply-author-edit.request.v1",
+    command_schema: "storyos.command.apply-author-edit.request.v2",
     ...BINDING,
     correlation_id: `018f0000-0000-7001-8000-00000000${suffix}14`,
     editor_session_id: session.editor_session.editor_session_id,
-    writer_generation: session.writer.writer_generation,
     chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: session.base_snapshot.proposal_head_revision_ids,

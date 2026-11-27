@@ -25,23 +25,13 @@ pub(super) struct ProjectCommandRoute {
     pub(super) path: &'static str,
     pub(super) schema_id: &'static str,
     pub(super) digest_profile: &'static str,
-    pub(super) revision_mismatch: RevisionMismatch,
-    pub(super) schema_mismatch: SchemaMismatch,
     pub(super) body_validation: BodyValidation,
     pub(super) target_validation: TargetValidation,
-    pub(super) problem_mapping: ProblemMapping,
-}
-
-/// The problem of a client contract or security policy revision that differs from the session.
-pub(super) enum RevisionMismatch {
-    InvalidRequest,
-    AuthenticationRequired,
 }
 
 /// When the command-specific body fields are validated, relative to the revision check.
 pub(super) enum BodyValidation {
     AfterRevisionCheck,
-    BeforeRevisionCheck,
     /// The revision, the correlation identity, the challenge headers, and the challenge secret
     /// are examined before the body fields.
     AfterChallengeSecret,
@@ -51,19 +41,6 @@ pub(super) enum BodyValidation {
 pub(super) enum TargetValidation {
     BeforeContentType,
     AfterContentType,
-}
-
-/// The problem of a command schema that differs from the route schema.
-pub(super) enum SchemaMismatch {
-    InvalidRequest,
-    CommandTargetRefused,
-}
-
-/// The problems that a route returns for a `ProjectCommandError`.
-pub(super) enum ProblemMapping {
-    /// The four shared problems, with messages that name the route display name.
-    Standard,
-    Route(fn(ProjectCommandError) -> ApiError),
 }
 
 /// The admission fields that every project command body carries.
@@ -141,29 +118,6 @@ project_command_request!(
     contracts::ExportProjectArchiveRequest,
     nested export_project_archive_input
 );
-
-impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
-    fn command_schema(&self) -> &str {
-        &self.command_schema
-    }
-
-    fn client_contract_revision(&self) -> &str {
-        &self.client_contract_revision
-    }
-
-    fn security_policy_revision(&self) -> &str {
-        &self.security_policy_revision
-    }
-
-    fn correlation_id(&self) -> &str {
-        &self.correlation_id
-    }
-
-    fn targets_route(&self, schema_id: &str) -> bool {
-        self.command_schema == schema_id
-            && self.editor_contract_revision == contracts::EDITOR_CONTRACT_REVISION
-    }
-}
 
 impl ProjectCommandRequest for contracts::WithdrawProposalRequest {
     fn command_schema(&self) -> &str {
@@ -357,19 +311,13 @@ pub(super) async fn admit_body<
 ) -> Result<Admitted<I>, ApiError> {
     let (session_handle, session) = bound_session(state, &headers)?;
     if !body.targets_route(route.schema_id) {
-        return Err(match route.schema_mismatch {
-            SchemaMismatch::InvalidRequest => invalid_request(),
-            SchemaMismatch::CommandTargetRefused => command_target_refused(),
-        });
+        return Err(invalid_request());
     }
     let check_revision = || {
         if body.client_contract_revision() != session.client_contract_revision
             || body.security_policy_revision() != session.security_policy_revision
         {
-            return Err(match route.revision_mismatch {
-                RevisionMismatch::InvalidRequest => invalid_request(),
-                RevisionMismatch::AuthenticationRequired => authentication_required(),
-            });
+            return Err(invalid_request());
         }
         Ok(())
     };
@@ -382,11 +330,6 @@ pub(super) async fn admit_body<
         BodyValidation::AfterRevisionCheck => {
             check_revision()?;
             validate_body(input)?
-        }
-        BodyValidation::BeforeRevisionCheck => {
-            let input = validate_body(input)?;
-            check_revision()?;
-            input
         }
         BodyValidation::AfterChallengeSecret => {
             check_revision()?;
@@ -551,19 +494,13 @@ impl From<StructureAuthority> for ReceiptAuthority {
 
 impl ProjectCommandRoute {
     pub(super) fn problem(&self, error: ProjectCommandError) -> ApiError {
-        let name = match self.problem_mapping {
-            ProblemMapping::Standard => self.display_name,
-            ProblemMapping::Route(route_problem) => return route_problem(error),
-        };
+        let name = self.display_name;
         match error {
-            // A command that requires a writer generation declares its own problem mapping.
-            ProjectCommandError::BindingConflict | ProjectCommandError::WriterIneligible => {
-                problem(
-                    StatusCode::CONFLICT,
-                    "idempotency_binding_conflict",
-                    &format!("The {name} binding conflicts."),
-                )
-            }
+            ProjectCommandError::BindingConflict => problem(
+                StatusCode::CONFLICT,
+                "idempotency_binding_conflict",
+                &format!("The {name} binding conflicts."),
+            ),
             ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
                 StatusCode::CONFLICT,
                 "historical_acknowledgement_unavailable",

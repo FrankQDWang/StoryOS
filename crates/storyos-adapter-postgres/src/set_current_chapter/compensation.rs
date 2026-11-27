@@ -7,7 +7,7 @@ use storyos_core::AuthorUndoFrontierKind;
 use crate::command_replay::ReplayFault;
 use crate::command_sequence::{ActionDisposition, insert_author_action};
 use crate::structural_authority_settlement::{
-    CurrentChapterSequences, allocate_current_chapter_sequences, update_writer_base,
+    CurrentChapterSequences, allocate_current_chapter_sequences, update_session_base,
 };
 use crate::undo_compensation::{CompensationAdapter, CompensationReplay, UndoRequest};
 use crate::undo_latest_author_action::undo_database_error;
@@ -197,7 +197,7 @@ async fn persist_current_chapter_compensation(
     )
     .await
     .map_err(undo_database_error)?;
-    let base_updates = update_writer_base(
+    let base_updates = update_session_base(
         client,
         &command.project_scope,
         Some(command.editor_session_id.as_ref()),

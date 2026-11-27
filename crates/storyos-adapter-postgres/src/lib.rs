@@ -14,10 +14,6 @@ mod tests;
 mod author_edit_outcome_tests;
 
 #[cfg(test)]
-#[path = "takeover_admission_tests.rs"]
-mod takeover_admission_tests;
-
-#[cfg(test)]
 #[path = "create_project_challenge_tests.rs"]
 mod create_project_challenge_tests;
 
@@ -224,7 +220,6 @@ mod stream_proposal_generation;
 mod structural_authority_settlement;
 mod subrun;
 mod subrun_read;
-mod takeover;
 mod tool_registration;
 mod undo_compensation;
 mod undo_frontier;

@@ -2,8 +2,8 @@ import { expect, it } from "vitest";
 
 import { verifyProductionHost } from "../support/browser-command-client";
 
-it("opens, edits, reloads, and takes over through the real production host in Chrome", async () => {
-  await expect(verifyProductionHost({ scenario: "open_edit_reload_takeover" }))
+it("opens, edits, and reloads through the real production host, and a second page writes with no click", async () => {
+  await expect(verifyProductionHost({ scenario: "open_edit_reload_two_pages" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 

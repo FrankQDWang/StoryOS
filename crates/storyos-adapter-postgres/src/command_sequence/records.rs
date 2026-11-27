@@ -230,8 +230,8 @@ pub(super) async fn lock_project(
     project_row(client, envelope, "FOR UPDATE").await
 }
 
-/// Reads the Project row without a lock, for the settle step of a direct editor action. A writer
-/// takeover can then settle while an admitted edit waits for its Chapter head.
+/// Reads the Project row without a lock, for the settle step of a direct editor action. Another
+/// command of the Project can then settle while an admitted edit waits for its Chapter head.
 pub(super) async fn read_project(
     client: &Client,
     envelope: &ProjectCommandEnvelope,

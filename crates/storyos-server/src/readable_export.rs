@@ -5,8 +5,7 @@ use storyos_application::{
 use storyos_core::{ExportHumanReadableManuscriptRefusal, READABLE_EXPORT_PROFILE};
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    TargetValidation, admit, controlled_project,
+    BodyValidation, ProjectCommandRoute, TargetValidation, admit, controlled_project,
 };
 use super::*;
 
@@ -17,11 +16,8 @@ const EXPORT_HUMAN_READABLE_MANUSCRIPT: ProjectCommandRoute = ProjectCommandRout
     path: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH,
     schema_id: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     digest_profile: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn export_human_readable_manuscript(

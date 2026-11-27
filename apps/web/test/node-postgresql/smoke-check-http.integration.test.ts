@@ -84,10 +84,9 @@ function agentRun(story: TestStory, text = "Revise this passage."): CommandInput
 async function authorEdit(story: TestStory,
   session?: CreateEditorSessionResponse): Promise<CommandInput<"applyAuthorEdit">> {
   session ??= await story.openEditorSession();
-  if (session.writer.kind !== "current_writer") throw new Error("expected the current writer");
   return { request: {
-    command_schema: "storyos.command.apply-author-edit.request.v1", ...story.binding(),
-    editor_session_id: session.editor_session.editor_session_id, writer_generation: session.writer.writer_generation,
+    command_schema: "storyos.command.apply-author-edit.request.v2", ...story.binding(),
+    editor_session_id: session.editor_session.editor_session_id,
     chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: [], target_refs: session.base_snapshot.target_refs,
@@ -252,22 +251,8 @@ const COMMANDS: CommandRows = {
         command_schema: "storyos.command.create-editor-session.request.v1", ...project.binding(),
       } } };
     },
-    expected: { writer: { kind: "current_writer" } },
+    expected: { editor_session: { disposition: "open" } },
   },
-  takeOverProjectWriter: {
-    arrange: async () => {
-      const project = await createStory(server, { title: "Smoke Takeover Novel" });
-      const writer = await project.openEditorSession();
-      const observer = await project.openEditorSession();
-      if (writer.writer.kind !== "current_writer") throw new Error("expected the current writer");
-      const editorSessionId = observer.editor_session.editor_session_id;
-      return { project, input: { request: {
-        command_schema: "storyos.command.take-over-project-writer.request.v1", ...project.binding(),
-        editor_session_id: editorSessionId, observed_writer_generation: writer.writer.writer_generation,
-        editor_contract_revision: "storyos.editor-contract.release-1.v3",
-      }, path: { editorSessionId } } };
-    },
-    expected: { result: { kind: "takeover_applied", prior_writer_generation: "1", resulting_writer_generation: "2" } },  },
   createVolume: {
     arrange: async () => {
       const project = await createProject(server, { title: "Smoke Volume Novel" });

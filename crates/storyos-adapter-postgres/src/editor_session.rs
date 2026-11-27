@@ -1,7 +1,7 @@
 use sha2::{Digest, Sha256};
 use storyos_application::{
     EditorSession, EditorSessionError, EditorSessionLookup, EditorSessionSnapshot,
-    EditorSessionStore, EditorWriterState, OpenEditorSession, ProjectCommandChallengeError,
+    EditorSessionStore, OpenEditorSession, ProjectCommandChallengeError,
     ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectScope,
 };
 
@@ -35,21 +35,6 @@ impl EditorSessionStore for PostgresProjectReader {
                       &request.client_binding.session_generation.to_string(),
                       &request.client_binding.client_contract_revision, &request.client_binding.security_policy_revision],
                 ).await.map_err(session_database_error)?;
-                transaction
-                    .client
-                    .execute(
-                        "INSERT INTO storyos.project_writer_generations
-                       (owner_user_id, project_id, writer_generation, current_editor_session_id)
-                     VALUES ($1::text::uuid, $2::text::uuid, 1, $3::text::uuid)
-                     ON CONFLICT DO NOTHING",
-                        &[
-                            &request.project_scope.owner_user_id.as_ref(),
-                            &request.project_scope.project_id.as_ref(),
-                            &request.editor_session_id.as_ref(),
-                        ],
-                    )
-                    .await
-                    .map_err(session_database_error)?;
                 let snapshot = transaction.client.query_opt(
                     "INSERT INTO storyos.editor_session_base_snapshots
                        (owner_user_id, project_id, snapshot_id, editor_session_id,
@@ -190,28 +175,12 @@ async fn read_session(
         "SELECT session.client_session_binding_ref, session.client_session_generation::text,
                 session.client_contract_revision, session.security_policy_revision,
                 to_char(session.opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                current_writer.writer_generation::text, current_writer.current_editor_session_id::text,
-                EXISTS (
-                  SELECT 1 FROM storyos.project_writer_generations AS prior
-                   WHERE prior.owner_user_id = session.owner_user_id
-                     AND prior.project_id = session.project_id
-                     AND prior.current_editor_session_id = session.editor_session_id
-                     AND prior.writer_generation < current_writer.writer_generation
-                ),
                 snapshot.snapshot_id::text, snapshot.chapter_object_id::text,
                 snapshot.authoritative_revision_id::text,
                 snapshot.project_activity_position::text,
                 convert_from(payload.canonical_bytes, 'UTF8'),
                 to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
          FROM storyos.editor_sessions AS session
-         JOIN LATERAL (
-           SELECT writer.writer_generation, writer.current_editor_session_id
-             FROM storyos.project_writer_generations AS writer
-            WHERE writer.owner_user_id = session.owner_user_id
-              AND writer.project_id = session.project_id
-            ORDER BY writer.writer_generation DESC
-            LIMIT 1
-         ) AS current_writer ON true
          JOIN storyos.editor_session_base_snapshots AS snapshot USING
            (owner_user_id, project_id, editor_session_id)
          JOIN storyos.authoritative_revisions AS revision
@@ -232,49 +201,33 @@ async fn read_session(
     let Some(row) = row else {
         return Ok(None);
     };
-    let writer_generation = row
-        .get::<_, String>(5)
-        .parse::<u64>()
-        .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
     let project_activity_position = row
-        .get::<_, String>(11)
+        .get::<_, String>(8)
         .parse::<u64>()
         .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-    let chapter_id: String = row.get(9);
-    let authoritative_revision_id: String = row.get(10);
+    let chapter_id: String = row.get(6);
+    let authoritative_revision_id: String = row.get(7);
     let (body, blocks, payload_digest_hex) = materialized_payload(
         client,
         scope,
         &chapter_id,
         &authoritative_revision_id,
-        &row.get::<_, String>(/*idx*/ 12),
+        &row.get::<_, String>(/*idx*/ 9),
     )
     .await?;
     Ok(Some(EditorSession {
         editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
         client_binding: binding.clone(),
         opened_at: row.get(4),
-        writer: if row.get::<_, String>(6) == editor_session_id {
-            EditorWriterState::CurrentWriter { writer_generation }
-        } else {
-            EditorWriterState::ReadOnly {
-                observed_writer_generation: writer_generation,
-                reason: if row.get::<_, bool>(7) {
-                    storyos_application::EditorReadOnlyReason::SupersededByTakeover
-                } else {
-                    storyos_application::EditorReadOnlyReason::SecondarySession
-                },
-            }
-        },
         base_snapshot: EditorSessionSnapshot {
-            snapshot_id: row.get(8),
+            snapshot_id: row.get(5),
             chapter_id,
             authoritative_revision_id,
             project_activity_position,
             payload_digest_hex,
             body,
             blocks,
-            created_at: row.get(13),
+            created_at: row.get(10),
         },
         author_undo_frontier_sequence: current_author_undo_frontier_sequence(
             client,
@@ -360,7 +313,6 @@ async fn replay_session(
         editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
         client_binding: binding.clone(),
         opened_at: row.get(/*idx*/ 0),
-        writer: acknowledgement.writer,
         base_snapshot: EditorSessionSnapshot {
             snapshot_id: acknowledgement.snapshot_id,
             chapter_id: acknowledgement.chapter_id,

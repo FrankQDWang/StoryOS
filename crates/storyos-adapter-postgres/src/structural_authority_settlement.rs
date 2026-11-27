@@ -201,12 +201,13 @@ fn parse_counter(value: String) -> Result<u64, Box<dyn std::error::Error + Send 
     Ok(value.parse()?)
 }
 
-/// Moves the writer base Snapshot to a new canonical Snapshot of the Chapter Revision
+/// Moves the base Snapshot of Editor Sessions to a new canonical Snapshot of the Chapter Revision
 /// `revision_id`, and gives the number of moved bases.
 ///
-/// The base moves only for the current writer Editor Session. With `editor_session_id`, it moves
-/// only when that session is the current writer.
-pub(crate) async fn update_writer_base(
+/// With `editor_session_id`, only the base of that Editor Session moves. With no
+/// `editor_session_id`, the base of each Editor Session of the Project moves (ADR 0107: each
+/// Editor Session writes).
+pub(crate) async fn update_session_base(
     client: &Client,
     scope: &ProjectScope,
     editor_session_id: Option<&str>,
@@ -223,20 +224,9 @@ pub(crate) async fn update_writer_base(
                     authoritative_revision_id = $6::text::uuid,
                     project_activity_position = $7::text::numeric,
                     created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
               WHERE snapshot.owner_user_id = $1::text::uuid
                 AND snapshot.project_id = $2::text::uuid
-                AND ($3::text IS NULL OR snapshot.editor_session_id = $3::text::uuid)
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id,
-                     snapshot.editor_session_id)
-                AND writer.writer_generation = (
-                  SELECT max(current_writer.writer_generation)
-                    FROM storyos.project_writer_generations AS current_writer
-                   WHERE current_writer.owner_user_id = snapshot.owner_user_id
-                     AND current_writer.project_id = snapshot.project_id
-                )",
+                AND ($3::text IS NULL OR snapshot.editor_session_id = $3::text::uuid)",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

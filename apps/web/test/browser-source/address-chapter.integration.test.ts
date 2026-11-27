@@ -4,7 +4,6 @@ import agentRunFixture from "../../../../generated/golden-wire/storyos-public-re
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import conversationFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-conversation.json";
 import setCurrentChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/set-current-chapter.json";
-import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { HISTORICAL_ACKNOWLEDGEMENT_MESSAGE } from "../../src/historical-acknowledgement.ts";
@@ -29,10 +28,7 @@ const EMPTY_BODY_DIGEST = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca4959
 const NOT_FOUND = "找不到这个章节。";
 const CURRENT_CHAPTER_PATH = `/api/v1/projects/${PROJECT}/current-chapter`;
 
-type Writer = CreateEditorSessionResponse["writer"];
-
 interface ServerSetup {
-  writer?: Writer | undefined;
   /** True: `setCurrentChapter` makes Chapter B current. Else the Server refuses it with the historical acknowledgement problem. */
   switches?: boolean;
   /** True: the Project has no Chapter. */
@@ -43,13 +39,13 @@ interface ServerSetup {
  * A fake Server with Chapter A (current) and Chapter B in one Volume, and Conversation C with one Run on Chapter B.
  * Each other request gets 404.
  */
-function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" }, switches = false, empty = false }:
+function fakeServer({ switches = false, empty = false }:
   ServerSetup) {
   const scenario = createBrowserScenario();
   const scope = scenario.project.project_scope;
   let current = CHAPTER;
   const open = () => empty ? { kind: "empty" as const } : { kind: "current_chapter" as const, current_chapter_id: current };
-  const session = () => current === CHAPTER ? { ...scenario.session, writer } : { ...scenario.session, writer,
+  const session = () => current === CHAPTER ? { ...scenario.session } : { ...scenario.session,
     base_snapshot: { ...scenario.session.base_snapshot, snapshot_id: SNAPSHOT_B, chapter_id: CHAPTER_B,
       authoritative_head_revision_id: REVISION_B, target_refs: [`manuscript:${CHAPTER_B}`],
       materialized_revision: chapterRevision(REVISION_B, ""),
@@ -90,7 +86,7 @@ function fakeServer({ writer = { kind: "current_writer", writer_generation: "1" 
     }
     if (path.endsWith("/editor-sessions")) return jsonResponse(session());
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
-      return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (path.endsWith("/activity")) return emptyActivityStream();
     if (path === CURRENT_CHAPTER_PATH && method === "PUT") {
@@ -174,12 +170,10 @@ it("sends no command for the Current Chapter", async () => {
 });
 
 it.each([
-  ["a value that is not a UUID", "?chapter=not-a-chapter", undefined],
-  ["a Chapter of another Project", `?chapter=${FOREIGN_CHAPTER}`, undefined],
-  ["a workspace that is not the current writer", `?chapter=${CHAPTER_B}`,
-    { kind: "read_only", observed_writer_generation: "2", reason: "superseded_by_takeover" } as const],
-])("opens nothing for %s and shows one sentence", async (_, search, writer) => {
-  const { loaded, shown, chapterSteps } = await openWorkspace(search, { writer });
+  ["a value that is not a UUID", "?chapter=not-a-chapter"],
+  ["a Chapter of another Project", `?chapter=${FOREIGN_CHAPTER}`],
+])("opens nothing for %s and shows one sentence", async (_, search) => {
+  const { loaded, shown, chapterSteps } = await openWorkspace(search, {});
   await expect.poll(shown).toEqual({ title: "Chapter A", alert: NOT_FOUND, search: "" });
   expect(chapterSteps()).toEqual([]);
   // The workspace stays usable: a click in the tree still opens a Chapter.

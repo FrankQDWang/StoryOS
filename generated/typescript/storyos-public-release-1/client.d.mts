@@ -123,25 +123,13 @@ export type DeleteMemoryEntryResponse = { schema_id: string, correlation_id: str
 
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
-export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
-
-export type EditorWriterProjection = { "kind": "current_writer", writer_generation: string, } | { "kind": "read_only", observed_writer_generation: string, reason: EditorReadOnlyReason, };
-
 export type EditorSessionBinding = { editor_session_id: string, client_session_binding_ref: string, client_session_generation: string, client_contract_revision: string, security_policy_revision: string, opened_at: string, disposition: string, };
 
 export type EditorBaseSnapshot = { snapshot_id: string, chapter_id: string, project_activity_position: string, authoritative_head_revision_id: string, proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, materialized_revision: AuthoritativeChapterRevision, materialized_payload_digest: DigestValue, created_at: string, };
 
-export type CreateEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
+export type CreateEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
 
-export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
-
-export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
-
-export type TakeoverCompareFailedReason = "writer_generation_advanced_after_admission" | "requester_became_current_after_admission";
-
-export type TakeOverProjectWriterResult = { "kind": "takeover_applied", prior_editor_session_id: string, prior_writer_generation: string, resulting_editor_session_id: string, resulting_writer_generation: string, resulting_snapshot_id: string, resulting_snapshot_activity_position: string, resulting_heads: Array<string>, } | { "kind": "takeover_compare_failed", observed_writer_generation: string, current_writer_generation: string, current_writer_projection: EditorWriterProjection, current_snapshot_id: string, current_snapshot_activity_position: string, current_heads: Array<string>, reason: TakeoverCompareFailedReason, };
-
-export type TakeOverProjectWriterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, result: TakeOverProjectWriterResult, };
+export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
 
 export type CreateVolumeInput = { title: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -247,9 +235,9 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type AuthorEditProposalTarget = { proposal_id: string, operation_id: string, revision_id: string, manuscript_block_id: string, };
 
-export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
+export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "updateProjectInstruction" | "deleteMemoryEntry" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "updateProjectInstruction" | "deleteMemoryEntry" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -709,8 +697,6 @@ export declare function deleteMemoryEntry(options: StoryOSQueryOptions & { proje
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
-export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createVolume(options: StoryOSQueryOptions & { projectId: string; request: CreateVolumeRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateVolumeResponse>;
 export declare function digestUpdateVolume(request: UpdateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

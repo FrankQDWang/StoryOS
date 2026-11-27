@@ -377,8 +377,7 @@ export function BlockProposalDisplay({
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
     // Acceptance of a Proposal on an earlier base replaces the current text of its target (ADR 0064).
     const acceptableValidation = (result: string) => result === "valid" || result === "conflicted";
-    const writerOpen = editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-      && editorProps.persistWorkspace.session.writer.kind === "current_writer";
+    const writerOpen = editorProps.persistWorkspace !== undefined;
     const sessionBlocked = proposal !== undefined && sessionBlockedIds.includes(proposal.proposal_id);
     const controlsReady = proposal !== undefined && allHeadsKnown && acceptanceChecked && !recoveryUnavailable
       && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
@@ -479,9 +478,8 @@ export function BlockProposalDisplay({
         if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
         await editorProps.writing?.flush();
         const projection = editorProps.writing?.snapshot().projection;
-        if (workspace.partition.disposition !== "current_writer_open"
-          || (!pendingAcceptances.includes(target.proposalId)
-            && (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0))) {
+        if (!pendingAcceptances.includes(target.proposalId)
+          && (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0)) {
           throw new Error("请先保存候选文字。");
         }
         const response = await acceptDisplayedBlockProposal({
@@ -642,8 +640,7 @@ export function BlockProposalDisplay({
         if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
         await editorProps.writing?.flush();
         const projection = editorProps.writing?.snapshot().projection;
-        if (workspace.partition.disposition !== "current_writer_open"
-          || projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0) {
+        if (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0) {
           throw new Error("请先保存候选文字。");
         }
         const response = await rejectDisplayedBlockProposal({ baseUrl: editorProps.baseUrl,
@@ -708,8 +705,7 @@ export function BlockProposalDisplay({
     })();
   };
 
-  const writerReady = () => editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-    && editorProps.persistWorkspace.session.writer.kind === "current_writer";
+  const writerReady = () => editorProps.persistWorkspace !== undefined;
 
   const withdrawControl = {
     baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
@@ -784,8 +780,7 @@ export function BlockProposalDisplay({
         <ProposalDecisionStatus key={locator.proposalId} proposalId={locator.proposalId}
           proposal={proposal} problem={knownProblems[locator.proposalId]}
           rejectionResult={settledRejections[locator.proposalId]}
-          writerOpen={editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-            && editorProps.persistWorkspace.session.writer.kind === "current_writer"}
+          writerOpen={editorProps.persistWorkspace !== undefined}
           sessionBlocked={sessionBlockedIds.includes(locator.proposalId)}
           pendingRejection={pendingRejections.includes(locator.proposalId)}
           pendingWithdraw={pendingWithdrawals.includes(locator.proposalId)}

@@ -34,7 +34,7 @@ pub(crate) enum CurrentChapterChange {
     Clear,
 }
 
-/// Whether the current writer base Snapshot moves to the new canonical Snapshot.
+/// Whether the Editor Session base Snapshots move to the new canonical Snapshot.
 pub(crate) enum WriterBase {
     Keep,
     RebindToCurrentChapter,
@@ -106,7 +106,7 @@ impl SettlementProfile for Structural {
         };
         let writer_base = match (&write.writer_base, resulting_current) {
             (WriterBase::RebindToCurrentChapter, Some(chapter_id)) => {
-                WriterBaseRebind::CurrentWriter { chapter_id }
+                WriterBaseRebind::EachSession { chapter_id }
             }
             (WriterBase::Keep, _) | (WriterBase::RebindToCurrentChapter, None) => {
                 WriterBaseRebind::Keep

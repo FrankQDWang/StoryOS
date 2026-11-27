@@ -9,7 +9,6 @@ fn request() -> contracts::ApplyAuthorEditRequest {
         security_policy_revision: "security".to_owned(),
         correlation_id: "018f0000-0000-7001-8000-000000000030".to_owned(),
         editor_session_id: "018f0000-0000-7001-8000-000000000021".to_owned(),
-        writer_generation: "1".to_owned(),
         chapter_id: "018f0000-0000-7001-8000-000000000003".to_owned(),
         expected_authoritative_revision_id: "018f0000-0000-7001-8000-000000000004".to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),

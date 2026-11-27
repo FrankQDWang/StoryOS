@@ -67,12 +67,10 @@ test.each([
         }),
       );
       const session = editorSession;
-      if (session.writer.kind !== "current_writer") throw new Error("expected current writer");
       const request: ApplyAuthorEditRequest = {
-        command_schema: "storyos.command.apply-author-edit.request.v1",
+        command_schema: "storyos.command.apply-author-edit.request.v2",
         ...BINDING, correlation_id: id(`${ns}${suffix}3`),
         editor_session_id: session.editor_session.editor_session_id,
-        writer_generation: session.writer.writer_generation,
         chapter_id: session.base_snapshot.chapter_id,
         expected_authoritative_revision_id: latestRevisionId ?? session.base_snapshot.authoritative_head_revision_id,
         expected_proposal_head_revision_ids: [],

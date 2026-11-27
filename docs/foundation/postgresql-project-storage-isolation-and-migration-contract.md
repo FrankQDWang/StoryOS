@@ -150,34 +150,32 @@ after the atomic bootstrap commits and before runtime traffic starts. The local
 verification deployment injects one disposable test password after it proves
 that the tracked bootstrap stored no password.
 
-### 0.3 Durable `takeOverProjectWriter` Admission and Activity
+### 0.3 No Project writer, and past `takeOverProjectWriter` rows
 
-`project_writer_generations` is append-only history. The primary key is
-`(owner_user_id, project_id, writer_generation)`. The current writer is the
-row with the maximum generation. A later takeover inserts generation `N+1`.
-It does not update or delete generation `N`. The runtime role has `SELECT` and
-`INSERT` only.
+The migration `0003_each_editor_session_writes.sql` drops the table
+`project_writer_generations`, the Admission column `writer_generation`, and the
+writer trigger (ADR 0107). No Admission names a writer, and an ApplyAuthorEdit
+Admission requires no current writer. The command payload of a past Admission
+keeps the generation that it named.
 
-`author_command_admissions` stores both `applyAuthorEdit` as
-`direct_editor_action` and catalogued `takeOverProjectWriter` as
-`explicit_editor_command`. ApplyAuthorEdit still requires the current writer
-session and generation. Takeover requires an observer session whose observed
-generation equals the current maximum.
+The command shape check of `author_command_admissions` keeps the branch
+`takeOverProjectWriter` as `explicit_editor_command` for the Admissions of the
+past. No product path writes a new takeover Admission.
 
-A takeover DomainReceipt stays on `domain_receipts` with
+A past takeover DomainReceipt stays on `domain_receipts` with
 `command_kind = takeOverProjectWriter`, `result_kind = no_effect`, and reason
-`writer_takeover_applied` or `writer_takeover_compare_failed`. It writes no
+`writer_takeover_applied` or `writer_takeover_compare_failed`. It has no
 Author Action, commit, or revision envelope.
 
-Catalogued `project_activity_event_payloads` stores that takeover Activity.
+Catalogued `project_activity_event_payloads` keeps the past takeover Activity.
 `project_activity_events` remains Author Edit applied Activity. Positions in
 the two tables are disjoint. Author Edit `no_effect`, `conflicted`, and
 `refused` receipts still have no Activity. Author Edit `no_effect` reason is
-only `content_unchanged`. Takeover `no_effect` reason is only
+only `content_unchanged`. A past takeover `no_effect` reason is only
 `writer_takeover_applied` or `writer_takeover_compare_failed`.
 
-Takeover Admission omits manuscript columns as SQL NULL. `MATCH FULL` cannot
-keep the ApplyAuthorEdit revision foreign key on those mixed-null columns, so
+A past takeover Admission omits manuscript columns as SQL NULL. `MATCH FULL`
+cannot keep the ApplyAuthorEdit revision foreign key on those mixed-null columns, so
 the baseline has no such foreign key. ApplyAuthorEdit still checks the
 same-scope authoritative revision at insert. Where the baseline adds a foreign
 key to a FORCE RLS table after that table exists, it uses `RESET ROLE`, so that
@@ -379,7 +377,7 @@ no one family crosses an authority or durability boundary:
 | `project-canonical` | Authoritative State | Project policy, manuscript objects, immutable Revisions/Payloads, Heads, Commits, and scoped counters | Core and Release 1 manuscript/project routes |
 | `artifact-proposal-draft` | Artifacts | Artifact, Proposal, Draft, provenance, memory, research, and source Revision histories | Proposal/Artifact routes; never a Canonical Head |
 | `operational-receipts-actions` | Operational Records | All typed Receipt kinds, Author Actions, idempotency, and domain evidence | Settlement queries and Receipt-backed Activity |
-| `operational-admission-editor` | Operational Records | Admission, nonce/challenge, Editor Session, writer-generation, Input Fence, and Pause Fence records | Admission and editor-session routes |
+| `operational-admission-editor` | Operational Records | Admission, nonce/challenge, Editor Session, Input Fence, and Pause Fence records | Admission and editor-session routes |
 | `operational-run-mailbox` | Operational Records | Run, Subrun, Step, Mailbox, Transcript, Approval, budget, lease, fence, and outbox evidence | Agent/run routes and downstream retention owner |
 | `operational-context-disclosure` | Operational Records | Processing Destination Identity, requirement/selection, Manifest, binding, Decision, Attempt, wire projection, and disclosure evidence | Context, model, Tool, and MCP boundaries |
 | `operational-wire-history` | Historical Operational Records | Immutable Application Wire Records and first materialized public Event representations | Public commands/Events are represented; query-response bytes and transport framing are not |
@@ -500,9 +498,7 @@ At minimum, constraints enforce:
 - one-use anti-forgery nonce binding per Client Session generation, exact
   existing or prospective Scope, route, command kind, digest, and idempotency
   record;
-- one current writer generation per Project Scope and exact generation binding
-  on every editor-bound admission;
-- one Editor Input Fence per scoped Editor Session, writer generation, local
+- one Editor Input Fence per scoped Editor Session, local
   intent range, and active Proposal Generation, with at most one associated
   Proposal Pause Fence;
 - one immutable attempt sequence per Run lane, ToolCall, Model Invocation, and
@@ -555,11 +551,11 @@ change Authoritative State or Manuscript Tree Revision and writes no
 Authoritative Commit or Authoritative Revision. A Manuscript Structure Transition
 writes an Authoritative Commit that may contain empty prose Revision pairs.
 `ApplyAuthorEdit.ProposalRevised` writes one Forward Author Action and a
-Proposal Revision and writes no Authoritative Commit. Takeover `no_effect`
-writes Activity without manuscript authority. ADR 0026 owns Current Chapter
+Proposal Revision and writes no Authoritative Commit. A past takeover
+`no_effect` has Activity without manuscript authority. ADR 0026 owns Current Chapter
 allocation. ADR 0025 owns structure Commit allocation. The Manuscript Revision
 and Proposal State Machine owns Author Edit allocation. The Web Editor Session
-contract owns takeover Activity. Current Chapter and structure paths are
+contract owns the past takeover Activity. Current Chapter and structure paths are
 delivered. `ProposalRevised` allocation is accepted and Proposal candidate
 editing is delivered through `ApplyAuthorEdit`. Allocation presence cannot substitute for the command's typed
 result. No row from either write set is published as committed before the
@@ -573,7 +569,7 @@ Revision, and resulting Revision. For that applied prose result, Author Action
 and Project Activity references continue the same Receipt and Commit tuple.
 Those references cannot name a zero-authority Author Edit Receipt. A Current
 Chapter change or `ProposalRevised` Action names its Receipt and does not
-require a Commit tuple. Takeover `no_effect` Activity names its Receipt and
+require a Commit tuple. A past takeover `no_effect` Activity names its Receipt and
 does not require manuscript authority.
 
 Every single-identity Receipt array has the canonical PostgreSQL dimension
@@ -590,8 +586,8 @@ The physical mapping is closed as follows:
 | Artifact, Proposal, Draft, provenance, lifecycle source, and source Snapshot | `artifact-proposal-draft` | Immutable Artifact/Proposal/Draft revisions and typed lifecycle/provenance edges; no shared Head or payload identity with Canonical State |
 | Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt | `operational-receipts-actions` | One independent typed immutable Receipt identity per first attempt; the typed payload contains no nullable or sentinel authority representation, and exact retry returns the same row |
 | Author Action and Author Undo Frontier evidence | `operational-receipts-actions` | One independent scoped Author Action sequence; successful author Proposal edits receive a Forward action, while Admission/Fence/refusal/conflict/no-effect evidence does not |
-| Author Command Admission, terminal settlement, anti-forgery challenge, and idempotency | `operational-admission-editor` and `operational-receipts-actions` | Exact User, Project Scope, client/session/writer generation, action class, digest, target, nonce, lifetime, and one terminal settlement; `outcome_unknown` is nonterminal |
-| Editor Session, current writer generation, Input Fence, and Proposal Pause Fence | `operational-admission-editor` | Scope-bound operational evidence; stale generations are fenced and no browser Local Edit Journal row becomes PostgreSQL authority |
+| Author Command Admission, terminal settlement, anti-forgery challenge, and idempotency | `operational-admission-editor` and `operational-receipts-actions` | Exact User, Project Scope, client/session generation, action class, digest, target, nonce, lifetime, and one terminal settlement; `outcome_unknown` is nonterminal |
+| Editor Session, Input Fence, and Proposal Pause Fence | `operational-admission-editor` | Scope-bound operational evidence; no browser Local Edit Journal row becomes PostgreSQL authority |
 | Application Wire Record | `operational-wire-history` | Store exact accepted schema-valid message-content bytes once with route, method, release, schema, content type, digest profile, idempotency/Command reference, and resulting identity; never store cookies, headers, nonces, secrets, malformed bodies, or query-response archives |
 | Public Event wire representation | `operational-wire-history` | Store the first compact JSON representation with Event identity, Activity profile, schema, redaction profile, and representation digest; duplicate delivery is not another Wire Record |
 | Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position` only when the result has client-visible Activity; for direct `ApplyAuthorEdit.AuthoritativeApplied` this is one exact Receipt, Commit, Revision, and Author Action relation; other Author Edit results and other commands follow their owner-defined Activity allocation |

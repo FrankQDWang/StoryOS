@@ -70,7 +70,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       });
     }
     if (path.endsWith("/activity")) return emptyActivityStream();

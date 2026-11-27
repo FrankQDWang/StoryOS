@@ -429,7 +429,7 @@ async fn an_author_edit_challenge_issued_under_the_shared_revision_stays_consuma
     let binding = &mut issued_before_deployment.binding;
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();
-    binding.command_schema = "storyos.command.apply-author-edit.request.v1".to_owned();
+    binding.command_schema = "storyos.command.apply-author-edit.request.v2".to_owned();
     binding.command_kind = CommandKind::ApplyAuthorEdit.as_str().to_owned();
     binding.canonical_command_digest = binding.canonical_command_digest.replace(
         CommandKind::UpdateProject.as_str(),
@@ -568,7 +568,7 @@ async fn a_repeated_request_across_the_rate_policy_revision_returns_the_original
             1,
             CommandKind::ApplyAuthorEdit.as_str(),
             "/api/v1/projects/{project_id}/manuscript/author-edits",
-            "storyos.command.apply-author-edit.request.v1",
+            "storyos.command.apply-author-edit.request.v2",
         ),
         (
             2,
@@ -608,7 +608,7 @@ async fn a_changed_binding_still_conflicts_across_the_rate_policy_revision() {
     let original = shared_revision_challenge(
         CommandKind::ApplyAuthorEdit.as_str(),
         "/api/v1/projects/{project_id}/manuscript/author-edits",
-        "storyos.command.apply-author-edit.request.v1",
+        "storyos.command.apply-author-edit.request.v2",
         /*lead*/ 3,
     );
     issue_project_command_challenge(&store, &original)

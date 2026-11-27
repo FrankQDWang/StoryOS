@@ -7,7 +7,7 @@ use super::records::insert_applied_activity;
 use super::{ActionDisposition, PersistFacts, PersistInput, insert_author_action, unavailable};
 use crate::structural_authority_settlement::{
     StructureCommitBinding, StructureTransitionSequences, persist_structure_commit,
-    update_writer_base,
+    update_session_base,
 };
 
 /// The settlement facts that `Structural` and `ChapterSelection` read: the locked Project facts
@@ -28,15 +28,15 @@ impl PersistInput for StructuralInput {
     }
 }
 
-/// The writer base Snapshot that moves to the new canonical Snapshot.
+/// The Editor Session base Snapshots that move to the new canonical Snapshot.
 pub(super) enum WriterBaseRebind<'a> {
     Keep,
-    /// The base of the current writer, if one exists, moves to the current head of the Chapter.
-    CurrentWriter {
+    /// The base of each Editor Session of the Project moves to the current head of the Chapter.
+    EachSession {
         chapter_id: &'a str,
     },
-    /// The base of the Editor Session moves to the Chapter Revision. A session that is not the
-    /// current writer is a binding conflict.
+    /// The base of the Editor Session moves to the Chapter Revision. A missing session base is a
+    /// binding conflict.
     Session {
         editor_session_id: &'a str,
         chapter_id: &'a str,
@@ -146,7 +146,7 @@ pub(super) async fn persist_structural_records(
     .map_err(unavailable)?;
     match records.writer_base {
         WriterBaseRebind::Keep => {}
-        WriterBaseRebind::CurrentWriter { chapter_id } => {
+        WriterBaseRebind::EachSession { chapter_id } => {
             let head = client
                 .query_opt(
                     "SELECT head.current_revision_id::text
@@ -164,7 +164,7 @@ pub(super) async fn persist_structural_records(
                 .map_err(unavailable)?
                 .map(|row| row.get::<_, String>(/*idx*/ 0))
                 .ok_or_else(|| unavailable("the Current Chapter has no authoritative head"))?;
-            update_writer_base(
+            update_session_base(
                 client,
                 scope,
                 None,
@@ -180,7 +180,7 @@ pub(super) async fn persist_structural_records(
             chapter_id,
             revision_id,
         } => {
-            let moved = update_writer_base(
+            let moved = update_session_base(
                 client,
                 scope,
                 Some(editor_session_id),

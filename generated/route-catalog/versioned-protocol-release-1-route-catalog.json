@@ -228,7 +228,7 @@
       "wire_profile": "storyos.project-activity.v1"
     },
     {
-      "description": "",
+      "description": "Historical Activity of a writer takeover from before ADR 0107. No operation writes it now.",
       "event_kind": "writer_takeover_applied",
       "negative_fixture": "storyos.golden.storyos.event.writer-takeover-applied.v1.negative.v1",
       "positive_fixture": "storyos.golden.storyos.event.writer-takeover-applied.v1.positive.v1",
@@ -237,7 +237,7 @@
       "wire_profile": "storyos.project-activity.v1"
     },
     {
-      "description": "",
+      "description": "Historical Activity of a writer takeover from before ADR 0107. No operation writes it now.",
       "event_kind": "writer_takeover_compare_failed",
       "negative_fixture": "storyos.golden.storyos.event.writer-takeover-compare-failed.v1.negative.v1",
       "positive_fixture": "storyos.golden.storyos.event.writer-takeover-compare-failed.v1.positive.v1",
@@ -483,9 +483,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_protocol",
       "fixtures": {
@@ -534,9 +532,7 @@
       },
       "admission": "challenge",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "challenge",
       "fixtures": {
@@ -599,9 +595,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -667,9 +661,7 @@
       },
       "admission": "challenge",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "challenge",
       "fixtures": {
@@ -730,9 +722,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -787,9 +777,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_current",
       "fixtures": {
@@ -843,9 +831,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -907,9 +893,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -967,9 +951,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1031,9 +1013,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -1091,9 +1071,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1155,9 +1133,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -1215,9 +1191,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1280,9 +1254,7 @@
       },
       "admission": "session_control",
       "editor": {
-        "session": "new",
-        "takeover": "no",
-        "writer_generation": "returned_projection"
+        "session": "new"
       },
       "error_profile": "session_control",
       "fixtures": {
@@ -1303,7 +1275,7 @@
       "schemas": {
         "request": "storyos.command.create-editor-session.request.v1",
         "request_source": "protocol",
-        "response": "storyos.command.create-editor-session.response.v1",
+        "response": "storyos.command.create-editor-session.response.v2",
         "response_source": "protocol",
         "semantic_source": "editor"
       },
@@ -1346,9 +1318,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "observed"
+        "session": "required"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -1367,7 +1337,7 @@
       "schemas": {
         "request": "storyos.query.editor-session.request.v1",
         "request_source": "protocol",
-        "response": "storyos.query.editor-session.response.v1",
+        "response": "storyos.query.editor-session.response.v2",
         "response_source": "protocol",
         "semantic_source": "editor"
       },
@@ -1396,76 +1366,6 @@
       "wire_owner": "protocol"
     },
     {
-      "action_class": "explicit_editor_command",
-      "activity": {
-        "no_effect": [
-          "storyos.event.writer-takeover-compare-failed.v1"
-        ],
-        "pre_admission": "none",
-        "success": [
-          "storyos.event.writer-takeover-applied.v1"
-        ],
-        "visibility": "only after the durable transition or async settlement named by the operation"
-      },
-      "admission": "author_command",
-      "editor": {
-        "session": "required",
-        "takeover": "explicit",
-        "writer_generation": "observed"
-      },
-      "error_profile": "editor_command",
-      "fixtures": {
-        "positive": "storyos.golden.takeOverProjectWriter.positive.v1"
-      },
-      "idempotency": "header_and_admission_record",
-      "kind": "command",
-      "method": "POST",
-      "notes": "Both TakeoverApplied and TakeoverCompareFailed are Receipt-backed Project Activity outcomes; stale pre-admission observation has no Admission or Receipt.",
-      "operation_id": "takeOverProjectWriter",
-      "path": "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
-      "preconditions": [
-        "server_derived_project_scope",
-        "session_scope_join",
-        "observed_writer_generation_current_before_admission",
-        "editor_contract_revision"
-      ],
-      "schemas": {
-        "request": "storyos.command.take-over-project-writer.request.v1",
-        "request_source": "protocol",
-        "response": "storyos.command.take-over-project-writer.response.v1",
-        "response_source": "protocol",
-        "semantic_source": "editor"
-      },
-      "semantic_owner": "editor",
-      "settlement": {
-        "acknowledgements": [
-          "committed",
-          "requires_reconfirmation"
-        ],
-        "http_statuses": [
-          200,
-          400,
-          401,
-          403,
-          404,
-          405,
-          409,
-          412,
-          413,
-          415,
-          422,
-          428,
-          429,
-          503
-        ],
-        "mode": "sync",
-        "operation_ref": null,
-        "settlement_query": null
-      },
-      "shape": "writer:takeover",
-      "wire_owner": "protocol"
-    },
-    {
       "action_class": "explicit_project_command",
       "activity": {
         "no_effect": [],
@@ -1478,9 +1378,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1549,9 +1447,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1615,9 +1511,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1683,9 +1577,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1755,9 +1647,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1821,9 +1711,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -1887,9 +1775,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "current"
+        "session": "required"
       },
       "error_profile": "editor_command",
       "fixtures": {
@@ -1903,7 +1789,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "project_active",
-        "editor_session_writer_generation",
+        "session_scope_join",
         "expected_current_chapter",
         "expected_authoritative_head"
       ],
@@ -1955,9 +1841,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "current"
+        "session": "required"
       },
       "error_profile": "editor_command",
       "fixtures": {
@@ -1974,11 +1858,11 @@
         "strict_origin",
         "protected_client_session_binding",
         "project_command_challenge",
-        "editor_session_writer_generation",
+        "session_scope_join",
         "expected_authoritative_head"
       ],
       "schemas": {
-        "request": "storyos.command.apply-author-edit.request.v1",
+        "request": "storyos.command.apply-author-edit.request.v2",
         "request_source": "protocol",
         "response": "storyos.command.apply-author-edit.response.v2",
         "response_source": "protocol",
@@ -2023,9 +1907,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "current"
+        "session": "required"
       },
       "error_profile": "editor_command",
       "fixtures": {
@@ -2040,7 +1922,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "project_active",
-        "editor_session_writer_generation",
+        "session_scope_join",
         "current_open_ready_proposal_revision",
         "valid_validation_receipt",
         "selected_pending_operations",
@@ -2093,9 +1975,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "current"
+        "session": "required"
       },
       "error_profile": "editor_command",
       "fixtures": {
@@ -2109,7 +1989,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "project_active",
-        "editor_session_writer_generation",
+        "session_scope_join",
         "current_open_ready_proposal_revision",
         "selected_pending_operations",
         "expected_target_revisions",
@@ -2174,9 +2054,7 @@
           "admission": "author_command",
           "cause_binding": "protected_author_command_admission",
           "editor": {
-            "session": "required",
-            "takeover": "no",
-            "writer_generation": "current"
+            "session": "required"
           },
           "error_profile": "editor_command",
           "idempotency": "header_and_admission_record",
@@ -2221,9 +2099,7 @@
           "admission": "none",
           "cause_binding": "exact_proposal_producer",
           "editor": {
-            "session": "not-applicable",
-            "takeover": "no",
-            "writer_generation": "not-applicable"
+            "session": "not-applicable"
           },
           "error_profile": "editor_command",
           "idempotency": "header_and_producer_cause_record",
@@ -2267,9 +2143,7 @@
         }
       },
       "editor": {
-        "session": "conditional_by_cause",
-        "takeover": "conditional_by_cause",
-        "writer_generation": "conditional_by_cause"
+        "session": "conditional_by_cause"
       },
       "error_profile": "editor_command",
       "fixtures": {
@@ -2331,9 +2205,7 @@
       },
       "admission": "author_command",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "current"
+        "session": "required"
       },
       "error_profile": "editor_command",
       "fixtures": {
@@ -2347,7 +2219,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "project_active",
-        "editor_session_writer_generation",
+        "session_scope_join",
         "author_undo_frontier_exact",
         "expected_authoritative_head"
       ],
@@ -2399,9 +2271,7 @@
       },
       "admission": "producer_cause",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "async_command",
       "fixtures": {
@@ -2467,9 +2337,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_projection",
       "fixtures": {
@@ -2526,9 +2394,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -2584,9 +2450,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -2642,9 +2506,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -2703,9 +2565,7 @@
       },
       "admission": "producer_cause",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -2770,9 +2630,7 @@
       },
       "admission": "producer_cause",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -2836,9 +2694,7 @@
       },
       "admission": "producer_cause",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "command_sync",
       "fixtures": {
@@ -2900,9 +2756,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
+        "session": "none"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -2958,9 +2812,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3016,9 +2868,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3074,9 +2924,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3134,9 +2982,7 @@
       },
       "admission": "author_command_or_async_operation",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "async_command",
       "fixtures": {
@@ -3203,9 +3049,7 @@
       },
       "admission": "author_command_or_async_operation",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "async_command",
       "fixtures": {
@@ -3271,9 +3115,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3330,9 +3172,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_current_chapter",
       "fixtures": {
@@ -3386,9 +3226,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_projection",
       "fixtures": {
@@ -3444,9 +3282,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3503,9 +3339,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3562,9 +3396,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "required",
-        "takeover": "no",
-        "writer_generation": "bound-to-original-admission-when-present"
+        "session": "required"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3634,9 +3466,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3694,9 +3524,7 @@
       },
       "admission": "sse",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "stream",
       "fixtures": {
@@ -3754,9 +3582,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_projection",
       "fixtures": {
@@ -3815,9 +3641,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3874,9 +3698,7 @@
       },
       "admission": "query",
       "editor": {
-        "session": "optional",
-        "takeover": "no",
-        "writer_generation": "not-applicable"
+        "session": "optional"
       },
       "error_profile": "query_canonical",
       "fixtures": {
@@ -3934,7 +3756,7 @@
     "context": "docs/foundation/context-assembly-retrieval-and-outbound-disclosure-semantics.md#15-required-verification-scenarios",
     "core": "docs/foundation/manuscript-revision-proposal-state-machine.md#13-normative-commands-events-and-records",
     "deletion": "docs/adr/0011-require-explicit-project-deletion-settlement.md",
-    "editor": "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md#22-one-current-writer-generation-per-project",
+    "editor": "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md#22-each-editor-session-writes",
     "memory": "docs/foundation/fiction-memory-and-research-provenance-semantics.md#11-author-interaction",
     "protocol": "docs/foundation/versioned-command-query-artifact-event-protocol.md#16-rust-source-generation-and-verification-contract",
     "release": "docs/foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md#3-complete-acceptance-journey",
@@ -4079,15 +3901,6 @@
         ]
       },
       {
-        "capability_id": "editor_session_takeover",
-        "journey": "Editor Session and writer-generation takeover",
-        "required_operations": [
-          "createEditorSession",
-          "getEditorSession",
-          "takeOverProjectWriter"
-        ]
-      },
-      {
         "capability_id": "snapshot_resync",
         "journey": "Snapshot and replay-generation resynchronization",
         "required_operations": [
@@ -4128,7 +3941,6 @@
       "manuscript_statistics",
       "human_readable_manuscript_export",
       "portable_project_archive",
-      "editor_session_takeover",
       "snapshot_resync",
       "proposal_draft_lifecycle",
       "project_activity",

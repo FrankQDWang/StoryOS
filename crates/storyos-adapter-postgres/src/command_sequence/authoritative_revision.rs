@@ -1,5 +1,5 @@
 //! The `AuthoritativeRevision` settlement profile: one new Authoritative Revision of a Chapter
-//! with its Commit, Author Action, Activity record, writer base, and canonical Snapshot
+//! with its Commit, Author Action, Activity record, session base, and canonical Snapshot
 //! (ADR 0076).
 
 use crate::statement_cache::Client;
@@ -36,7 +36,7 @@ pub(crate) enum ActionDisposition {
     },
 }
 
-/// The move of the writer base Snapshot of the Editor Session to the new Revision.
+/// The move of the base Snapshot of the Editor Session to the new Revision.
 pub(crate) enum RevisionBase {
     /// Moves the base when it is on the prior Revision. Another base stays.
     WhenOnPrior,
@@ -57,13 +57,13 @@ pub(crate) struct RevisionWrite<E> {
     pub(crate) effect: E,
     pub(crate) chapter_id: String,
     /// The current head that the new Revision replaces: its parent, and the guard of the Head and
-    /// writer base updates.
+    /// session base updates.
     pub(crate) prior_revision_id: String,
     /// The canonical bytes of the new Revision payload.
     pub(crate) payload: String,
     pub(crate) members: RevisionMembers,
     pub(crate) disposition: ActionDisposition,
-    /// The writer Editor Session whose base Snapshot moves to the new Revision.
+    /// The Editor Session whose base Snapshot moves to the new Revision.
     pub(crate) editor_session_id: String,
     pub(crate) writer_base: RevisionBase,
 }
@@ -349,14 +349,10 @@ pub(crate) async fn write_revision<E>(
                     authoritative_revision_id = $5::text::uuid,
                     project_activity_position = $6::text::numeric,
                     created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
               WHERE snapshot.owner_user_id = $1::text::uuid
                 AND snapshot.project_id = $2::text::uuid
                 AND snapshot.editor_session_id = $3::text::uuid
-                AND snapshot.authoritative_revision_id = $7::text::uuid
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id, snapshot.editor_session_id)",
+                AND snapshot.authoritative_revision_id = $7::text::uuid",
             &[
                 &owner_user_id,
                 &project_id,

@@ -6,8 +6,7 @@ use storyos_application::{
 use storyos_core::{CreateAgentRunRefusal, TransitionOutcome};
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    TargetValidation, admit, controlled_project,
+    BodyValidation, ProjectCommandRoute, TargetValidation, admit, controlled_project,
 };
 use super::*;
 
@@ -18,11 +17,8 @@ const CREATE_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::CREATE_AGENT_RUN_PATH,
     schema_id: contracts::CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
     digest_profile: contracts::CREATE_AGENT_RUN_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterChallengeSecret,
     target_validation: TargetValidation::AfterContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn create_agent_run(

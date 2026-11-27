@@ -112,10 +112,6 @@ pub(super) async fn apply_author_edit(
         correlation_id: body.correlation_id.clone(),
         ids,
         editor_session_id: EditorSessionId::new(&body.editor_session_id),
-        writer_generation: body
-            .writer_generation
-            .parse()
-            .map_err(|_| invalid_request())?,
         chapter_id: body.chapter_id.clone(),
         expected_authoritative_revision_id: body.expected_authoritative_revision_id.clone(),
         expected_proposal_head_revision_ids: body.expected_proposal_head_revision_ids.clone(),
@@ -418,11 +414,6 @@ fn author_edit_error(error: AuthorEditError) -> ApiError {
             StatusCode::UNPROCESSABLE_ENTITY,
             "challenge_invalid",
             "The command challenge is invalid or expired.",
-        ),
-        AuthorEditError::StaleWriter => problem(
-            StatusCode::PRECONDITION_FAILED,
-            "editor_writer_stale",
-            "The Editor Session is not the current writer.",
         ),
         AuthorEditError::AdmissionExpired => problem(
             StatusCode::CONFLICT,

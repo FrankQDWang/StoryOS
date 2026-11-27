@@ -194,7 +194,6 @@ impl DiagnosticField for crate::ProjectCommandError {
             Self::HistoricalAcknowledgementUnavailable => "historical_acknowledgement_unavailable",
             Self::InvalidChallenge => "invalid_challenge",
             Self::MissingProject => "missing_project",
-            Self::WriterIneligible => "writer_ineligible",
             Self::Unavailable(_) => "unavailable",
         }
     }

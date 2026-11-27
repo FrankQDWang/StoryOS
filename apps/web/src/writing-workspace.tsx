@@ -1,16 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { WritingAssistantPanel, type AssistantContext } from "./writing-assistant-panel.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
-
-function writerGeneration(writer: EditorWriterProjection | undefined): string | undefined {
-  if (writer === undefined) return undefined;
-  return writer.kind === "current_writer"
-    ? writer.writer_generation
-    : writer.observed_writer_generation;
-}
 
 /** The value of one parameter of the workspace address, for example `?conversation={conversation_id}`. */
 export function addressParameter(name: "conversation" | "chapter"): string | undefined {
@@ -27,13 +19,11 @@ export function removeAddressParameter(name: "conversation" | "chapter"): void {
 export function WritingWorkspace({
   tree,
   editor,
-  writer,
   assistant,
   onOpenedProposal, onNavigateProposal, holdAddressConversation = false,
 }: {
   tree: ReactNode;
   editor: ReactNode;
-  writer?: EditorWriterProjection | undefined;
   assistant?: AssistantContext;
   onNavigateProposal?: (destination: ProposalDestination) => void;
   onOpenedProposal?: (locator: ProposalLocator) => void;
@@ -52,8 +42,6 @@ export function WritingWorkspace({
     <section
       className={collapsed ? "workspace agent-is-collapsed" : "workspace"}
       data-writing-workspace=""
-      data-writer-kind={writer?.kind}
-      data-writer-generation={writerGeneration(writer)}
     >
       <aside className="tree-panel">{tree}</aside>
       <section className="editor-panel">{editor}</section>

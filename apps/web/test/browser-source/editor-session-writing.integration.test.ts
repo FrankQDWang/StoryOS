@@ -66,7 +66,7 @@ async function openWriting(options: { challengeRefusals?: number } = {}) {
         limit_profile_revision: "storyos.foundation.absolute.v1" });
     }
     if (path.includes("/editor-sessions/")) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (path.includes("/manuscript/author-edit-outcomes/")) {
       return jsonResponse({ schema_id: "storyos.query.apply-author-edit-outcome.response.v1",

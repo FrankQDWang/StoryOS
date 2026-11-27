@@ -50,7 +50,7 @@ pub(crate) fn author_command(
         scope,
         CommandKind::ApplyAuthorEdit.as_str(),
         "/api/v1/projects/{project_id}/manuscript/author-edits",
-        "storyos.command.apply-author-edit.request.v1",
+        "storyos.command.apply-author-edit.request.v2",
         key,
     );
     let mut command = ApplyAuthorEditCommand {
@@ -71,7 +71,6 @@ pub(crate) fn author_command(
             receipt_id: format!("018f0000-0000-7001-8000-000000000{suffix}3"),
         },
         editor_session_id: EditorSessionId::new(editor_session_id),
-        writer_generation: 1,
         chapter_id: CHAPTER.to_owned(),
         expected_authoritative_revision_id: REVISION.to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
@@ -140,7 +139,6 @@ pub(crate) fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
         "security_policy_revision": command.client_binding.security_policy_revision,
         "correlation_id": command.correlation_id,
         "editor_session_id": command.editor_session_id.as_ref(),
-        "writer_generation": command.writer_generation.to_string(),
         "chapter_id": command.chapter_id,
         "expected_authoritative_revision_id": command.expected_authoritative_revision_id,
         "expected_proposal_head_revision_ids": command.expected_proposal_head_revision_ids,

@@ -101,7 +101,6 @@ mod skill_package;
 mod skill_use;
 mod start_subrun;
 mod statistics_profile;
-mod take_over_project_writer;
 mod transition_outcome;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -427,10 +426,6 @@ pub use submit_research::{
 };
 pub use subrun::{SubrunAssembly, assemble_subrun_context, next_subrun_context};
 pub use subrun_read::{SubrunState, SubrunStep, subrun_state, subrun_steps};
-pub use take_over_project_writer::{
-    CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
-    TakeOverProjectWriterResult, take_over_project_writer,
-};
 pub use tool_call::{
     CallValidationRefusal, CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS,
     MAX_FUNCTION_NAME_CHARS, RefusedToolCall, RequestedToolCall, SnapshotTool, ToolCallBatch,

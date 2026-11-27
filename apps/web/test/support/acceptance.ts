@@ -280,13 +280,11 @@ export async function reviseCandidate(
       request: sessionRequest,
     }),
   );
-  if (session.writer.kind !== "current_writer") throw new Error("expected current writer");
   const editRequest: ApplyAuthorEditRequest = {
-    command_schema: "storyos.command.apply-author-edit.request.v1",
+    command_schema: "storyos.command.apply-author-edit.request.v2",
     ...BINDING,
     correlation_id: id(`${ns}3`),
     editor_session_id: session.editor_session.editor_session_id,
-    writer_generation: session.writer.writer_generation,
     chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: [opened.proposal.revision_id],
@@ -331,8 +329,8 @@ export async function reviseCandidate(
   return { session, revised };
 }
 
-/** Moves the editor session base of the current writer to the Chapter Head, as an Author Edit does. */
-export async function alignWriterBase(projectId: string, chapterId: string,
+/** Moves the base of the latest Editor Session to the Chapter Head, as an Author Edit does. */
+export async function alignLatestSessionBase(projectId: string, chapterId: string,
   nextRevision: string, snapshotId: string): Promise<void> {
   const updated = await queryPostgres(`WITH advanced AS (
       UPDATE storyos.scope_counters
@@ -345,15 +343,12 @@ export async function alignWriterBase(projectId: string, chapterId: string,
           authoritative_revision_id = '${nextRevision}'::uuid,
           project_activity_position = (SELECT project_activity_position FROM advanced),
           created_at = clock_timestamp()
-      FROM storyos.project_writer_generations AS writer
-      WHERE snapshot.owner_user_id = writer.owner_user_id
-        AND snapshot.project_id = writer.project_id
-        AND snapshot.editor_session_id = writer.current_editor_session_id
-        AND snapshot.project_id = '${projectId}'::uuid
+      WHERE snapshot.project_id = '${projectId}'::uuid
         AND snapshot.chapter_object_id = '${chapterId}'::uuid
-        AND writer.writer_generation = (
-          SELECT max(latest.writer_generation) FROM storyos.project_writer_generations AS latest
+        AND snapshot.editor_session_id = (
+          SELECT latest.editor_session_id FROM storyos.editor_sessions AS latest
           WHERE latest.project_id = '${projectId}'::uuid
+          ORDER BY latest.opened_at DESC, latest.editor_session_id DESC LIMIT 1
         )
       RETURNING snapshot.snapshot_id
     )
@@ -470,18 +465,17 @@ type AuthorEditContext = {
   session: { editor_session: { editor_session_id: string } };
 };
 
-/** Builds one author edit from the current editor session base of the writer, with one unit for each primitive. */
+/** Builds one author edit from the current base of the Editor Session, with one unit for each primitive. */
 export async function authorEditRequest(started: Started, context: AuthorEditContext,
   primitives: AuthorEditPrimitive | readonly AuthorEditPrimitive[], ownership: EditOwnership, sequence: string,
   ns: string): Promise<ApplyAuthorEditRequest> {
   const { projectId, fetchImpl } = context.prepared;
   const session = await getEditorSession({ baseUrl: started.baseUrl, projectId, fetchImpl,
     editorSessionId: context.session.editor_session.editor_session_id });
-  if (session.writer.kind !== "current_writer") throw new Error("expected the current writer");
   const proposal = ownership.kind === "authoritative" ? undefined : ownership.proposal;
   const request: ApplyAuthorEditRequest = {
-    command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING, correlation_id: id(`${ns}1`),
-    editor_session_id: session.editor_session.editor_session_id, writer_generation: session.writer.writer_generation,
+    command_schema: "storyos.command.apply-author-edit.request.v2", ...BINDING, correlation_id: id(`${ns}1`),
+    editor_session_id: session.editor_session.editor_session_id,
     chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: proposal ? [proposal.revision_id] : [],
@@ -501,7 +495,7 @@ export async function authorEditRequest(started: Started, context: AuthorEditCon
   return request;
 }
 
-/** Sends one author edit from the current editor session base of the writer. */
+/** Sends one author edit from the current base of the Editor Session. */
 export async function sendAuthorEdit(started: Started, context: AuthorEditContext,
   primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string) {
   const { projectId, fetchImpl } = context.prepared;

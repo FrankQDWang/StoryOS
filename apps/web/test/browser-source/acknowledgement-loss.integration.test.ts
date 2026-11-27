@@ -77,13 +77,11 @@ function assertGroup(
   expect(group.reconciliation).toEqual(reconciliation);
   expect(group.batch_policy_revision).toBe("storyos.author-edit-batch.release-1.preview.v1");
   expect(group.editor_session_id).toBe(SESSION);
-  expect(group.writer_generation).toBe("1");
   expect(group.frozen_request_body).toMatchObject({
-    command_schema: "storyos.command.apply-author-edit.request.v1",
+    command_schema: "storyos.command.apply-author-edit.request.v2",
     client_contract_revision: "storyos.web-client.release-1.v3",
     security_policy_revision: "storyos.web-security-policy.release-1.v1",
     editor_session_id: SESSION,
-    writer_generation: "1",
     chapter_id: CHAPTER,
     expected_authoritative_revision_id: REVISION,
     expected_proposal_head_revision_ids: [],
@@ -98,7 +96,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
   const scenario = createBrowserScenario();
   const freshSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
     correlation_id: "018f0000-0000-7001-8000-000000000037",
     base_snapshot: {
       ...scenario.session.base_snapshot,
@@ -120,7 +118,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
   let lastIdempotencyKey: string | undefined;
   let canonicalSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
   };
   const counts = { authorEdits: 0, methods: [] as string[], outcomes: 0 };
   const openDatabases = new Set<IDBDatabase>();
@@ -131,7 +129,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     counts.methods.push(`${init?.method ?? "GET"} ${path}`);
     if (path.endsWith("/anti-forgery-challenges")) {
       const request = requireRequestBody(init);
-      if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+      if (request.command_schema === "storyos.command.apply-author-edit.request.v2") {
         commandDigest = requireDigestValue(request.canonical_command_digest, "command digest");
       }
       return jsonResponse({
@@ -251,7 +249,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
   };
 
   async function openReady(): Promise<EditorReadyState> {
-    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
     const workspace = await openEditorWorkspace({
       baseUrl: location.origin,
       project: scenario.project,
@@ -263,7 +261,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    expect(workspace.database.version).toBe(5);
+    expect(workspace.database.version).toBe(6);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
       "metadata",

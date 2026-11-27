@@ -157,20 +157,15 @@ type EarlyChapterOpen = {
  * Session. The Project read stays the authority: when it names another Chapter, or an empty Project, the open discards
  * the early Chapter read and the early Editor Session read and reads as the first open does. The open of the
  * workspace ends after the Chapter read of the Chapter of the Project read, and only that open writes to the Journal.
- * For a current writer with a generation above 1, the takeover check of #1897 runs unless each part of its local proof
- * is there: the page state (the Journal partition of the last ready open of this page is the partition of the new
- * Editor Session), the partition row, the active base row, and the cursor of the Project Activity Stream.
  */
 export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project"> & Partial<Pick<ProjectReadyState, "editor">>;
+  opened: Pick<ProjectReadyState, "profile" | "project">;
   chapterId?: string | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
     cryptoImpl = globalThis.crypto } = options;
   const scope = opened.project.project_scope;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
-  const readyPartitionId = opened.editor?.kind === "editor-ready"
-    ? opened.editor.partition.journal_partition_id : undefined;
   const open = opened.project.project.open;
   const chapterId = options.chapterId ?? (open.kind === "current_chapter" ? open.current_chapter_id : undefined);
   // The early open requests no Challenge: when the open discards it, its replacement requests one, and one open
@@ -178,7 +173,7 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
   const early = chapterId === undefined ? undefined : { chapterId,
     chapter: settle(readCurrentChapter(queryOptions, scope.project_id, chapterId, scope.owner_user_id)),
     opening: startEditorWorkspace({ baseUrl, project: opened.project, profile: opened.profile, fetchImpl,
-      indexedDBImpl, cryptoImpl, readyPartitionId, earlyChallenge: false }) };
+      indexedDBImpl, cryptoImpl, earlyChallenge: false }) };
   try {
     const read = await readSessionProject(queryOptions, scope.project_id, "together");
     if (read === undefined) {
@@ -187,7 +182,7 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision, readyPartitionId, early);
+      read.revision, early);
   } catch (error) {
     void early?.opening.abandon();
     return projectUnavailable(error);
@@ -203,7 +198,6 @@ async function openProjectWorkspace(
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
   revision: string,
-  readyPartitionId?: string,
   early?: EarlyChapterOpen,
 ): Promise<ControlledProjectState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
@@ -237,15 +231,15 @@ async function openProjectWorkspace(
       return { kind: "empty-project-ready", profile, project, revision, tree };
     }
     const opening = used?.opening ?? startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl,
-      cryptoImpl, readyPartitionId });
+      cryptoImpl });
     const chapter = await (used?.chapter
       ?? settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId)));
     if (chapter.kind === "failed") {
       void opening.abandon();
       throw chapter.error;
     }
-    const { editor, tree } = await opening.finish(chapter.value, project);
-    return { kind: "project-ready", profile, project, revision, chapter: chapter.value, editor, tree };
+    const { editor } = await opening.finish(chapter.value, project);
+    return { kind: "project-ready", profile, project, revision, chapter: chapter.value, editor };
   } catch (error) {
     return projectUnavailable(error);
   }

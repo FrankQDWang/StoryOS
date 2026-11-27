@@ -10,8 +10,7 @@ use crate::shared_tests::command_sequence_agent_run::{
 };
 use crate::shared_tests::command_sequence_memory_entry::delete_memory_entry_call;
 use crate::shared_tests::command_sequence_project_session::{
-    take_over_project_writer_call, update_project_assistance_call, update_project_call,
-    update_project_instruction_call,
+    update_project_assistance_call, update_project_call, update_project_instruction_call,
 };
 use crate::shared_tests::command_sequence_proposal_decision::{
     reject_proposal_operations_call, withdraw_proposal_call,
@@ -100,12 +99,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b30).await,
         )
         .await,
@@ -167,9 +160,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             .collect::<Vec<_>>();
         (failures, result)
     };
-    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 11];
-    expected.push(rolled_back(ReceiptResult::NoEffect));
-    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 12];
     expected.push(rolled_back(ReceiptResult::Refused));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 4]);
     expected.push(rolled_back(ReceiptResult::NoEffect));

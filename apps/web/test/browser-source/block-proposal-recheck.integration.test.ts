@@ -68,7 +68,7 @@ it("keeps the editor editable and the caret in place while the Proposal checks r
   const test = await openJournalAppendTestWorkspace();
   const scenario = createBrowserScenario();
   const proposal = candidateFor(test.workspace);
-  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   let reads = 0, submissions = 0;
   let rereadStarted!: () => void, releaseReread!: (value: Proposal) => void;
   const reread = new Promise<void>((resolve) => { rereadStarted = resolve; });
@@ -177,7 +177,7 @@ it("accepts input in a candidate during and after its own settlement and keeps t
     }
     if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64),
       expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
-    if (path.includes("/editor-sessions/")) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+    if (path.includes("/editor-sessions/")) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     if (!path.endsWith("/manuscript/author-edits")) throw new Error(`No request handler: ${path}`);
     const request = JSON.parse(String(init?.body));
     targets.push(request.proposal_target.revision_id);
@@ -300,7 +300,7 @@ it("keeps each line break character of a candidate after typing in it", async ()
     if (request === `POST ${projectPath}/anti-forgery-challenges`) return jsonResponse({ nonce: "a".repeat(64),
       expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
     if (request === `GET ${projectPath}/editor-sessions/${SESSION}`) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (request === `POST ${projectPath}/manuscript/author-edits`) {
       sent.push(JSON.parse(String(init?.body)));

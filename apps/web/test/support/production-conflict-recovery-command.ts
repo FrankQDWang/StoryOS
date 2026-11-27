@@ -4,7 +4,7 @@ import type { BrowserContext, Page } from "playwright";
 import { getChapter, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, BlockProposalInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { alignWriterBase } from "./acceptance.ts";
+import { alignLatestSessionBase } from "./acceptance.ts";
 import { queryStoryOSPostgres, sessionFetch } from "./node-integration";
 import { uuidV7 } from "../../src/client-identity.ts";
 
@@ -122,7 +122,7 @@ export async function verifyConflictedProposalRecovery(input: {
       WHERE project_id = '${projectId}'::uuid AND revision_id = '${input.chapterRevisionId}'::uuid;
       UPDATE storyos.authoritative_heads SET current_revision_id = '${nextRevision}'::uuid
       WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid`);
-    await alignWriterBase(projectId, chapterId, nextRevision, uuidV7());
+    await alignLatestSessionBase(projectId, chapterId, nextRevision, uuidV7());
     // The observer reads the moved Chapter Head, so its Acceptance expects that Head.
     await observer.reload();
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();

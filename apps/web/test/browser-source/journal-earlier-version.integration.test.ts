@@ -124,7 +124,7 @@ function journalServer(scenario: ReturnType<typeof createBrowserScenario>) {
     }
     if (route === `POST /api/v1/projects/${PROJECT}/editor-sessions`) return jsonResponse(scenario.session);
     if (route === `GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`) {
-      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (route === `GET /api/v1/projects/${PROJECT}/activity`) return emptyActivityStream();
     // The page reads the open Proposals of the Chapter and the assistance settings. This Project has none of them.
