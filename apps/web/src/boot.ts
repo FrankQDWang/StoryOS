@@ -22,6 +22,7 @@ import type {
   StateDifference,
 } from "./editor-types.ts";
 import { startEditorWorkspace, type EditorWorkspaceOpening } from "./editor-session.ts";
+import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
@@ -215,7 +216,8 @@ async function openProjectWorkspace(
     const open = project.project.open;
     const used = open.kind === "current_chapter" && early?.chapterId === open.current_chapter_id ? early : undefined;
     // A discarded open ends before its replacement starts: its Chapter read and its Session read end first.
-    if (used === undefined && early !== undefined) await Promise.all([early.chapter, early.opening.abandon()]);
+    const discarded = used === undefined && early !== undefined
+      ? (await Promise.all([early.chapter, early.opening.abandon()]))[0] : undefined;
     if (open.kind === "empty") {
       const treeValue: unknown = await getManuscriptTree({ ...queryOptions, projectId });
       const treeView = treeValue as {
@@ -239,8 +241,18 @@ async function openProjectWorkspace(
     }
     const opening = used?.opening ?? startEditorWorkspace({ baseUrl, project, profile, fetchImpl, indexedDBImpl,
       cryptoImpl });
-    const chapter = await (used?.chapter
-      ?? settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId)));
+    let reading = used?.chapter
+      ?? settle(readCurrentChapter(queryOptions, projectId, open.current_chapter_id, ownerUserId));
+    // Another tab set another Chapter current while this tab had text to send on its Chapter. The later action of this
+    // tab wins: it sets its Chapter current again and catches up there (ADR 0107, section 2).
+    const other = used === undefined ? await opening.otherChapter(open.current_chapter_id, shown) : undefined;
+    const back = other === undefined ? undefined : await setChapterBack(options, project, other,
+      discarded?.kind === "read" ? discarded.value : undefined).catch(() => undefined);
+    if (back !== undefined) {
+      ({ project, revision } = back.read);
+      reading = Promise.resolve({ kind: "read", value: back.chapter });
+    }
+    const chapter = await reading;
     if (chapter.kind === "failed") {
       void opening.abandon();
       throw chapter.error;
@@ -250,6 +262,29 @@ async function openProjectWorkspace(
   } catch (error) {
     return projectUnavailable(error);
   }
+}
+
+/**
+ * Sets the Chapter of the stored Editor Session current again, with that Session. `read` is a read of that Chapter,
+ * when the reopen has one. It gives the Project and the Chapter after the command, or `undefined` when the command
+ * had no effect.
+ */
+async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse,
+  other: { chapterId: string; editorSessionId: string }, read: GetChapterResponse | undefined) {
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, cryptoImpl = globalThis.crypto } = options;
+  const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
+  const open = project.project.open;
+  if (open.kind !== "current_chapter") return undefined;
+  const chapter = read?.chapter.chapter_id === other.chapterId ? read
+    : await readCurrentChapter(queryOptions, projectId, other.chapterId, project.project_scope.owner_user_id);
+  const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
+    chapterId: other.chapterId, expectedCurrentChapterId: open.current_chapter_id,
+    expectedTargetRevisionId: chapter.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });
+  if (switched.effect.kind !== "authoritative_applied") return undefined;
+  const after = await readSessionProject(queryOptions, projectId, "together");
+  const reopened = after?.project.project.open;
+  return reopened?.kind === "current_chapter" && reopened.current_chapter_id === other.chapterId
+    ? { read: after!, chapter } : undefined;
 }
 
 /** Reads the Chapter `chapterId` of the Project, and refuses a read of another Project Scope or Chapter. */

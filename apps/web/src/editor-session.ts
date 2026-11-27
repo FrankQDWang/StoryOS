@@ -29,6 +29,7 @@ import {
   validateJournalSnapshot,
 } from "./local-edit-journal.ts";
 import { blocksOnCurrent, stepsOnCurrent, type EarlierBaseText } from "./earlier-base-catch-up.ts";
+import { paragraphsEqual } from "./manuscript-doc.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
@@ -310,6 +311,12 @@ type EditorWorkspaceOptions = {
 export interface EditorWorkspaceOpening {
   finish(chapter: GetChapterResponse, project?: GetProjectResponse, shown?: readonly ManuscriptParagraph[])
     : Promise<OpenedEditorWorkspace>;
+  /**
+   * The stored Editor Session and the Chapter of its base, when that Chapter is not `currentChapterId` and the Session
+   * has text that can catch up on it: another tab set another Chapter current (ADR 0107, section 2).
+   */
+  otherChapter(currentChapterId: string, shown?: readonly ManuscriptParagraph[])
+    : Promise<{ chapterId: string; editorSessionId: string } | undefined>;
   /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
   abandon(): Promise<void>;
 }
@@ -378,6 +385,23 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         return opened;
       }
       return startEditorWorkspace(options).finish(chapter, read, shown);
+    },
+    otherChapter: async (currentChapterId, shown) => {
+      const start = await started;
+      if (start.kind !== "started" || !start.active) return undefined;
+      try {
+        const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
+        const base = stored.session.base_snapshot;
+        if (base.chapter_id === currentChapterId) return undefined;
+        // A tab with no text to send opens the Current Chapter that the other tab set.
+        if ((shown === undefined || paragraphsEqual(shown, base.materialized_revision.blocks))
+          && !await partitionHasOpenWork(stored)) return undefined;
+        return await earlierBaseText(stored, base.chapter_id, shown) === undefined ? undefined
+          : { chapterId: base.chapter_id, editorSessionId: start.active };
+      } catch {
+        // An unreadable Journal keeps the stored Session, so its recovery runs.
+        return undefined;
+      }
     },
     abandon: () => started.then((start) => { start.database?.close(); }),
   };
@@ -455,10 +479,10 @@ async function partitionHasOpenWork(workspace: EditorWorkspace): Promise<boolean
  * result, input in a Proposal candidate, and decision work keep the stored Session, because the catch-up cannot know
  * if they applied. `shown` is the text that a live tab shows, with its input that is not in the Journal.
  */
-async function earlierBaseText(workspace: EditorWorkspace, chapter: GetChapterResponse,
+async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
   shown: readonly ManuscriptParagraph[] | undefined): Promise<EarlierBaseText | undefined> {
   const base = workspace.session.base_snapshot;
-  if (base.chapter_id !== chapter.chapter.chapter_id || await partitionHasDecisionWork(workspace)) return undefined;
+  if (base.chapter_id !== chapterId || await partitionHasDecisionWork(workspace)) return undefined;
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const revisedCandidate = new Set(snapshot.groups.flatMap((group) => group.settlement.kind
     === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised"
@@ -499,7 +523,7 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       if (!await partitionHasOpenWork(stored)) {
         start = { ...start, active: null };
       } else {
-        text = await earlierBaseText(stored, chapter, shown);
+        text = await earlierBaseText(stored, chapter.chapter.chapter_id, shown);
         const current = chapter.chapter.current_revision.blocks;
         if (text !== undefined && stepsOnCurrent(current, blocksOnCurrent(text, current, mintId)) === undefined) {
           text = undefined;

@@ -162,29 +162,24 @@ catches up in a new Editor Session on the current Chapter:
 
 The catch-up runs at a load, when a save gets `stale_authoritative_head`, and
 when the tab comes to the front (`visibilitychange`). At the front, the tab
-saves its input, then reads the Chapter one time. A live tab catches up in this
-order:
-
-1. It waits until no IME composition is open, so the editor first captures the
-   confirmed text.
-2. It ends input: the editor is read-only, and the controller starts no
-   submission and no Author Undo. Captured input still enters the Journal.
-3. It waits until the submission in flight settles and an Author Undo ends.
-4. It takes the blocks that the editor shows, closes the controller, and opens
-   again on the later Revision.
-
-A front read that finds a later Revision starts the catch-up and gives the
-read to the reopen. A save that gets `stale_authoritative_head` during the
-front read also starts the catch-up, and the reopen waits for the front read
-and uses it. So one return to the front reads the Chapter one time in both
-orders. The quiet step of a Chapter switch or a deletion refuses with
+saves its input, then reads the Chapter one time. A live tab waits for the end
+of an open IME composition, then ends input: the editor is read-only, and the
+controller starts no submission and no Author Undo, but captured input still
+enters the Journal. After the submission in flight and an Author Undo end, the
+tab takes the blocks that the editor shows, closes the controller, and opens
+again. A front read that finds a later Revision gives the read to the reopen.
+A save that gets `stale_authoritative_head` during the front read also starts
+the catch-up, and the reopen uses the front read, so one return to the front
+reads the Chapter one time in both orders. The quiet step of a Chapter switch or a deletion refuses with
 `earlier_base`: the tab catches up, a Chapter switch runs again on the new
 editor, and the author can delete again. The tab shows no sentence and no
 button.
 
-When another tab sets another Chapter current, the reopen opens that Chapter.
-The stored Editor Session then has its base on another Chapter, so the catch-up
-does not run, and the stored Editor Session keeps its recovery state.
+When another tab set another Chapter current and the stored Editor Session has
+text that can catch up on the Chapter of its base, the open (a load or a
+reopen) sets that Chapter current again with that Editor Session, and then
+catches up on it. The later action wins, as for a block. With no such text, the
+open opens the Chapter that the other tab set current.
 
 The catch-up does not run when the stored partition has a group that went out
 with no known result, a refused Author Edit, an Author Edit that conflicted for
@@ -355,10 +350,10 @@ Editor Session of the Project shows. When the client cannot read its groups,
 the text comes from its records only.
 
 A tab opens the Session of the changed rows only when no other open tab has it:
-the tab holds the Web Lock of that Session, as for each Editor Session. A tab with no
-Editor Session in its session storage opens the first such Session. When that
-Session does not open, its text goes to local recovery, and the tab opens a new
-Session.
+the tab holds the Web Lock of that Session, as for each Editor Session. A tab
+with no Editor Session in its session storage opens the first such Session.
+When that Session does not open, its text goes to local recovery, and the tab
+opens a new Session.
 
 A version 5 group that the client sent keeps its v1 request, its digest, and
 its capsule, because the Server keeps that Admission. The next save asks for
