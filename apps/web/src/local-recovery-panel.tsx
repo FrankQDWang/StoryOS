@@ -64,7 +64,9 @@ export function LocalRecoveryPanel({ workspace, refreshKey, onContinue }: {
         </> : <p>已保留供手动重新输入；原修改未标记为已保存。</p>}
       </article>;
     })}
-    {materials.filter((item) => item.disposition !== "awaiting_author_choice").length === RECOVERY_PAGE_SIZE
+    {materials.filter((item) => item.disposition !== "awaiting_author_choice"
+      && !(item.disposition === "retained_from_earlier_journal" && item.journal_submission_group_id)).length
+      === RECOVERY_PAGE_SIZE
       ? <button type="button" onClick={() => { void readLocalRecovery(workspace, materials.at(-1)).then(setMaterials).catch(() => setFailure("无法读取更多恢复内容")); }}>更多恢复内容</button> : null}
     <button type="button" onClick={() => { void readLocalRecovery(workspace).then(setMaterials).catch(() => setFailure("无法读取恢复内容")); }}>返回恢复内容首页</button>
     {failure ? <p role="alert">{failure}</p> : null}
