@@ -1355,7 +1355,11 @@ it("takes the title and the revision of a reopen after a Project rename in anoth
   server.renameElsewhere("Project A, other tab");
 
   workspace.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
-  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
+  // The Arriving Chapter shows its title before the reopen (ADR 0105). An empty fact of the arrival comes only after the
+  // reopen, so the test reads the Project heading after the reopen.
+  await expect.poll(() => ({ title: workspace.shown().title, arrival: workspace.root
+    .querySelector("[data-arrival-no-open-suggestion]")?.getAttribute("data-arrival-no-open-suggestion") }))
+    .toEqual({ title: "Chapter B", arrival: "" });
   const shown = projectHeading(workspace.root);
   await renameProject(workspace.root, "Project A, renamed");
 

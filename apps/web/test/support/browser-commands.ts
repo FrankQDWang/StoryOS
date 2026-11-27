@@ -72,7 +72,9 @@ export const storyOSBrowserCommands = {
       const request = parseAuthorEditSubmissionHoldRequest(value);
       if (request.action !== "release") {
         if (authorEditHold !== undefined) throw new Error("Author Edit submissions are already held");
-        const current = request.action === "hold_set_current_chapter";
+        const current = request.action !== "hold";
+        const losing = request.action === "lose_set_current_chapter";
+        let lost = 0;
         const routed = current ? setCurrentChapterCommand : authorEditCommand;
         let release = (): void => undefined;
         const released = new Promise<void>((resolve) => {
@@ -80,7 +82,14 @@ export const storyOSBrowserCommands = {
         });
         const orchestrator = context.page.mainFrame();
         const handler = async (route: Route, held: Request): Promise<void> => {
-          if (held.method() === (current ? "PUT" : "POST") && held.frame() !== orchestrator) {
+          if (losing && lost < 2 && held.method() === "PUT" && held.frame() !== orchestrator) {
+            lost += 1;
+            // The Server gets the request and answers, and the page gets a network failure.
+            await route.fetch();
+            await route.abort("failed");
+            return;
+          }
+          if (!losing && held.method() === (current ? "PUT" : "POST") && held.frame() !== orchestrator) {
             // The test waits for this count before its next step.
             if (current) {
               await held.frame().evaluate(() => {

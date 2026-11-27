@@ -46,7 +46,8 @@ export async function applyImeComposition(
 /**
  * While held, the Author Edit command requests of the page wait and do not reach the Server. With
  * `hold_set_current_chapter`, the Set Current Chapter command requests wait, and `data-storyos-held-requests` on the
- * root element of the application frame counts them.
+ * root element of the application frame counts them. With `lose_set_current_chapter`, the Server gets the next two Set
+ * Current Chapter command requests, and the page gets no response to them.
  */
 export async function updateAuthorEditSubmissionHold(
   request: AuthorEditSubmissionHoldRequest,
