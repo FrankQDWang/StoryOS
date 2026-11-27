@@ -24,7 +24,7 @@ import {
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
 import { ArrivalNoticeSlot, type ArrivalNotice, type UnsavedArrival } from "./arrival-notice.tsx";
-import { createArrivalInput, type ArrivalInput } from "./arrival-input.ts";
+import { createArrivalInput, type ArrivalInput, type EditorSelection } from "./arrival-input.ts";
 import { chapterText, createChapterCopies, editorParagraphs, type ChapterCopies } from "./chapter-copies.ts";
 import { deleteOwnedChapter } from "./delete-chapter.ts";
 import { deleteOwnedVolume } from "./delete-volume.ts";
@@ -115,6 +115,8 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   copies: ChapterCopies;
   /** The Arrival Input that a switch gives to the next editor part for its hand-over (ADR 0105, section 4). */
   handOverStore: { current: ArrivalInput | undefined };
+  /** The caret of a focused Arriving Chapter with no Arrival Input, which the editor of the next editor part takes. */
+  caretStore: { current: EditorSelection | undefined };
   /** The waiting selection. It stays through the change of the editor part (ADR 0105, section 6). */
   waitingStore: { current: WaitingSelection | undefined };
 }
@@ -179,6 +181,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     timers: props.writingTimers }));
   useEffect(() => () => { copies.close(); }, [copies]);
   const handOverStore = useRef<ArrivalInput | undefined>(undefined);
+  const caretStore = useRef<EditorSelection | undefined>(undefined);
   const waitingStore = useRef<WaitingSelection | undefined>(undefined);
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
@@ -287,6 +290,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         handle={editor}
         copies={copies}
         handOverStore={handOverStore}
+        caretStore={caretStore}
         waitingStore={waitingStore}
         onStatus={setStatus} />}
     />
@@ -297,7 +301,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
   proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
-  handOverStore, waitingStore,
+  handOverStore, caretStore, waitingStore,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -361,6 +365,11 @@ function ProjectEditorView({
     return given;
   });
   const handOverRef = useRef(handOver);
+  const [caret] = useState(() => {
+    const given = caretStore.current;
+    caretStore.current = undefined;
+    return given;
+  });
   useSyncExternalStore(handOver?.subscribe ?? noChanges, () => handOver?.version());
   // Each end of an arrival with no hand-over shows the Arrival Input as text that is not saved.
   const showUnsaved = (ended: ArrivalInput | undefined) => {
@@ -767,6 +776,9 @@ function ProjectEditorView({
                 if (typed.hasInput() && next.editor.openedProjection.authoritative_revision_id === typed.revisionId) {
                   inputRef.current = undefined;
                   handOverStore.current = typed;
+                } else if (!typed.hasInput() && typed.focused()) {
+                  // The editor of the Chapter keeps the focus and the caret of a click in the Arriving Chapter (#1934).
+                  caretStore.current = typed.selection();
                 }
               }
               handedOff = true;
@@ -1020,7 +1032,7 @@ function ProjectEditorView({
         }}
         blocks={editorBlocks}
         arrival={handOver}
-        initialSelection={handOver?.selection()}
+        initialSelection={handOver?.selection() ?? caret}
         onSuggestionList={handOver === undefined ? undefined : decideHandOver}
         // A Selection Reference needs saved text, so none is available while the hand-over waits.
         referenceSource={handOver !== undefined ? undefined : {

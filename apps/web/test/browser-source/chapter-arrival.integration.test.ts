@@ -1841,6 +1841,7 @@ it("keeps the focus and the caret of a click in an Arriving Chapter that accepts
     workspace.stopIdle();
     workspace.server.hold(READ_B);
     workspace.server.hold(openProposals(CHAPTER_B));
+    const before = workspace.server.requests.length;
     workspace.button(CHAPTER_B).click();
     await expect.poll(() => [READ_B, openProposals(CHAPTER_B)].every(workspace.server.isHeld)).toBe(true);
 
@@ -1859,8 +1860,47 @@ it("keeps the focus and the caret of a click in an Arriving Chapter that accepts
     const body = `${"Beta".slice(0, clicked.offset)}?${"Beta".slice(clicked.offset)}`;
     await expect.poll(() => ({ ...workspace.ready(), footer: workspace.footer() }))
       .toEqual({ ...READY, body, footer: "已保存" });
+    await expectRequests(workspace.server, before, [openProposals(CHAPTER_B), ...SWITCH_STEPS, ...REOPEN_STEPS],
+      [...PANEL_READS, ACTIVITY], ...SAVE_B);
     expect({ ...clicked, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({ footer: OPENING, editable: false,
       focus: true, offset: clicked.offset, stored: body });
+  });
+
+// With no Arrival Input, the switch ends with the editor of the Chapter. That editor takes the focus and the caret of
+// a click in the read-only Arriving Chapter (#1934).
+it("keeps the focus and the caret of a click in an Arriving Chapter with no Arrival Input in the editor of the reopen",
+  async () => {
+    const workspace = await openWorkspace((server) => {
+      server.lists[CHAPTER_B] = "018f0000-0000-7001-8000-000000000474";
+    });
+    await workspace.copy(CHAPTER_B);
+    workspace.stopIdle();
+    workspace.server.hold(READ_B);
+    workspace.server.hold(openProposals(CHAPTER_B));
+    const before = workspace.server.requests.length;
+    workspace.button(CHAPTER_B).click();
+    await expect.poll(() => [READ_B, openProposals(CHAPTER_B)].every(workspace.server.isHeld)).toBe(true);
+    await userEvent.click(workspace.editor().querySelector("p")!);
+    const offset = getSelection()!.anchorOffset;
+    const earlier = workspace.editor();
+
+    // Another tab decided the Proposal. The author types nothing, so the switch ends with the editor of Chapter B.
+    delete workspace.server.lists[CHAPTER_B];
+    workspace.server.release(openProposals(CHAPTER_B));
+    workspace.server.release(READ_B);
+    await expect.poll(() => ({ ...workspace.ready(), newEditor: !earlier.isConnected, save: workspace.saveState() }))
+      .toEqual({ ...READY, newEditor: true, save: "saved" });
+    const reopened = { focus: workspace.editor().contains(document.activeElement), caret: getSelection()!.anchorOffset };
+    await applyTrustedInput({ operation: "insert_text", text: "?" });
+    workspace.server.acceptEdits = true;
+    await expect.poll(workspace.runIdle).toBe(true);
+
+    const body = `${"Beta".slice(0, offset)}?${"Beta".slice(offset)}`;
+    await expect.poll(workspace.ready).toEqual({ ...READY, body });
+    await expectRequests(workspace.server, before, [openProposals(CHAPTER_B), ...SWITCH_STEPS, ...REOPEN_STEPS],
+      [...PANEL_READS, ACTIVITY], ...SAVE_B);
+    expect({ reopened, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({ reopened: { focus: true,
+      caret: offset }, stored: body });
   });
 
 // ADR 0105, section 4: with no Arrival Input, a newer Revision of the Chapter read of the switch replaces the shown
@@ -1878,6 +1918,7 @@ it("keeps the focus and the caret of a click when a newer Revision replaces the 
   workspace.server.hold(openProposals(CHAPTER_B));
   // The Challenge waits, so that the switch with no Arrival Input does not end before the checks.
   workspace.server.hold(CHALLENGE);
+  const before = workspace.server.requests.length;
   workspace.button(CHAPTER_B).click();
   await expect.poll(() => [READ_B, openProposals(CHAPTER_B)].every(workspace.server.isHeld)).toBe(true);
   await userEvent.click(workspace.editor().querySelector("p")!);
@@ -1902,6 +1943,8 @@ it("keeps the focus and the caret of a click when a newer Revision replaces the 
   const body = `${"Beta two".slice(0, offset)}?${"Beta two".slice(offset)}`;
   await expect.poll(() => ({ ...workspace.ready(), footer: workspace.footer() }))
     .toEqual({ ...READY, body, footer: "已保存" });
+  await expectRequests(workspace.server, before, [openProposals(CHAPTER_B), ...SWITCH_STEPS, ...REOPEN_STEPS],
+    [...PANEL_READS, ACTIVITY], ...SAVE_B);
   expect({ replaced, caret, stored: workspace.server.texts[CHAPTER_B]!.body }).toEqual({ replaced: { editable: false,
     newEditor: true, focus: true }, caret: offset, stored: body });
 });
