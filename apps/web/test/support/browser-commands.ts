@@ -40,13 +40,19 @@ import { assertProjectReceipts } from "./project-receipts.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
 const AUTHOR_EDIT_COMMAND_PATH = /^\/api\/v1\/projects\/[^/]+\/manuscript\/author-edits$/u;
+const SET_CURRENT_CHAPTER_PATH = /^\/api\/v1\/projects\/[^/]+\/current-chapter$/u;
 
 function authorEditCommand(url: URL): boolean {
   return AUTHOR_EDIT_COMMAND_PATH.test(url.pathname);
 }
 
+function setCurrentChapterCommand(url: URL): boolean {
+  return SET_CURRENT_CHAPTER_PATH.test(url.pathname);
+}
+
 let authorEditHold: {
   readonly release: () => void;
+  readonly route: (url: URL) => boolean;
   readonly handler: (route: Route, request: Request) => Promise<void>;
 } | undefined;
 
@@ -64,27 +70,38 @@ export const storyOSBrowserCommands = {
   [storyOSBrowserCommandNames.authorEditSubmissionHold]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseAuthorEditSubmissionHoldRequest(value);
-      if (request.action === "hold") {
+      if (request.action !== "release") {
         if (authorEditHold !== undefined) throw new Error("Author Edit submissions are already held");
+        const current = request.action === "hold_set_current_chapter";
+        const routed = current ? setCurrentChapterCommand : authorEditCommand;
         let release = (): void => undefined;
         const released = new Promise<void>((resolve) => {
           release = resolve;
         });
         const orchestrator = context.page.mainFrame();
         const handler = async (route: Route, held: Request): Promise<void> => {
-          if (held.method() === "POST" && held.frame() !== orchestrator) await released;
+          if (held.method() === (current ? "PUT" : "POST") && held.frame() !== orchestrator) {
+            // The test waits for this count before its next step.
+            if (current) {
+              await held.frame().evaluate(() => {
+                const root = document.documentElement;
+                root.dataset.storyosHeldRequests = String(Number(root.dataset.storyosHeldRequests ?? "0") + 1);
+              });
+            }
+            await released;
+          }
           // A reload aborts a held request, and Playwright then refuses to continue it.
           await route.continue().catch(() => undefined);
         };
-        authorEditHold = { release, handler };
-        await context.page.route(authorEditCommand, handler);
+        authorEditHold = { release, route: routed, handler };
+        await context.page.route(routed, handler);
         return { kind: "author_edit_submission_hold_updated" } as const;
       }
       const hold = authorEditHold;
       authorEditHold = undefined;
       if (hold !== undefined) {
         hold.release();
-        await context.page.unroute(authorEditCommand, hold.handler);
+        await context.page.unroute(hold.route, hold.handler);
       }
       return { kind: "author_edit_submission_hold_updated" } as const;
     },
@@ -113,6 +130,7 @@ export const storyOSBrowserCommands = {
         receipts: request.receipts,
         kinds: request.kinds,
         ...(request.authorActions === undefined ? {} : { authorActions: request.authorActions }),
+        ...(request.lastResults === undefined ? {} : { lastResults: request.lastResults }),
       });
       return { kind: "project_receipts_verified" } as const;
     },

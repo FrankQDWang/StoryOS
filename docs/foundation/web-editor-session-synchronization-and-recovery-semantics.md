@@ -1280,6 +1280,16 @@ groups across chapters, or imply Core settlement. Returning to a chapter
 restores its exact pending or attention surfaces from journal and durable
 Server facts.
 
+A tab that holds the writer shows the selected chapter at once as an Arriving
+Chapter, from a copy in the memory of the tab, while the switch above runs with
+no change
+([ADR 0105](../adr/0105-let-the-author-type-in-a-selected-chapter-before-the-chapter-switch-settles-and-hold-that-input-in-the-tab.md)).
+Arrival Input is outside the journal and outside the Pending Edit Projection.
+It becomes normal input only at the hand-over to the Editor Session writing
+controller, after the switch settled and the base Revision is the Revision of
+the copy. In each other case no part of it goes to the controller, and the tab
+shows it to the author as text that is not saved.
+
 ### 5.3 Submission scheduler
 
 The current-writer partition owns one serialized author-command queue ordered

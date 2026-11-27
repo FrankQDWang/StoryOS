@@ -4,6 +4,7 @@ import { getProposal, listChapterOpenProposals } from "../../../generated/typesc
 import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { ArrivalSink } from "./arrival-input.ts";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
 import type { EditorReadyState } from "./editor-types.ts";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
@@ -33,9 +34,13 @@ export type ProposalLocator = {
 
 // The Server list is the source of the open Proposals of a Chapter. A failed or truncated list leaves Proposal heads unknown.
 type OpenProposalList = { kind: "reading" } | { kind: "failed" }
-  | { kind: "listed"; complete: boolean; locators: ProposalLocator[] };
+  | {
+    kind: "listed"; complete: boolean; locators: ProposalLocator[];
+    /** The Proposal and its Revision of each entry, as `{proposal_id}@{revision_id}`. */
+    heads: string[];
+  };
 
-async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
+export async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
   fetchImpl: typeof fetch): Promise<OpenProposalList> {
   try {
     const response = await listChapterOpenProposals({ baseUrl, fetchImpl, projectId: scope.project_id, chapterId });
@@ -46,7 +51,8 @@ async function readOpenProposalList(scope: ProjectScope, chapterId: string, base
     return { kind: "listed", complete: response.completeness === "complete",
       locators: response.proposals.map(({ proposal_id, source }) => source.kind === "agent_run_decision"
         ? { proposalId: proposal_id, runId: source.run_id, decisionId: source.decision_id }
-        : { proposalId: proposal_id, runId: "", decisionId: "" }) };
+        : { proposalId: proposal_id, runId: "", decisionId: "" }),
+      heads: response.proposals.map(({ proposal_id, revision_id }) => `${proposal_id}@${revision_id}`) };
   } catch {
     return { kind: "failed" };
   }
@@ -59,7 +65,7 @@ type ProposalRead = {
 
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
-  onAccepted, ...editorProps
+  onAccepted, onDecisionEnd, startSuggestionRead, onSuggestionList, arriving, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
@@ -69,6 +75,25 @@ export function BlockProposalDisplay({
   safeToProject: boolean;
   /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
   onAccepted: (settled: boolean) => Promise<void>;
+  /** Each end of a decision of this display. A decision can change a Proposal of the Project (ADR 0105). */
+  onDecisionEnd?: (() => void) | undefined;
+  /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
+  startSuggestionRead?: (() => (proposalIds: readonly string[] | undefined) => void) | undefined;
+  /**
+   * The text that the editor part shows during the switch to an Arriving Chapter (ADR 0105). Its input goes to `input`
+   * while `editable` is true. The editor and the Proposal states of this Chapter end. The reads and the state of this
+   * display stay for a switch that fails.
+   */
+  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink }
+    | undefined;
+  /**
+   * Each answer of the read of the open suggestions of this Chapter: the Proposal heads of a complete list, or
+   * `undefined` for an incomplete list, a failed read, or a Local Edit Journal that stops input. It comes after the
+   * input check of the Local Edit Journal, and it uses the input rule of the editor, so input that the answer starts
+   * does not stop the editor. The hand-over of Arrival Input waits for it (ADR 0105). `refreshKey` is the key of the
+   * read that gave the answer.
+   */
+  onSuggestionList?: ((heads: readonly string[] | undefined, refreshKey: number) => void) | undefined;
   persistWorkspace: EditorReadyState | undefined;
   onFailure: (error: unknown) => void;
   baseUrl: string;
@@ -141,7 +166,10 @@ export function BlockProposalDisplay({
     const refusal = acceptanceRefusals[proposalId];
     return refusal != null && refusal.revisionId === proposal?.revision_id ? refusal : undefined;
   };
+  const onDecisionEndRef = useRef(onDecisionEnd);
+  onDecisionEndRef.current = onDecisionEnd;
   const finishDecision = () => {
+    onDecisionEndRef.current?.();
     acceptingRef.current = false;
     setAccepting(undefined);
     setDecisionGeneration((value) => value + 1);
@@ -171,15 +199,33 @@ export function BlockProposalDisplay({
     return () => { active = false; };
   }, [editorProps.persistWorkspace, settlementRefresh, settlements, decisionGeneration]);
 
+  const startSuggestionReadRef = useRef(startSuggestionRead);
+  startSuggestionReadRef.current = startSuggestionRead;
+  const onSuggestionListRef = useRef(onSuggestionList);
+  onSuggestionListRef.current = onSuggestionList;
+  const [suggestionList, setSuggestionList] = useState<{ heads: readonly string[] | undefined; refreshKey: number }>();
   useEffect(() => {
     let active = true;
+    const record = startSuggestionReadRef.current?.();
     void readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl).then((next) => {
-      if (active) setOpenList((current) => canonical(current) === canonical(next) ? current : next);
+      if (!active) return;
+      setOpenList((current) => canonical(current) === canonical(next) ? current : next);
+      if (next.kind === "listed") record?.(next.complete ? next.heads : undefined);
+      setSuggestionList({ heads: next.kind === "listed" && next.complete ? next.heads : undefined, refreshKey });
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
     decisionGeneration, locators.map((locator) => locator.proposalId).join("|"),
     editorProps.baseUrl, editorProps.fetchImpl]);
+  const inputChecked = acceptanceChecked || journalProposalsChecked;
+  // The Local Edit Journal lets the editor accept input: the part of the input rule of the editor below that does not
+  // depend on the input itself.
+  const journalAccepts = !recoveryUnavailable && journalPendingIds.length === 0 && accepting === undefined
+    && pendingAcceptances.length === 0;
+  useEffect(() => {
+    if (suggestionList === undefined || !inputChecked) return;
+    onSuggestionListRef.current?.(journalAccepts ? suggestionList.heads : undefined, suggestionList.refreshKey);
+  }, [suggestionList, inputChecked]);
 
   useEffect(() => {
     let active = true;
@@ -274,6 +320,8 @@ export function BlockProposalDisplay({
       if (active && !acceptingRef.current && result === "applied_not_shown"
         && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
+        // The applied Acceptance changed a Proposal of the Project, as the end of a decision does (ADR 0105).
+        onDecisionEndRef.current?.();
         await onAccepted(true);
       }
       return result === "pending" || result === "applied" || result === "applied_not_shown"
@@ -696,15 +744,17 @@ export function BlockProposalDisplay({
     });
   };
 
+  if (arriving !== undefined) {
+    return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={arriving.editable === true}
+      arrival={arriving.input} />;
+  }
   return (
     <>
-      <ManuscriptEditor {...editorProps}
-        editable={editorProps.editable && !recoveryUnavailable
-          && journalPendingIds.length === 0
-          && (acceptanceChecked || journalProposalsChecked || (locators.length === 0
-            && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))
-          && accepting === undefined
-          && pendingAcceptances.length === 0}
+      <ManuscriptEditor key="editor" {...editorProps}
+        // While a hand-over waits, the input goes to the Arrival Input, and the hand-over waits for the input check.
+        editable={editorProps.editable && journalAccepts
+          && (editorProps.arrival !== undefined || inputChecked || (locators.length === 0
+            && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))}
         proposals={projections}
         onCandidateSettled={(proposalId) => {
           if (typeof proposalId === "string" && proposalId.length > 0) {

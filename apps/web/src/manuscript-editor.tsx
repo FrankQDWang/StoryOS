@@ -5,6 +5,7 @@ import { TextSelection } from "@tiptap/pm/state";
 
 import { firstOwnerRange } from "./first-owner-range.ts";
 
+import type { ArrivalSink, EditorSelection } from "./arrival-input.ts";
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
 import {
   captureManuscriptChange,
@@ -66,6 +67,13 @@ export interface ManuscriptEditorProps {
   onCopyProposal?: (proposalId: string) => void;
   /** The source of the references that the author adds from a selection. */
   referenceSource?: EditorReferenceSource | undefined;
+  /**
+   * The input of an Arriving Chapter goes here (ADR 0105), also when `writing` exists and the hand-over waits. The sink
+   * stays through each change of `editable`, so a composition that ends while the editor is read-only ends in the sink.
+   */
+  arrival?: ArrivalSink | undefined;
+  /** The selection that the editor takes, with the focus, when it starts: the caret of the hand-over. */
+  initialSelection?: EditorSelection | undefined;
 }
 
 const ignoreChanges = () => () => {};
@@ -99,6 +107,8 @@ export function ManuscriptEditor({
   onWithdrawProposal,
   onCopyProposal,
   referenceSource,
+  arrival,
+  initialSelection,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const capturedInputRef = useRef(0);
@@ -112,6 +122,11 @@ export function ManuscriptEditor({
   const candidateCompositionDirtyRef = useRef(false);
   const writingRef = useRef(writing);
   writingRef.current = writing;
+  const arrivalRef = useRef(arrival);
+  arrivalRef.current = arrival;
+  // The receiver of the input: the Arrival Input of an Arriving Chapter until its hand-over, or the writing controller.
+  const inputRef = useRef<ArrivalSink | EditorSessionWritingController | undefined>(arrival ?? writing);
+  inputRef.current = arrival ?? writing;
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onUndoCurrentChapterRef = useRef(onUndoCurrentChapter);
   const proposalsRef = useRef(proposals);
@@ -138,7 +153,8 @@ export function ManuscriptEditor({
         () => onAuthorUndoRef.current(),
         (hardBoundary, candidate) => !candidateCompositionBlockedRef.current
           && writingRef.current?.canAcceptInput(hardBoundary, candidate) === true,
-        () => composingRef.current && crossingCompositionRef.current !== undefined),
+        () => composingRef.current && crossingCompositionRef.current !== undefined,
+        (origin) => arrivalRef.current?.accepts(origin) !== false),
     ],
     content: manuscriptBlocksJson(blocks),
     editable,
@@ -158,6 +174,7 @@ export function ManuscriptEditor({
       syncManuscriptSurface(created.view.dom, observedBlocksRef.current);
     },
     onTransaction({ editor: current, transaction }) {
+      arrivalRef.current?.select({ anchor: current.state.selection.anchor, head: current.state.selection.head });
       const nextBlocks = readManuscriptParagraphs(current.state.doc);
       if (nextBlocks === undefined) return;
       const source = referenceSourceRef.current;
@@ -204,7 +221,7 @@ export function ManuscriptEditor({
         return;
       }
       if (current.view.composing || composingRef.current) {
-        writingRef.current?.showSaving(nextBlocks);
+        inputRef.current?.showSaving(nextBlocks);
         return;
       }
       if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
@@ -212,7 +229,7 @@ export function ManuscriptEditor({
       observedBlocksRef.current = nextBlocks;
       capturedInputRef.current += 1;
       if (edit === undefined) {
-        writingRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
+        inputRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
       }
       const origin = edit.kind === "split_block"
@@ -228,13 +245,14 @@ export function ManuscriptEditor({
                 primitive.kind === "replace_block_selection")?.text ?? "",
             }
             : edit);
-      writingRef.current?.capture(edit, origin, nextBlocks);
+      inputRef.current?.capture(edit, origin, nextBlocks);
     },
   }, []);
 
   onAuthorUndoRef.current = () => {
     const current = writingRef.current;
-    if (editor === null || current === undefined) return true;
+    // An Arriving Chapter has no Author Undo, also while its hand-over waits (ADR 0105, section 3).
+    if (editor === null || current === undefined || arrivalRef.current !== undefined) return true;
     void current.undo().then((outcome) => {
       if (outcome !== undefined) onCandidateSettledRef.current?.(outcome.proposalId);
       if (outcome?.currentChapterId !== undefined) onUndoCurrentChapterRef.current?.(outcome.currentChapterId);
@@ -245,6 +263,17 @@ export function ManuscriptEditor({
   useEffect(() => {
     editor?.setEditable(editable);
   }, [editable, editor]);
+
+  // The editor of a hand-over starts with the caret of the Arriving Chapter.
+  useEffect(() => {
+    if (editor === null || initialSelection === undefined) return;
+    const size = editor.state.doc.content.size;
+    const clamp = (position: number) => Math.max(0, Math.min(position, size));
+    const { doc } = editor.state;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(doc.resolve(clamp(initialSelection.anchor)),
+      doc.resolve(clamp(initialSelection.head)))));
+    editor.view.focus();
+  }, [editor]);
 
   useEffect(() => {
     if (referenceSource === undefined) return;
@@ -338,7 +367,8 @@ export function ManuscriptEditor({
     written?.projection.save_state, editor]);
 
   useEffect(() => {
-    if (editor === null || writing === undefined) return;
+    const sink = arrival ?? writing;
+    if (editor === null || sink === undefined) return;
     const { dom } = editor.view;
     const onCompositionStart = (): void => {
       composingRef.current = true;
@@ -350,16 +380,16 @@ export function ManuscriptEditor({
       const parent = editor.state.selection.$from.parent;
       const candidateSelected = !crossing
         && parent.type.name === "blockProposal";
-      candidateCompositionBlockedRef.current = candidateSelected && !writing.canAcceptInput(true,
+      candidateCompositionBlockedRef.current = candidateSelected && !sink.canAcceptInput(true,
         { proposalId: String(parent.attrs.proposalId), operationId: String(parent.attrs.operationId) });
       candidateCompositionStartRef.current = candidateSelected
         && !candidateCompositionBlockedRef.current ? editor.state.doc : null;
       candidateCompositionDirtyRef.current = false;
-      writing.setComposing(true);
+      sink.setComposing(true);
     };
     const onCompositionEnd = (event: CompositionEvent): void => {
       composingRef.current = false;
-      writing.setComposing(false);
+      sink.setComposing(false);
       const candidateStart = candidateCompositionStartRef.current;
       candidateCompositionStartRef.current = null;
       candidateCompositionBlockedRef.current = false;
@@ -383,12 +413,12 @@ export function ManuscriptEditor({
       if (candidateStart !== null) {
         const captured = capturedCandidateEdit(candidateStart, editor.state.doc);
         if (!captured.valid) {
-          writing.fail(new Error("Candidate composition is not a supported edit"));
+          sink.fail(new Error("Candidate composition is not a supported edit"));
           return;
         }
         if (captured.edit !== undefined) {
           const { proposal, priorText, from, to, text, resultingBody } = captured.edit;
-          writing.capture({
+          sink.capture({
             kind: "candidate_selection",
             target: {
               proposal_id: proposal.proposalId,
@@ -410,10 +440,10 @@ export function ManuscriptEditor({
       observedBlocksRef.current = nextBlocks;
       capturedInputRef.current += 1;
       if (edit === undefined) {
-        writing.fail(new Error("Manuscript replacement is not a supported Block edit"));
+        sink.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
       }
-      writing.capture(edit, "composition_confirmation", nextBlocks);
+      sink.capture(edit, "composition_confirmation", nextBlocks);
     };
     dom.addEventListener("compositionstart", onCompositionStart, true);
     dom.addEventListener("compositionend", onCompositionEnd);
@@ -421,9 +451,9 @@ export function ManuscriptEditor({
       dom.removeEventListener("compositionstart", onCompositionStart, true);
       dom.removeEventListener("compositionend", onCompositionEnd);
       // A closed editor abandons its Author Undo (ADR 0038).
-      writing.abandonUndo();
+      sink.abandonUndo();
     };
-  }, [editor, writing]);
+  }, [editor, writing, arrival]);
 
   if (editor === null) return null;
   return <>

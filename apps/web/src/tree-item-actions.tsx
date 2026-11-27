@@ -31,6 +31,7 @@ export function TreeItemActions({
   expectedTreeRevision,
   selectedChapterId,
   onSelectChapter,
+  onChapterPointer,
   onRemove,
   baseUrl,
   fetchImpl,
@@ -49,6 +50,8 @@ export function TreeItemActions({
   /** Only a Chapter can be selected. */
   selectedChapterId?: string | undefined;
   onSelectChapter?: ((chapterId: string) => void) | undefined;
+  /** The pointer came onto (`inside`) or left the button of a Chapter. */
+  onChapterPointer?: ((chapterId: string, inside: boolean) => void) | undefined;
   onRemove?: ((itemId: string) => void) | undefined;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -115,7 +118,9 @@ export function TreeItemActions({
       </form>
     ) : kind === "volume" || onSelectChapter === undefined ? <span {...data(`${kind}-title`, true)}>{title}</span> : (
       <button type="button" data-chapter-id={itemId} data-chapter-title
-        aria-current={itemId === selectedChapterId} onClick={() => onSelectChapter(itemId)}>{title}</button>
+        aria-current={itemId === selectedChapterId} onClick={() => onSelectChapter(itemId)}
+        onPointerEnter={() => onChapterPointer?.(itemId, true)}
+        onPointerLeave={() => onChapterPointer?.(itemId, false)}>{title}</button>
     )}
     <button type="button" {...{ [text.menuAttribute]: itemId }} aria-label={text.menuLabel} onClick={openMenu}>⋯</button>
     {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>

@@ -1,9 +1,9 @@
-import type { GetProposalResponse, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { GetProposalResponse, ProjectScope, SetCurrentChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openControlledProject } from "./boot.ts";
 import { openSelectedChapter } from "./chapter-navigation.ts";
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
-import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
+import { setOwnedCurrentChapter, SkippedCurrentChapterError } from "./set-current-chapter.ts";
 import type { ProjectReadyState, ControlledProjectState } from "./editor-types.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 
@@ -32,6 +32,13 @@ export function navigateProposal(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  /** The command of the navigation went out. Until its answer, the Server can move the Editor Session base. */
+  onCommandSent: () => void;
+  /**
+   * The command of the navigation ended, also when a later choice of the author made the navigation stale. The value is
+   * the new Current Chapter when the command had an effect.
+   */
+  onCommandEnded: (currentChapterId: string | undefined) => void;
   onOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onLocator: (locator: ProposalLocator) => void;
   onFailure: (message: string) => void;
@@ -68,11 +75,30 @@ export function navigateProposal(options: {
       if (!latest()) return;
       if (current.kind !== "project-ready" || current.editor.kind !== "editor-ready"
         || current.project.project.open.kind !== "current_chapter") throw new Error("无法打开写作会话。");
-      const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id,
-        chapterId: destination.chapterId, expectedCurrentChapterId: current.project.project.open.current_chapter_id,
-        expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
-        editorSessionId: current.editor.session.editor_session.editor_session_id });
-      if (!latest()) return;
+      let sent = false;
+      let switched: SetCurrentChapterResponse | undefined;
+      try {
+        switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id,
+          chapterId: destination.chapterId, expectedCurrentChapterId: current.project.project.open.current_chapter_id,
+          expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
+          editorSessionId: current.editor.session.editor_session.editor_session_id,
+          // A later choice of the author after the Command Challenge replaces the command before it goes out.
+          proceed: () => {
+            if (!latest()) return false;
+            sent = true;
+            options.onCommandSent();
+            return true;
+          } }).catch((error: unknown) => {
+          if (error instanceof SkippedCurrentChapterError) return undefined;
+          throw error;
+        });
+      } finally {
+        if (sent) {
+          options.onCommandEnded(switched?.effect.kind === "authoritative_applied"
+            ? switched.effect.current_chapter_id : undefined);
+        }
+      }
+      if (switched === undefined || !latest()) return;
       if (switched.effect.kind !== "authoritative_applied" && switched.effect.kind !== "no_effect") {
         throw new Error("无法打开写作会话。");
       }

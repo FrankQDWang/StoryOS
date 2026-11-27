@@ -54,3 +54,11 @@ _Avoid_: Autosaved Authoritative State, server event log, ProseMirror history as
 **Pending Edit Projection**:
 The immediate author-facing editor view composed from one durable Server Snapshot plus the active Local Edit Journal. It exposes saving, saved, and needs-attention states without becoming an authoritative manuscript or Proposal Head.
 _Avoid_: Optimistic authority, hidden pending state, network acknowledgement as domain truth
+
+**Arriving Chapter**:
+The Chapter that the author selected in a tab that holds the writer, from the selection until the tab has the editor of that Chapter on its Editor Session base, or until the switch ends with another result. The tab shows it at once from a copy that the tab keeps in memory ([ADR 0105](../adr/0105-let-the-author-type-in-a-selected-chapter-before-the-chapter-switch-settles-and-hold-that-input-in-the-tab.md)).
+_Avoid_: Current Chapter, provisional Chapter, preview Chapter
+
+**Arrival Input**:
+The author input in an Arriving Chapter. It is only in the memory of the tab until the hand-over to the Editor Session Writing Controller. It is not in the Local Edit Journal and not in the Pending Edit Projection, and a crash or a new load loses it (ADR 0105).
+_Avoid_: held input, pending edit, draft, Local Edit Journal record

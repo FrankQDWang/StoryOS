@@ -43,7 +43,11 @@ export async function applyImeComposition(
   );
 }
 
-/** While held, the Author Edit command requests of the page wait and do not reach the Server. */
+/**
+ * While held, the Author Edit command requests of the page wait and do not reach the Server. With
+ * `hold_set_current_chapter`, the Set Current Chapter command requests wait, and `data-storyos-held-requests` on the
+ * root element of the application frame counts them.
+ */
 export async function updateAuthorEditSubmissionHold(
   request: AuthorEditSubmissionHoldRequest,
 ): Promise<void> {
