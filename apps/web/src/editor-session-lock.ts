@@ -41,3 +41,11 @@ export function releaseEarlierEditorSessions(editorSessionId: string): void {
     release();
   }
 }
+
+/** Ends the lock of the Editor Session `editorSessionId` of this page, when this page has it. */
+export function releaseEditorSession(editorSessionId: string): void {
+  const release = heldSessions.get(editorSessionId);
+  if (release === undefined) return;
+  heldSessions.delete(editorSessionId);
+  release();
+}
