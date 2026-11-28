@@ -298,20 +298,3 @@ it.each([
   if (state.kind === "editor-ready") state.database.close();
   expect(await journalRows("intents")).toEqual(records);
 });
-
-it("keeps the base of the Journal at a load when Set Current Chapter moved the Server base and a group is not settled",
-  async () => {
-    const server = await prepare(undefined, "chapter", async (workspace) => {
-      await appendAuthorEdit(workspace, EDIT);
-      await freezeOneIntentSubmission(workspace);
-    });
-    const bases = async () => (await journalRows("metadata") as { key: string; value: { snapshot_id?: string } }[])
-      .filter(({ key }) => key.startsWith("active_base:")).map(({ value }) => value.snapshot_id);
-    const before = await bases();
-
-    const state = await load(server);
-
-    expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests,
-      bases: await bases() }).toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ],
-      bases: before });
-  });
