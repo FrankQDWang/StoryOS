@@ -105,7 +105,9 @@ it("shows pending, saving, and saved without calling local input saved, across C
   switchedEditor.focus();
   focusManuscriptEnd(switchedEditor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text: "Beta prose" });
-  await expect.poll(() => manuscriptBody(switchedEditor), { timeout: 10_000 }).toBe("Beta prose");
+  // The end of the switch can replace the editor after the key, so each step reads the editor that is on the screen.
+  await expect.poll(() => manuscriptBody(manuscriptEditor(switchedRoot, applicationWindow(frame))), { timeout: 10_000 })
+    .toBe("Beta prose");
   await waitSaveState(switchedRoot);
 
   await selectTreeChapter(switchedRoot, chapterAId);
