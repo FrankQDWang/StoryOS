@@ -237,13 +237,14 @@ pub(crate) async fn update_session_base(
         .map_err(unavailable)
 }
 
-/// Moves the base Snapshot of each Editor Session of the Project to the Chapter Revision
-/// `revision_id` (ADR 0107: each Editor Session writes). Each base gets a new canonical Snapshot of
-/// its own at `project_activity_position`, because the Snapshot ID is the key of a base row and a
-/// browser with no stored Activity cursor starts the Activity stream from its base Snapshot.
-pub(crate) async fn update_each_session_base(
+/// Moves the base Snapshot of each Editor Session on the Chapter `removed_chapter_id` to the
+/// Chapter Revision `revision_id`. Each base gets a new canonical Snapshot of its own at
+/// `project_activity_position`, because the Snapshot ID is the key of a base row and a browser with
+/// no stored Activity cursor starts the Activity stream from its base Snapshot.
+pub(crate) async fn update_session_bases_on_chapter(
     client: &Client,
     scope: &ProjectScope,
+    removed_chapter_id: &str,
     chapter_id: &str,
     revision_id: &str,
     project_activity_position: u64,
@@ -252,8 +253,13 @@ pub(crate) async fn update_each_session_base(
         .query(
             "SELECT editor_session_id::text FROM storyos.editor_session_base_snapshots
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND chapter_object_id = $3::text::uuid
               ORDER BY editor_session_id",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &removed_chapter_id,
+            ],
         )
         .await
         .map_err(unavailable)?;

@@ -965,6 +965,8 @@ function ProjectEditorView({
             setSwitchRecovery(`无法删除${noun}。`);
             return;
           }
+          // A deletion moves only the bases on its Chapter, so the editor part can stay and keep an earlier sentence.
+          setSwitchRecovery(undefined);
           const next = await reopen();
           if (generation !== switchGenerationRef.current) return;
           onReopened(next);
@@ -1596,7 +1598,8 @@ function Stage1View({
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
     // The workspace stays through each command of one Project. Volume removal keeps the current Chapter, so the chapter
-    // key stays put. The new editor base snapshot starts the editor part again after honor-deletion.
+    // key stays put. A deletion of the Chapter of the base moves the base, and the new base snapshot starts the editor
+    // part again.
     return (
       <ProjectReadyView
         key={current.project.project.project_id}

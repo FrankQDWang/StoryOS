@@ -160,7 +160,7 @@ impl ProjectCommand for DeleteVolumeInput {
                 resulting_tree_revision: applied.tree_revision,
                 identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
                 current_chapter: CurrentChapterChange::Preserve,
-                session_base: SessionBase::RebindToCurrentChapter,
+                session_base: SessionBase::Keep,
                 activity: serde_json::json!({ "volume_id": self.volume_id.as_ref() }),
                 effect: VolumeDeleted {
                     volume_id: self.volume_id.as_ref().to_owned(),
