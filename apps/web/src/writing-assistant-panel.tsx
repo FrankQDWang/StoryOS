@@ -475,8 +475,22 @@ export function WritingAssistantPanel({
         proposalId: proposal.proposalId, runId: result.run_id, decisionId: proposal.decisionId,
       });
     }
+    // A Proposal that needs no read goes to the editor only while its Conversation is the selected one.
+    if (!stillCurrent()) return false;
     give();
     return true;
+  };
+
+  /** Reads the Run of `current`. The failure of a read that a later Conversation selection overtook is not a part of
+   * that Conversation, so the read then gives no failure. */
+  const inspectInSelection = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
+    const selection = openSequence.current;
+    try {
+      return await inspect(current);
+    } catch (error) {
+      if (selection === openSequence.current) throw error;
+      return undefined;
+    }
   };
 
   const inspectResult = async (): Promise<void> => {
@@ -488,7 +502,7 @@ export function WritingAssistantPanel({
       && readReference(context.scope)?.correlationId === current.correlationId;
     setResultUnavailable(false);
     try {
-      if (await inspect(current) === undefined && stillCurrent()) setResultUnavailable(true);
+      if (await inspectInSelection(current) === undefined && stillCurrent()) setResultUnavailable(true);
     } catch {
       if (stillCurrent()) setResultUnavailable(true);
     }
@@ -496,7 +510,7 @@ export function WritingAssistantPanel({
 
   useEffect(() => {
     if (reference === undefined || context === undefined) return;
-    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"))
+    void inspectInSelection(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"))
       .finally(() => setStoredReadDone(true));
     return () => { inspectSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
@@ -516,10 +530,8 @@ export function WritingAssistantPanel({
   useEffect(() => {
     if (reference?.runId === undefined || terminal || context === undefined) return;
     return scheduleRefresh(() => {
-      const selection = openSequence.current;
-      void inspect(reference).catch(() => {
-        // The failure of a read that started before a selection of a Conversation is not a part of that Conversation.
-        if (selection === openSequence.current) setStatus("无法确认请求结果，请稍后检查。");
+      void inspectInSelection(reference).catch(() => {
+        setStatus("无法确认请求结果，请稍后检查。");
         setFailedReads((count) => count + 1);
       });
     });
@@ -892,7 +904,11 @@ export function WritingAssistantPanel({
         <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
           context={context} available={availability === "available"} sending={busy} current={reference} run={run}
           skills={skills}
-          onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onSend={submit} onRefresh={async () => {
+            const selection = openSequence.current;
+            if (reference !== undefined) await inspectInSelection(reference);
+            return selection === openSequence.current;
+          }}
           onGuidanceRetained={(steeringInputId, labels, references) => {
             const latest = context === undefined ? undefined : readReference(context.scope);
             if (latest === undefined || (labels.length === 0 && references.length === 0)) return;

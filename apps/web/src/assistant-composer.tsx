@@ -31,7 +31,8 @@ export function AssistantComposer({ context, available, sending, current, run, s
   skills?: readonly SkillCatalogEntry[] | undefined;
   onSend: (message: string, acknowledged: () => void, frozen?: SentReferences, recorded?: () => void,
     selected?: SentSkills) => void;
-  onRefresh: () => Promise<unknown>;
+  /** Reads the Run again. Gives false when the author selected another Conversation during the read. */
+  onRefresh: () => Promise<boolean>;
   onStatus: (status: string) => void;
   /** Keeps the labels and the references of a retained steering input for the history. */
   onGuidanceRetained?: (steeringInputId: string, labels: string[], references: SelectionReference[]) => void;
@@ -88,14 +89,15 @@ export function AssistantComposer({ context, available, sending, current, run, s
         onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
           intent.request.steer_agent_run_input.selection_references ?? []);
       }
+      let selected: boolean;
       try {
-        await onRefresh();
+        selected = await onRefresh();
       } catch {
         if (alive.current) onStatus(response.effect.kind === "conflicted" && intent.kind === "guidance"
           ? "消息未发送，任务状态暂不可读取。请稍后重新发送。" : "操作已确认，任务状态暂不可读取。请稍后检查。");
         return;
       }
-      if (!alive.current) return;
+      if (!alive.current || !selected) return;
       if (response.effect.kind === "conflicted" && intent.kind === "guidance" && !edited.current) {
         setResend(intent);
         return;

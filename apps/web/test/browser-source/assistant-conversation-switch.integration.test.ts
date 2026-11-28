@@ -1,5 +1,5 @@
 import { act, createElement } from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import cancelFixture from "../../../../generated/golden-wire/storyos-public-release-1/cancel-agent-run.json";
@@ -234,6 +234,8 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
   };
 }
 
+type Panel = Awaited<ReturnType<typeof openPanel>>;
+
 const B_SHOWN = [["B first", "Answer to B first"]];
 const A_SHOWN = [["A first", "Answer to A first"], ["A second", "Answer to A second"], ["A third", "Answer to A third"]];
 const C_SHOWN = [["C first", "Answer to C first"]];
@@ -388,32 +390,52 @@ it("changes nothing when the read of a selection fails after a later selection",
     lines: [], unexpected: [], unused: [] });
 });
 
-it.each([
-  ["fails", SERVICE_UNAVAILABLE],
-  ["answers", () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNNING.runId, conversation_id: B,
-    status: "completed", results: [], decision: { kind: "advisory", decision_id: id("e6f"), selected: true,
-      text: "Late answer to B", continuation: { kind: "absent" } } })],
-] as const)("shows nothing of a Run read that started before a selection and %s after it", async (_, late) => {
-  let reads = 0;
-  const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
-    // In the order of the answers: the first read finds the Run running, the read after the run control finds it
-    // cancelled, and the scheduled read, which is held, fails last.
-    [runRoute(RUNNING)]: () => [() => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNNING.runId,
-      conversation_id: B, status: "claimed", results: [], decision: { kind: "absent" } }),
-    () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNNING.runId, conversation_id: B,
-      status: "cancelled", results: [], decision: { kind: "absent" } }), late][reads++]!(),
-    [PROPOSAL_READ_1]: null } });
-  const scheduledRead = `${runRoute(RUNNING)}#2`;
-  panel.hold(scheduledRead);
-  await panel.poll();
-  await panel.click("button[data-cancel-agent-run]");
-  await panel.select(A);
-  const selected = panel.status();
-  await panel.release(scheduledRead);
+const runningRead = (status: string, decision: object) => () => jsonResponse({ ...agentRunFixture, project_scope: scope,
+  run_id: RUNNING.runId, conversation_id: B, status, results: [], decision });
+// The Run settles with a Proposal that the editor gets with no Proposal read.
+const OPENED_PROPOSAL = runningRead("completed", { ...PROSE.decision, locations: [],
+  opened_proposal: { kind: "present", proposal_id: PROPOSAL_1 } });
+const CANCELLED = runningRead("cancelled", { kind: "absent" });
 
-  expect({ selected, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
-    unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ selected: null, status: null, shown: A_SHOWN,
-    runId: RUNS[2]!.runId, unexpected: [], unused: [] });
+describe.each([
+  // The scheduled read is held, and the check of the author finds the Run completed.
+  ["a scheduled Run read", OPENED_PROPOSAL, async (panel: Panel) => {
+    await panel.poll();
+    await panel.click("button[data-assistant-inspect]");
+  }, { "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null }],
+  // The read after the run control is held, and the scheduled read finds the Run cancelled.
+  ["the Run read after a run control", CANCELLED, async (panel: Panel) => {
+    await panel.click("button[data-cancel-agent-run]");
+    await panel.poll();
+  }, {}],
+] as const)("%s that started before a selection", (_, settled, start, unusedRoutes) => {
+  it.each([
+    ["fails", "before", SERVICE_UNAVAILABLE], ["fails", "after", SERVICE_UNAVAILABLE],
+    ["answers", "before", settled], ["answers", "after", settled],
+  ] as const)("%s %s the selected Conversation opens, and shows nothing", async (__, order, late) => {
+    let reads = 0;
+    const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: { ...unusedRoutes,
+      // In the order of the answers: the first read finds the Run running, the read that is not held finds it
+      // settled, and the held read answers last.
+      [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), settled, late][reads++]!(),
+      [PROPOSAL_READ_1]: null } });
+    const heldRead = `${runRoute(RUNNING)}#2`;
+    panel.hold(heldRead);
+    await start(panel);
+    const beforeSelection = [...panel.opened];
+    if (order === "before") {
+      panel.hold(A_READ);
+      await panel.select(A);
+      await panel.release(heldRead, A_READ);
+    } else {
+      await panel.select(A);
+      await panel.release(heldRead);
+    }
+
+    expect({ opened: panel.opened, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+      unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ opened: beforeSelection, status: null,
+      shown: A_SHOWN, runId: RUNS[2]!.runId, unexpected: [], unused: [] });
+  });
 });
 
 it.each([
