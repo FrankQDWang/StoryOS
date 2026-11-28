@@ -876,7 +876,9 @@ function ProjectEditorView({
                 }
               }
               handedOff = true;
-              onReopened(next);
+              // The editor of the Chapter replaces the Arriving Chapter in this task, so no key comes between the
+              // check of the Arrival Input and the change of the editor (#1960).
+              flushSync(() => { onReopened(next); });
               return;
             }
           });
