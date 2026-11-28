@@ -1059,25 +1059,24 @@ it("opens the Chapter that another tab set current at a load when the group of t
       `${PROJECT_READ}/editor-sessions/${SESSION}`].sort(), switches: [], unexpected: [] });
   });
 
-// A load with no Chapter switch shows the same state on the later Revision: the open uses the Editor Session read of
-// the load, and that read comes before Set Current Chapter.
-it("shows the recovery state of a load with no Chapter switch when another tab also wrote a later Revision of the "
-  + "Chapter of a group with an unknown result", async () => {
-  const states: unknown[] = [];
-  for (const setB of [false, true]) {
-    const server = fakeServer();
-    await closeDuringSave(server, "edit");
-    server.writeInOtherTab();
-    if (setB) server.setCurrentInOtherTab(CHAPTER_B);
+// #1972: a Set Current Chapter moves the Server base of the Session to the head of the Chapter. On a later Revision of
+// another tab, the records of the group would not bind that base, and a later load would show them as saved. So the
+// load keeps the Chapter that the other tab set, as before, and each load shows the same recovery state.
+it("keeps the Chapter that another tab set at each load, with no Set Current Chapter, when another tab also wrote a "
+  + "later Revision of the Chapter of a group with an unknown result", async () => {
+  const server = fakeServer();
+  await closeDuringSaveAndSetB(server, "edit");
+  server.writeInOtherTab();
+  const before = server.requests.length;
+  for (let reload = 0; reload < 2; reload += 1) {
     await withReload(server, heldTimers, async (root) => {
-      await expect.poll(() => shown(root).save, { timeout: 10_000 }).toBe("needs_attention");
-      states.push({ shown: shown(root), switches: server.switches, unexpected: server.unexpected });
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "乙章。", editable: false,
+        save: "needs_attention", failure: "", stored: SESSION });
     });
-    sessionStorage.removeItem(ACTIVE_KEY);
-    await deleteJournal(scenario.journalName);
   }
-  const state = (switches: unknown[]) => ({ shown: { text: "雨夜，风起。\n渡口。", editable: false,
-    save: "needs_attention", failure: "", stored: SESSION }, switches, unexpected: [] });
-  expect(states).toEqual([state([]), state([{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B,
-    expected_target_revision_id: LATER_REVISION, editor_session_id: SESSION }])]);
+  const load = ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
+    `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`, CHAPTER_B_READ,
+    `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, `${CHAPTER_B_READ}/open-proposals`];
+  expect({ requests: server.requests.slice(before).sort(), switches: server.switches, unexpected: server.unexpected })
+    .toEqual({ requests: [...load, ...load].sort(), switches: [], unexpected: [] });
 });

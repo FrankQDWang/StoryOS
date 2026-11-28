@@ -315,11 +315,12 @@ const SET_CHAPTER_BACK_ATTEMPTS = 8;
  * when the reopen has one. A conflict (`wrong_target_head` or `stale_current_chapter`) is a command of another tab
  * after the reads, so the tab reads the Project and the Chapter again and sends again, at most
  * `SET_CHAPTER_BACK_ATTEMPTS` times. A Project read after an applied command that names another Chapter is one more
- * conflict. When another tab set the Chapter current again, the tab sends nothing more. It gives the Project and the
- * Chapter after the command, or `undefined` when the command had no effect at the end.
+ * conflict. When another tab set the Chapter current again, the tab sends nothing more. With `revisionId`, the tab sends
+ * the command only while the Chapter is at that Revision (#1972). It gives the Project and the Chapter after the
+ * command, or `undefined` when the command had no effect at the end.
  */
 async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse,
-  other: { chapterId: string; editorSessionId: string }, read: GetChapterResponse | undefined) {
+  other: { chapterId: string; editorSessionId: string; revisionId?: string }, read: GetChapterResponse | undefined) {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   const open = project.project.open;
@@ -329,6 +330,9 @@ async function setChapterBack(options: ProjectOpenOptions, project: GetProjectRe
   let current = open.current_chapter_id;
   let chapter = read?.chapter.chapter_id === other.chapterId ? read : await readChapter();
   for (let attempt = 1; ; attempt += 1) {
+    if (other.revisionId !== undefined && chapter.chapter.current_revision.revision_id !== other.revisionId) {
+      return undefined;
+    }
     const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
       chapterId: other.chapterId, expectedCurrentChapterId: current,
       expectedTargetRevisionId: chapter.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });

@@ -249,9 +249,13 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
  * With `held` "challenge" (#1964), the save of page 1 freezes its group, and page 1 leaves its document before the
  * Command Challenge answers, so the group never went to the Server. Then page 2 only selects Chapter B. The new load of
  * page 1 sets A current again with its stored Editor Session and sends the group.
+ *
+ * With `held` "response" (#1972), the Server applies the Author Edit of page 1, page 1 gets no response, and page 1
+ * leaves its document, so the group has an unknown result. Then page 2 only selects Chapter B. The new load of page 1
+ * sets A current again with its stored Editor Session and shows the text of the group, and the next load keeps it.
  */
 export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext,
-  held: "clock" | "challenge" = "clock"): Promise<void> {
+  held: "clock" | "challenge" | "response" = "clock"): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
   const origin = new URL(configured).origin;
@@ -296,13 +300,18 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     // The pause moves the clock of page 1 only a little, so page 1 sees no time of the Server as late.
     if (held === "clock") await late.clock.pauseAt(Date.now() + 100);
     // The Command Challenge of the Author Edit of page 1 gets no response. The save freezes its group before it asks.
-    let challengeHeld = Promise.resolve();
+    // With "response", the Author Edit goes to the Server and its response does not come back to page 1.
+    let resolveHeld = () => {};
+    const requestHeld = new Promise<void>((resolve) => { resolveHeld = resolve; });
     if (held === "challenge") {
-      let resolveHeld = () => {};
-      challengeHeld = new Promise((resolve) => { resolveHeld = resolve; });
       await writer.route("**/anti-forgery-challenges", async (route) => {
         if (route.request().postData()?.includes("/manuscript/author-edits")) resolveHeld();
         else await route.continue();
+      });
+    } else if (held === "response") {
+      await writer.route("**/manuscript/author-edits", async (route) => {
+        assert.equal((await route.fetch()).status(), 200);
+        resolveHeld();
       });
     }
     await writer.locator(MANUSCRIPT_EDITABLE).focus();
@@ -317,10 +326,10 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     // stay (ADR 0107, section 2).
     await writer.keyboard.insertText(" Unsent on page one.");
     await writer.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
-    if (held === "challenge") {
-      await challengeHeld;
-      // Page 1 leaves its document while its Command Challenge has no response. The tab keeps its sessionStorage, so its
-      // next load has its stored Editor Session.
+    if (held !== "clock") {
+      await requestHeld;
+      // Page 1 leaves its document while its request has no response. The tab keeps its sessionStorage, so its next
+      // load has its stored Editor Session.
       await writer.unrouteAll({ behavior: "ignoreErrors" });
       await writer.goto("about:blank");
     }

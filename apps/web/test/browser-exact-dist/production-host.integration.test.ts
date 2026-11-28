@@ -18,6 +18,12 @@ it("sets the Chapter current again at a new load and stores the text of a save w
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 
+it("sets the Chapter current again at a new load and shows the text of a save whose response did not come back "
+  + "before the page closed", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_outcome" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
 it("recovers one prose request through the production Web, Server, database, and Worker", async () => {
   await expect(verifyProductionHost({ scenario: "prose_request" }))
     .resolves.toEqual({ kind: "production_host_verified" });

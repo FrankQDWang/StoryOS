@@ -320,10 +320,12 @@ export interface EditorWorkspaceOpening {
   /**
    * The stored Editor Session and the Chapter of its base, when that Chapter is not `currentChapterId` and the Session
    * has text that can catch up on it, or `keep` tells that the tab keeps its Chapter: another tab set another Chapter
-   * current (ADR 0107, section 2).
+   * current (ADR 0107, section 2). For an Author Edit group with an unknown result, `revisionId` is the Revision of the
+   * Server base of the Session: the Chapter goes back only at that Revision, so Set Current Chapter does not move the
+   * base past the group (#1972).
    */
   otherChapter(currentChapterId: string, shown?: readonly ManuscriptParagraph[], keep?: boolean)
-    : Promise<{ chapterId: string; editorSessionId: string } | undefined>;
+    : Promise<{ chapterId: string; editorSessionId: string; revisionId?: string } | undefined>;
   /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
   abandon(): Promise<void>;
 }
@@ -406,10 +408,9 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       const start = await started;
       if (start.kind !== "started" || !start.active) return undefined;
       try {
+        const server = (start.sessionValue as GetEditorSessionResponse).base_snapshot;
         // A command of this Editor Session that set another Chapter current moved its Server base there.
-        if ((start.sessionValue as GetEditorSessionResponse).base_snapshot.chapter_id === currentChapterId) {
-          return undefined;
-        }
+        if (server.chapter_id === currentChapterId) return undefined;
         const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
         const base = stored.session.base_snapshot;
         if (keep) return { chapterId: base.chapter_id, editorSessionId: start.active };
@@ -419,7 +420,8 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         if (text !== undefined) return paragraphsEqual(text.shown, text.base) ? undefined : back;
         // An Author Edit group that went out with no known result also goes back to its Chapter. Its recovery shows its
         // text there and does not send it again (#1972). Other open work keeps the Chapter that the other tab set.
-        return await hasUnknownResultGroup(stored) ? back : undefined;
+        return await hasUnknownResultGroup(stored)
+          ? { ...back, revisionId: server.materialized_revision.revision_id } : undefined;
       } catch {
         // An unreadable Journal keeps the stored Session, so its recovery runs.
         return undefined;
