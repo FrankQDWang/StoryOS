@@ -360,7 +360,7 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       claimed = choice.claimed;
       // A Session that another page writes with is not this page's Session, so the open creates one.
       let active = choice.active && !await lockEditorSession(choice.active) ? null : choice.active;
-      // A Session whose text an earlier open copied to a later Session goes on in that later Session (#1965).
+      // A Session of version 5 rows whose text an earlier open copied to a later Session goes on in that Session (#1965).
       for (let target = active ? await sessionTransferTarget(database, active) : undefined; target !== undefined;
         target = active ? await sessionTransferTarget(database, active) : undefined) {
         active = await lockEditorSession(target) ? target : null;
@@ -702,11 +702,12 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       await appendAuthorEdit(workspace, { ...edit, inputOrigin: "selection_replacement", undoGroupId, createdAt },
         cryptoImpl);
     }
-    // The new Session replaces the stored Session and has its text. The record comes while this tab has the lock of
-    // the stored Session, so no other tab copies the same text again (#1965).
+    // The new Session replaces the stored Session and has its text. For a Session of version 5 rows, the record comes
+    // while this tab has the lock of the stored Session, so no other tab copies the same text again (#1965).
     const replaced = stored?.partition.editor_session_id;
     if (replaced !== undefined && replaced !== session.editor_session.editor_session_id) {
-      await recordSessionTransfer(database, replaced, session.editor_session.editor_session_id);
+      await recordSessionTransfer(database, replaced, { editor_session_id: session.editor_session.editor_session_id,
+        journal_partition_id: partition.journal_partition_id });
     }
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
     releaseEarlierEditorSessions(session.editor_session.editor_session_id);

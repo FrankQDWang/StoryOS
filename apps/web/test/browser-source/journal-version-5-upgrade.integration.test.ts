@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { openEditorWorkspace, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
-import { editorSessionLock } from "../../src/editor-session-lock.ts";
+import { editorSessionLock, releaseEarlierEditorSessions, releaseEditorSession } from "../../src/editor-session-lock.ts";
 import { freezeUnsentVersion5Groups, recordSessionTransfer } from "../../src/journal-version-5-upgrade.ts";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
 import candidateFixture from "../../../../fixtures/local-edit-journal/version-5-candidate-record.json";
@@ -33,6 +33,8 @@ const NEW_SESSION = "018f0000-0000-7001-8000-0000000000e1";
 const OTHER_SESSION = "018f0000-0000-7001-8000-0000000000e2";
 const LATER_REVISION = "018f0000-0000-7001-8000-0000000000e3";
 const LATER_BLOCK = "018f0000-0000-7001-8000-0000000000e4";
+// The partition of the Session that another tab created. No test reads it.
+const OTHER_PARTITION = "018f0000-0000-7001-8000-0000000000e5";
 const NEW_SESSION_READ = `GET /api/v1/projects/${PROJECT}/editor-sessions/${NEW_SESSION}`;
 
 const databases = new Set<IDBDatabase>();
@@ -218,6 +220,23 @@ it("opens the Session of the version 5 rows in a tab that has no stored Editor S
     .toEqual({ body: "Base!?", requests: [SESSION_READ] });
 });
 
+/** Holds the lock of `editorSessionId` in another page, as an open tab that has that Session. It gives the end. */
+async function holdInOtherPage(editorSessionId: string): Promise<() => void> {
+  const frame = document.createElement("iframe");
+  document.body.append(frame);
+  let release!: () => void;
+  await new Promise<void>((held) => {
+    void frame.contentWindow!.navigator.locks.request(editorSessionLock(editorSessionId), () => {
+      held();
+      return new Promise<void>((done) => { release = done; });
+    });
+  });
+  return () => {
+    release();
+    frame.remove();
+  };
+}
+
 /** `fixture` with the Editor Session `OTHER_SESSION`. The rows of this Session are not read, so no digest is checked. */
 function otherSession(fixture: Fixture): Fixture {
   return JSON.parse(JSON.stringify(fixture).replaceAll(SESSION, OTHER_SESSION)) as Fixture;
@@ -230,16 +249,7 @@ it.each([["no stored Editor Session", null], ["the same stored Editor Session", 
     stored) => {
   const fixture = otherSession(unsentFixture as Fixture);
   await restore(fixture);
-  const lock = editorSessionLock(OTHER_SESSION);
-  const frame = document.createElement("iframe");
-  document.body.append(frame);
-  let release!: () => void;
-  await new Promise<void>((held) => {
-    void frame.contentWindow!.navigator.locks.request(lock, () => {
-      held();
-      return new Promise<void>((done) => { release = done; });
-    });
-  });
+  const release = await holdInOtherPage(OTHER_SESSION);
   const server = fakeServer([CHALLENGE, SESSION_CREATE]);
   try {
     const state = await openStored(server, stored);
@@ -248,7 +258,6 @@ it.each([["no stored Editor Session", null], ["the same stored Editor Session", 
       requests: server.requests }).toEqual({ body: "Base", session: NEW_SESSION, requests: [CHALLENGE, SESSION_CREATE] });
   } finally {
     release();
-    frame.remove();
   }
 });
 
@@ -302,15 +311,23 @@ it("puts the text of the version 5 rows in one Author Edit when a second tab ope
       requests: server.requests }).toEqual({ body: "Base!?\nLater", session: NEW_SESSION,
       requests: [CHALLENGE, SESSION_READ, SESSION_CREATE] });
 
-    // Tab 2 is a new tab. It does not claim the Session whose text tab 1 has.
-    sessionStorage.removeItem(ACTIVE_KEY);
-    server.requests.length = 0;
-    const second = await openStored(server, null, LATER_CHAPTER);
-    expect({ body: second.openedProjection.body, session: second.session.editor_session.editor_session_id,
-      requests: server.requests }).toEqual({ body: "Base\nLater", session: OTHER_SESSION,
-      requests: [CHALLENGE, SESSION_CREATE] });
-    await expect(submitOnePendingAuthorEdit({ workspace: second, baseUrl: location.origin,
-      fetchImpl: server.fetchImpl, cryptoImpl: crypto })).rejects.toThrow("One pending Author Edit is required");
+    // Tab 2 is a new tab in another page. Tab 1 keeps its Session open, so an iframe holds the lock of that Session
+    // in the place of the page of tab 1. Tab 2 does not claim the Session whose text tab 1 copied, and it does not
+    // claim the Session of tab 1.
+    releaseEditorSession(NEW_SESSION);
+    const release = await holdInOtherPage(NEW_SESSION);
+    try {
+      sessionStorage.removeItem(ACTIVE_KEY);
+      server.requests.length = 0;
+      const second = await openStored(server, null, LATER_CHAPTER);
+      expect({ body: second.openedProjection.body, session: second.session.editor_session.editor_session_id,
+        requests: server.requests }).toEqual({ body: "Base\nLater", session: OTHER_SESSION,
+        requests: [CHALLENGE, SESSION_CREATE] });
+      await expect(submitOnePendingAuthorEdit({ workspace: second, baseUrl: location.origin,
+        fetchImpl: server.fetchImpl, cryptoImpl: crypto })).rejects.toThrow("One pending Author Edit is required");
+    } finally {
+      release();
+    }
 
     void submitOnePendingAuthorEdit({ workspace: first, baseUrl: location.origin, fetchImpl: server.fetchImpl,
       cryptoImpl: crypto });
@@ -336,6 +353,46 @@ it("goes on in the new Session when the session storage still names the Session 
       session: NEW_SESSION, active: NEW_SESSION, requests: [NEW_SESSION_READ] });
   });
 
+// A tab with no stored Session claimed the Session of the version 5 rows and copied its text to a new Session. The page
+// stopped after the transfer and before the tab stored the new Session, so the reload has no stored Session.
+it("opens the new Session in a tab with no stored Session after a stop before the tab stored the new Session",
+  async () => {
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ], { later: LATER_CHAPTER });
+    await openStored(server, null, LATER_CHAPTER);
+    closeTrackedDatabases(databases);
+    sessionStorage.removeItem(ACTIVE_KEY);
+    releaseEarlierEditorSessions("");
+    server.requests.length = 0;
+
+    const again = await openStored(server, null, LATER_CHAPTER);
+
+    expect({ body: again.openedProjection.body, session: again.session.editor_session.editor_session_id,
+      active: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ body: "Base!?\nLater",
+      session: NEW_SESSION, active: NEW_SESSION, requests: [CHALLENGE, NEW_SESSION_READ] });
+  });
+
+// A transfer record is only for a Session of the version 5 rows (#1965). A version 6 Session keeps its open.
+it("records no transfer for a Session that is not a Session of the version 5 rows", async () => {
+  await restore(unsentFixture as Fixture);
+  const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ], { session: "missing" });
+  expect((await openStored(server, null)).session.editor_session.editor_session_id).toBe(NEW_SESSION);
+  closeTrackedDatabases(databases);
+  const database = await requestResult(indexedDB.open(scenario.journalName));
+  try {
+    await recordSessionTransfer(database, NEW_SESSION, { editor_session_id: OTHER_SESSION,
+      journal_partition_id: OTHER_PARTITION });
+  } finally {
+    database.close();
+  }
+  server.requests.length = 0;
+
+  const again = await openStored(server, NEW_SESSION);
+
+  expect({ session: again.session.editor_session.editor_session_id, requests: server.requests })
+    .toEqual({ session: NEW_SESSION, requests: [NEW_SESSION_READ] });
+});
+
 it("does not claim a Session of the version 5 rows that another tab transferred after this tab read the Sessions",
   async () => {
     await restore(unsentFixture as Fixture);
@@ -346,7 +403,8 @@ it("does not claim a Session of the version 5 rows that another tab transferred 
       if (args[0] === editorSessionLock(SESSION)) {
         const database = await requestResult(indexedDB.open(scenario.journalName));
         try {
-          await recordSessionTransfer(database, SESSION, OTHER_SESSION);
+          await recordSessionTransfer(database, SESSION, { editor_session_id: OTHER_SESSION,
+            journal_partition_id: OTHER_PARTITION });
         } finally {
           database.close();
         }

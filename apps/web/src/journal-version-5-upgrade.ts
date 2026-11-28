@@ -210,22 +210,20 @@ async function version5Sessions(database: IDBDatabase): Promise<Version5Session[
 }
 
 /**
- * Records that the open of the new Editor Session `to` replaced the stored Session `from`, after the new Session got the
- * text of `from` (ADR 0107, section 2). In the same transaction it removes `from` from the Sessions of the version 5
- * rows. The tab calls it before it ends the lock of `from`, so no other tab claims `from` and copies the same text
- * again (#1965). A later open of `from`, as after a stop before the tab stored `to`, or in a duplicated tab, goes on in
- * `to` (`sessionTransferTarget`).
+ * Records that the open of the new Editor Session `to` replaced the Session `from` of the version 5 rows, after `to` got
+ * the text of `from` (ADR 0107, section 2). One transaction puts `to` in the place of `from` in the Sessions of the
+ * version 5 rows and records the transfer. The tab calls it before it ends the lock of `from`, so no other tab claims
+ * `from` and copies the same text again (#1965). After a stop before the tab stored `to`, a tab with no stored Session
+ * claims `to`, and a tab that has `from` stored goes on in `to` (`sessionTransferTarget`). A Session that is not a
+ * Session of the version 5 rows gets no record.
  */
-export async function recordSessionTransfer(database: IDBDatabase, from: string, to: string): Promise<void> {
+export async function recordSessionTransfer(database: IDBDatabase, from: string, to: Version5Session): Promise<void> {
   const transaction = database.transaction("metadata", "readwrite");
   const metadata = transaction.objectStore("metadata");
-  metadata.put({ key: `${TRANSFER_PREFIX}${from}`, value: { editor_session_id: to } });
   const marker = await requestResult(metadata.get(SESSIONS_KEY)) as { value: Version5Session[] } | undefined;
-  if (marker?.value.some((item) => item.editor_session_id === from)) {
-    const rest = marker.value.filter((item) => item.editor_session_id !== from);
-    if (rest.length === 0) metadata.delete(SESSIONS_KEY);
-    else metadata.put({ key: SESSIONS_KEY, value: rest });
-  }
+  if (!marker?.value.some((item) => item.editor_session_id === from)) return;
+  metadata.put({ key: SESSIONS_KEY, value: marker.value.map((item) => item.editor_session_id === from ? to : item) });
+  metadata.put({ key: `${TRANSFER_PREFIX}${from}`, value: { editor_session_id: to.editor_session_id } });
   await transactionResult(transaction);
 }
 
