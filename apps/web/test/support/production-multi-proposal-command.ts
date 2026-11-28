@@ -318,20 +318,39 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       editor.commands.setTextSelection({ from: start + from, to: start + to });
       editor.view.focus();
     }, { proposalId, operationId: secondaryOutcome.operation_id, from, to });
-    // The caret stays in the candidate text: the author types the paragraph first and then starts it with Enter.
+    // The caret at an offset of the candidate text.
     const caretInCandidate = (offset: number) => selectInCandidate(offset, offset);
     const savedCandidate = (text: string) => expect.poll(async () => (await getProposal({ ...options, proposalId }))
       .proposal.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text,
     { timeout: 10_000 }).toBe(text);
-    await caretInCandidate(unsplit.length);
-    await page.keyboard.insertText('A second paragraph.');
-    await savedCandidate(`${unsplit}A second paragraph.`);
+    // The Chapter read can answer before the client installs the saved base, and the candidate shows only after that.
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
     await caretInCandidate(unsplit.length);
+    // The author presses Enter at the end of the candidate and types at once, while the candidate edit of Enter is in
+    // progress. The input stays in the candidate, and the editor accepts more input (#1944).
+    let releaseEnter!: () => void;
+    let observedEnter!: () => void;
+    const enterHeld = new Promise<void>(resolve => { releaseEnter = resolve; });
+    const enterObserved = new Promise<void>(resolve => { observedEnter = resolve; });
+    let enterPosts = 0;
+    await page.route(editRoute, async route => {
+      if (route.request().method() === 'POST' && ++enterPosts === 1) { observedEnter(); await enterHeld; }
+      await route.continue();
+    });
     await page.keyboard.press('Enter');
+    await enterObserved;
+    await page.keyboard.insertText('A second');
+    releaseEnter();
+    await page.keyboard.insertText(' paragraph.');
     const splitText = `${unsplit}\nA second paragraph.`;
     await savedCandidate(splitText);
+    await page.unroute(editRoute, undefined);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    // A new load shows the stored candidate text with all typed text.
+    await page.reload();
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
     await expect(candidate()).toHaveCount(1);
     assert.equal(await candidate().locator('.block-proposal-text').textContent(), splitText);
     // The author adds a part of each paragraph of the candidate to the message.
