@@ -15,13 +15,16 @@ import {
   applicationWindow,
   chapterButton,
   closeApplicationFrame,
+  destroyApplicationFrame,
   nextFrameLoad,
   openApplicationFrame,
+  openChapterEditor,
   openFirstChapterForm,
   submitChapterForm,
   submitProjectForm,
   submitVolumeForm,
   waitLastChapter,
+  waitSaved,
 } from "../support/exact-dist-frame.ts";
 
 afterEach(async () => {
@@ -137,4 +140,36 @@ it("shows pending, saving, and saved without calling local input saved, across C
   expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame))))
     .toBe("Alpha prose");
   await waitSaveState(reopenedRoot);
+});
+
+// ADR 0106 section 3: each save takes the base of the Editor Session from its response, and the next save starts on
+// that base. The browser-source test of the save proves the requests of one save.
+it("keeps each input of three saves in a row after a new load", async () => {
+  const { frame, projectId, chapterId } = await openChapterEditor("StoryOS exact-dist saves in a row",
+    "Saves In A Row Novel");
+  const root = appRoot(frame);
+  const childWindow = applicationWindow(frame);
+  const editor = manuscriptEditor(root, childWindow);
+  editor.focus();
+  focusManuscriptEnd(editor, childWindow);
+  let revision = saveNode(root)?.getAttribute("data-authoritative-revision-id") ?? undefined;
+  for (const [text, body] of [["One", "One"], [" two", "One two"], [" three", "One two three"]] as const) {
+    await applyTrustedInput({ operation: "insert_text", text });
+    await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(body);
+    revision = await waitSaved(root, revision);
+  }
+
+  await destroyApplicationFrame(frame);
+  const reopened = await openApplicationFrame("StoryOS exact-dist saves in a row reload", `/projects/${projectId}`);
+  await expect.poll(() => {
+    const nextRoot = reopened.contentDocument?.querySelector("#app");
+    return nextRoot?.getAttribute("data-boot-state") === "project-ready"
+      && nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
+  }, { timeout: 10_000 }).toBe(true);
+  const reopenedWindow = applicationWindow(reopened);
+  await expect.poll(() => manuscriptBody(manuscriptEditor(appRoot(reopened), reopenedWindow))).toBe("One two three");
+  const stored = await getChapter({ baseUrl: reopenedWindow.location.origin, projectId, chapterId,
+    fetchImpl: reopenedWindow.fetch.bind(reopenedWindow) });
+  expect({ body: stored.chapter.current_revision.body, revision: stored.chapter.current_revision.revision_id })
+    .toEqual({ body: "One two three", revision });
 });

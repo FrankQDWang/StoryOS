@@ -3,7 +3,7 @@
 use ts_rs::TS;
 
 use super::{
-    Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, UUID,
+    Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64, UUID,
     raw_schema,
 };
 use crate::release1_accept_proposal::{
@@ -133,7 +133,7 @@ pub(super) const ACCEPT_PROPOSAL_ROW: OperationRow = OperationRow {
         "selected_operation_ids": ["018f0000-0000-7001-8000-000000000b04"],
         "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08"
       },
-      "schema_id": "storyos.command.accept-proposal.response.v1"
+      "schema_id": "storyos.command.accept-proposal.response.v2"
     }"#,
     ),
 };
@@ -394,6 +394,13 @@ const ACCEPT_PROPOSAL_RESPONSE: &[Patch] = &[
             "/properties/author_command_admission_id",
             "/properties/command_id",
             "/properties/correlation_id",
+        ],
+    ),
+    Patch(
+        U64,
+        &[
+            "/$defs/EditorBaseSnapshot/properties/project_activity_position",
+            "/$defs/EditorSessionBinding/properties/client_session_generation",
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),

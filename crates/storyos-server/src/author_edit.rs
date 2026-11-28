@@ -318,6 +318,9 @@ pub(super) fn author_edit_response(
         effect,
         completed_intent_record_id: settlement.completed_intent_record_id,
         local_intent_sequence: settlement.local_intent_sequence.to_string(),
+        editor_session_state: settlement
+            .editor_session
+            .map(super::editor_session::session_state),
     })
 }
 

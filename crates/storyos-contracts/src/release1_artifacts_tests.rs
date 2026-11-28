@@ -122,7 +122,7 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
 }
 
 #[test]
-fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
+fn author_edit_response_v3_keeps_activity_only_on_the_applied_variant() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
@@ -145,7 +145,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v33"
+        "storyos.typescript-client.release-1.v34"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated["generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json"],
@@ -153,7 +153,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     .expect("response schema must be JSON");
     assert_eq!(
         schema["$id"],
-        "storyos.command.apply-author-edit.response.v2"
+        "storyos.command.apply-author-edit.response.v3"
     );
     assert_eq!(
         schema["$defs"]["DomainReceipt"]["required"],
@@ -277,7 +277,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v33\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v34\";"
     ));
     assert!(
         generated["generated/json-schema/storyos-public-release-1/chapter-response.schema.json"]

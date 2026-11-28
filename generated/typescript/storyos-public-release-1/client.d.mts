@@ -127,6 +127,8 @@ export type EditorSessionBinding = { editor_session_id: string, client_session_b
 
 export type EditorBaseSnapshot = { snapshot_id: string, chapter_id: string, project_activity_position: string, authoritative_head_revision_id: string, proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, materialized_revision: AuthoritativeChapterRevision, materialized_payload_digest: DigestValue, created_at: string, };
 
+export type EditorSessionState = { editor_session: EditorSessionBinding, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
+
 export type CreateEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
 
 export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
@@ -253,7 +255,7 @@ export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_sele
 
 export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
 
-export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
+export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, editor_session_state?: EditorSessionState | null, };
 
 export type AcceptProposalInput = { proposal_revision_id: string, validation_receipt_id: string, selected_operation_ids: Array<string>, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -273,7 +275,7 @@ export type AcceptanceTargetResolution = "exact_base" | "block_replacement";
 
 export type AcceptProposalEffect = { "kind": "applied", author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, target_resolution: AcceptanceTargetResolution, } | { "kind": "invalid", reason: AcceptProposalInvalidReason, } | { "kind": "conflicted", reason: AcceptProposalConflictReason, } | { "kind": "refused", reason: AcceptProposalRefusalReason, };
 
-export type AcceptProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: AcceptanceReceipt, project: ControlledProject, effect: AcceptProposalEffect, };
+export type AcceptProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: AcceptanceReceipt, project: ControlledProject, effect: AcceptProposalEffect, editor_session_state?: EditorSessionState | null, };
 
 export type BoundedAuthorNote = { "kind": "omitted" } | { "kind": "present", text: string, };
 
@@ -635,7 +637,9 @@ export type ApplyAuthorEditReconfirmationReason = "admission_expired" | "binding
 
 export type ApplyAuthorEditUnknownObservation = { "observation_kind": "challenge_issued", expires_at: string, } | { "observation_kind": "admission_committed", command_id: string, author_command_admission_id: string, reconciliation_required: true, };
 
-export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: ApplyAuthorEditResponse, } | { "outcome_kind": "rejected", reason: ApplyAuthorEditRejectionReason, } | { "outcome_kind": "requires_reconfirmation", command_id: string, author_command_admission_id: string, reconfirmation_reason: ApplyAuthorEditReconfirmationReason, } | { "outcome_kind": "still_unknown", observation: ApplyAuthorEditUnknownObservation, };
+export type CommittedApplyAuthorEdit = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
+
+export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: CommittedApplyAuthorEdit, } | { "outcome_kind": "rejected", reason: ApplyAuthorEditRejectionReason, } | { "outcome_kind": "requires_reconfirmation", command_id: string, author_command_admission_id: string, reconfirmation_reason: ApplyAuthorEditReconfirmationReason, } | { "outcome_kind": "still_unknown", observation: ApplyAuthorEditUnknownObservation, };
 
 export type GetApplyAuthorEditOutcomeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, outcome: ApplyAuthorEditOutcome, };
 

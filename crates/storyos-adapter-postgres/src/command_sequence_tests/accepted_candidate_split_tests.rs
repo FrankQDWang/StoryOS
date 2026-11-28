@@ -96,7 +96,7 @@ async fn an_accepted_candidate_with_two_line_feeds_gives_three_blocks_in_each_re
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (mut observed, mut wanted) = (Vec::new(), Vec::new());
-    for (base, earlier_base) in [(0xe700_u16, false), (0xe720, true)] {
+    for (base, earlier_base) in [(0xe400_u16, false), (0xe420, true)] {
         let mut fixture = split_fixture(&store, &admin, base, "One.\nTwo.\nThree.").await;
         let after = (Uuid::now_v7().to_string(), "After.".to_owned());
         if earlier_base {
@@ -145,7 +145,7 @@ async fn an_empty_part_of_an_accepted_candidate_makes_no_block() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
-    for (base, candidate) in [(0xe740_u16, "\nOne.\n\nTwo.\n"), (0xe760, "\n\n")] {
+    for (base, candidate) in [(0xe440_u16, "\nOne.\n\nTwo.\n"), (0xe460, "\n\n")] {
         let fixture = split_fixture(&store, &admin, base, candidate).await;
         let (_, blocks) = accept_and_read(&store, &fixture, base + 9).await;
         new_ids(&blocks, &[&fixture.target]);
@@ -172,7 +172,7 @@ async fn an_empty_part_of_an_accepted_candidate_makes_no_block() {
 async fn a_line_feed_outside_the_accepted_candidate_stays_in_its_block() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let mut fixture = split_fixture(&store, &admin, 0xe780, "New.\nNext.").await;
+    let mut fixture = split_fixture(&store, &admin, 0xe480, "New.\nNext.").await;
     let other = (Uuid::now_v7().to_string(), "Keep\nthis line.".to_owned());
     move_to_earlier_base(&admin, &fixture.input).await;
     fixture.input.expected_authoritative_revision_id = advance_chapter_head(
@@ -184,7 +184,7 @@ async fn a_line_feed_outside_the_accepted_candidate_stays_in_its_block() {
         ],
     )
     .await;
-    let (_, blocks) = accept_and_read(&store, &fixture, 0xe789).await;
+    let (_, blocks) = accept_and_read(&store, &fixture, 0xe489).await;
     let added = new_ids(&blocks, &[&fixture.target, &other.0]);
 
     assert_eq!(
@@ -248,7 +248,7 @@ async fn an_accepted_candidate_with_no_line_feed_keeps_the_blocks_and_the_stored
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     let mut wanted = Vec::new();
-    for (base, earlier_base) in [(0xe7a0_u16, false), (0xe7c0, true)] {
+    for (base, earlier_base) in [(0xe4a0_u16, false), (0xe4c0, true)] {
         let mut fixture = split_fixture(&store, &admin, base, "Plain text.").await;
         let after = Uuid::now_v7().to_string();
         if earlier_base {
@@ -307,7 +307,7 @@ async fn an_accepted_candidate_with_no_line_feed_keeps_the_blocks_and_the_stored
 async fn author_undo_of_a_split_acceptance_restores_the_blocks_and_reopens_the_proposal() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let fixture = split_fixture(&store, &admin, 0xe7e0, "One.\nTwo.").await;
+    let fixture = split_fixture(&store, &admin, 0xe4e0, "One.\nTwo.").await;
     // The writer edits Chapter B, so the Acceptance moves its base and Author Undo applies.
     edit_in_chapter_of(
         &admin,
@@ -316,7 +316,7 @@ async fn author_undo_of_a_split_acceptance_restores_the_blocks_and_reopens_the_p
     )
     .await;
     let before = chapter_blocks(&store, &fixture.scope, &fixture.chapter_id).await;
-    let (_, accepted) = accept_and_read(&store, &fixture, 0xe7e9).await;
+    let (_, accepted) = accept_and_read(&store, &fixture, 0xe4e9).await;
     assert_eq!(accepted.len(), 2);
     let call = undo_call(
         &store,
@@ -324,7 +324,7 @@ async fn author_undo_of_a_split_acceptance_restores_the_blocks_and_reopens_the_p
         &fixture.scope,
         fixture.input.editor_session_id.as_ref(),
         &chapter_head(&admin, &fixture.chapter_id).await,
-        /*suffix*/ 0xe7ea,
+        /*suffix*/ 0xe4ea,
     )
     .await;
     let settled = undo(&store, &call).await.unwrap();
@@ -371,14 +371,14 @@ async fn author_undo_of_a_split_acceptance_restores_the_blocks_and_reopens_the_p
 async fn author_undo_of_a_split_acceptance_after_a_later_edit_is_unavailable() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
-    let fixture = split_fixture(&store, &admin, 0xe7f0, "One.\nTwo.").await;
+    let fixture = split_fixture(&store, &admin, 0xe4f0, "One.\nTwo.").await;
     edit_in_chapter_of(
         &admin,
         fixture.input.editor_session_id.as_ref(),
         &fixture.input.expected_authoritative_revision_id,
     )
     .await;
-    let (_, accepted) = accept_and_read(&store, &fixture, 0xe7f9).await;
+    let (_, accepted) = accept_and_read(&store, &fixture, 0xe4f9).await;
     let edited: Vec<(String, String)> = accepted
         .iter()
         .map(|(id, text)| (id.clone(), format!("{text} Later.")))
@@ -395,7 +395,7 @@ async fn author_undo_of_a_split_acceptance_after_a_later_edit_is_unavailable() {
         &fixture.scope,
         fixture.input.editor_session_id.as_ref(),
         &head,
-        /*suffix*/ 0xe7fa,
+        /*suffix*/ 0xe4fa,
     )
     .await;
     let settled = undo(&store, &call).await.unwrap();

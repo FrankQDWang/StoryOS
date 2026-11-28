@@ -67,12 +67,12 @@
           "018f0000-0000-7001-8000-000000000034"
         ]
       },
-      "schema_id": "storyos.command.apply-author-edit.response.v2"
+      "schema_id": "storyos.command.apply-author-edit.response.v3"
     }
   },
   "project_scope": {
     "owner_user_id": "018f0000-0000-7001-8000-000000000001",
     "project_id": "018f0000-0000-7001-8000-000000000002"
   },
-  "schema_id": "storyos.query.apply-author-edit-outcome.response.v1"
+  "schema_id": "storyos.query.apply-author-edit-outcome.response.v2"
 }

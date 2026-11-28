@@ -164,6 +164,35 @@ impl EditorSessionStore for PostgresProjectReader {
     }
 }
 
+/// The columns and joins of one Editor Session with its base Snapshot, then the conditions of the read.
+macro_rules! session_query {
+    ($conditions:literal) => {
+        concat!(
+            "SELECT session.client_session_binding_ref, session.client_session_generation::text,
+                    session.client_contract_revision, session.security_policy_revision,
+                    to_char(session.opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+                    snapshot.snapshot_id::text, snapshot.chapter_object_id::text,
+                    snapshot.authoritative_revision_id::text,
+                    snapshot.project_activity_position::text,
+                    convert_from(payload.canonical_bytes, 'UTF8'),
+                    to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+             FROM storyos.editor_sessions AS session
+             JOIN storyos.editor_session_base_snapshots AS snapshot USING
+               (owner_user_id, project_id, editor_session_id)
+             JOIN storyos.authoritative_revisions AS revision
+               ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id, revision.revision_id) =
+                  (snapshot.owner_user_id, snapshot.project_id, snapshot.chapter_object_id, snapshot.authoritative_revision_id)
+             JOIN storyos.authoritative_payloads AS payload
+               ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                  (revision.owner_user_id, revision.project_id, revision.payload_id)
+             WHERE session.owner_user_id = current_setting('storyos.owner_user_id')::uuid
+               AND session.project_id = current_setting('storyos.project_id')::uuid
+               AND session.editor_session_id = $1::text::uuid",
+            $conditions
+        )
+    };
+}
+
 async fn read_session(
     client: &crate::statement_cache::Client,
     scope: &ProjectScope,
@@ -171,40 +200,63 @@ async fn read_session(
     binding: &storyos_application::EditorClientBinding,
 ) -> Result<Option<EditorSession>, EditorSessionError> {
     let generation = binding.session_generation.to_string();
-    let row = client.query_opt(
-        "SELECT session.client_session_binding_ref, session.client_session_generation::text,
-                session.client_contract_revision, session.security_policy_revision,
-                to_char(session.opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                snapshot.snapshot_id::text, snapshot.chapter_object_id::text,
-                snapshot.authoritative_revision_id::text,
-                snapshot.project_activity_position::text,
-                convert_from(payload.canonical_bytes, 'UTF8'),
-                to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
-         FROM storyos.editor_sessions AS session
-         JOIN storyos.editor_session_base_snapshots AS snapshot USING
-           (owner_user_id, project_id, editor_session_id)
-         JOIN storyos.authoritative_revisions AS revision
-           ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id, revision.revision_id) =
-              (snapshot.owner_user_id, snapshot.project_id, snapshot.chapter_object_id, snapshot.authoritative_revision_id)
-         JOIN storyos.authoritative_payloads AS payload
-           ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
-              (revision.owner_user_id, revision.project_id, revision.payload_id)
-         WHERE session.owner_user_id = current_setting('storyos.owner_user_id')::uuid
-           AND session.project_id = current_setting('storyos.project_id')::uuid
-           AND session.editor_session_id = $1::text::uuid
-           AND session.client_session_binding_ref = $2
-           AND session.client_session_generation = $3::text::numeric
-           AND session.client_contract_revision = $4 AND session.security_policy_revision = $5",
-        &[&editor_session_id, &binding.binding_ref, &generation,
-          &binding.client_contract_revision, &binding.security_policy_revision],
-    ).await.map_err(session_database_error)?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
+    let row = client
+        .query_opt(
+            session_query!(
+                "
+               AND session.client_session_binding_ref = $2
+               AND session.client_session_generation = $3::text::numeric
+               AND session.client_contract_revision = $4 AND session.security_policy_revision = $5"
+            ),
+            &[
+                &editor_session_id,
+                &binding.binding_ref,
+                &generation,
+                &binding.client_contract_revision,
+                &binding.security_policy_revision,
+            ],
+        )
+        .await
+        .map_err(session_database_error)?;
+    match row {
+        Some(row) => session_from_row(client, scope, editor_session_id, &row)
+            .await
+            .map(Some),
+        None => Ok(None),
+    }
+}
+
+/// The Editor Session `editor_session_id` as its read gives it, in the transaction of a command
+/// that moved its base. The command response carries it (ADR 0106 section 3, ADR 0107 section 3).
+pub(crate) async fn session_after_command(
+    client: &crate::statement_cache::Client,
+    scope: &ProjectScope,
+    editor_session_id: &str,
+) -> Result<Option<EditorSession>, EditorSessionError> {
+    let row = client
+        .query_opt(session_query!(""), &[&editor_session_id])
+        .await
+        .map_err(session_database_error)?;
+    match row {
+        Some(row) => session_from_row(client, scope, editor_session_id, &row)
+            .await
+            .map(Some),
+        None => Ok(None),
+    }
+}
+
+async fn session_from_row(
+    client: &crate::statement_cache::Client,
+    scope: &ProjectScope,
+    editor_session_id: &str,
+    row: &tokio_postgres::Row,
+) -> Result<EditorSession, EditorSessionError> {
+    let unavailable =
+        |error: std::num::ParseIntError| EditorSessionError::Unavailable(Box::new(error));
     let project_activity_position = row
         .get::<_, String>(8)
         .parse::<u64>()
-        .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
+        .map_err(unavailable)?;
     let chapter_id: String = row.get(6);
     let authoritative_revision_id: String = row.get(7);
     let (body, blocks, payload_digest_hex) = materialized_payload(
@@ -215,9 +267,14 @@ async fn read_session(
         &row.get::<_, String>(/*idx*/ 9),
     )
     .await?;
-    Ok(Some(EditorSession {
+    Ok(EditorSession {
         editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
-        client_binding: binding.clone(),
+        client_binding: storyos_application::EditorClientBinding {
+            binding_ref: row.get(0),
+            session_generation: row.get::<_, String>(1).parse().map_err(unavailable)?,
+            client_contract_revision: row.get(2),
+            security_policy_revision: row.get(3),
+        },
         opened_at: row.get(4),
         base_snapshot: EditorSessionSnapshot {
             snapshot_id: row.get(5),
@@ -235,7 +292,7 @@ async fn read_session(
             scope.project_id.as_ref(),
         )
         .await?,
-    }))
+    })
 }
 
 /// The first acknowledgement of a settled Create Editor Session (protocol section 7.3). A fence

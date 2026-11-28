@@ -15,7 +15,7 @@ pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-09-27-exp
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
 pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v7";
 pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v6";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v33";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v34";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -42,7 +42,7 @@ pub const AUTHOR_EDIT_MAX_UNITS: usize = 240;
 pub const AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES: usize = 240;
 pub const AUTHOR_EDIT_MAX_WIRE_BODY_BYTES: usize = 1024 * 1024;
 pub const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID: &str =
-    "storyos.command.apply-author-edit.response.v2";
+    "storyos.command.apply-author-edit.response.v3";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";
 pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.positive.v1";
 
@@ -349,6 +349,18 @@ pub struct EditorBaseSnapshot {
     pub materialized_revision: AuthoritativeChapterRevision,
     pub materialized_payload_digest: DigestValue,
     pub created_at: String,
+}
+
+/// The state of the Editor Session after a command that moved its base: the binding, the base
+/// Snapshot, and the Author Undo Frontier that a read of the Editor Session gives (ADR 0106
+/// section 3, ADR 0107 section 3).
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EditorSessionState {
+    pub editor_session: EditorSessionBinding,
+    pub base_snapshot: EditorBaseSnapshot,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_undo_frontier_sequence: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

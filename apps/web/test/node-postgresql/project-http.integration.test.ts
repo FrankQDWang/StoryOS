@@ -480,7 +480,7 @@ test("each Editor Session settles its own Author Edit and exact retries return o
     assert.ok(pendingOutcomeResponse);
     assert.equal(pendingOutcomeResponse.headers.get("cache-control"), "no-store");
     assert.deepEqual(pendingOutcomePayload, {
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
       outcome: {
         outcome_kind: "still_unknown",
@@ -638,7 +638,7 @@ test("each Editor Session settles its own Author Edit and exact retries return o
     const { correlation_id: rejectedCorrelation, ...rejectedPayload } = rejectedOutcome;
     assert.match(rejectedCorrelation, UUID);
     assert.deepEqual(rejectedPayload, {
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
       outcome: {
         outcome_kind: "rejected",
@@ -938,6 +938,12 @@ test("each Editor Session settles its own Author Edit and exact retries return o
     assert.equal(otherApplied.receipt.result, "authoritative_applied");
     const secondRevision = otherApplied.effect.authoritative_revision.revision_id;
     assert.notEqual(secondRevision, firstRevision);
+    // The first run gives the Editor Session state that a read right after it gives (ADR 0106 section 3).
+    const { schema_id: _otherSchema, correlation_id: _otherCorrelation, project_scope: _otherScope, ...otherRead } =
+      await getEditorSession({ baseUrl, projectId: PROJECT_A,
+        editorSessionId: otherSession.editor_session.editor_session_id, fetchImpl: browserFetch(baseUrl, "session-a") });
+    assert.equal(otherApplied.editor_session_state?.base_snapshot.authoritative_head_revision_id, secondRevision);
+    assert.deepEqual(otherApplied.editor_session_state, otherRead);
 
     // The same Editor Session names the earlier Revision, and the Server refuses the stale head.
     const staleRequest = otherRequest("8", firstRevision, "2");
