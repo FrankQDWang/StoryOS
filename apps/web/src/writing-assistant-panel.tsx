@@ -386,8 +386,10 @@ export function WritingAssistantPanel({
   const inspect = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
     if (context === undefined) return;
     const selection = openSequence.current;
-    const stillCurrent = () =>
-      readReference(current.scope)?.correlationId === current.correlationId;
+    // A later selection ends the read before the record check, because a full browser storage keeps the earlier
+    // record (#1696).
+    const stillCurrent = () => selection === openSequence.current
+      && readReference(current.scope)?.correlationId === current.correlationId;
     let runId = current.runId;
     if (runId === undefined) {
       if (current.snapshotId === undefined) return;

@@ -42,6 +42,9 @@ export function AssistantComposer({ context, available, sending, current, run, s
 }) {
   const draft = useReferenceDraft(context?.scope);
   const [message, setMessage] = useState("");
+  // The draft of the last render, for a command answer that arrives later.
+  const latestMessage = useRef(message);
+  useEffect(() => { latestMessage.current = message; }, [message]);
   const [pending, setPending] = useState<RunControlIntent | undefined>(() => {
     const stored = context === undefined ? undefined : readRunControl(context.scope);
     return stored?.kind === "guidance" && stored.resend === true ? undefined : stored;
@@ -89,10 +92,14 @@ export function AssistantComposer({ context, available, sending, current, run, s
       } else clearRunControl(intent);
       if (!alive.current) return;
       setPending(undefined);
-      if (response.effect.kind === "retained" && intent.kind === "guidance") {
-        setMessage("");
-        clearDraftReferences(intent.scope, intent.referenceKeys ?? []);
-        if (control.selected()) onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
+      if (response.effect.kind === "retained" && intent.kind === "guidance" && control.selected()) {
+        // The draft goes only while it is the submitted text. A text that the author typed after the command stays.
+        const submitted = intent.request.steer_agent_run_input.author_message.text;
+        if (latestMessage.current.trim() === submitted) {
+          setMessage("");
+          clearDraftReferences(intent.scope, intent.referenceKeys ?? []);
+        }
+        onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
           intent.request.steer_agent_run_input.selection_references ?? []);
       }
       try {

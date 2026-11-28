@@ -8,6 +8,7 @@ import conversationFixture from "../../../../generated/golden-wire/storyos-publi
 import listFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-project-conversations.json";
 import proposalFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-proposal.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import steerFixture from "../../../../generated/golden-wire/storyos-public-release-1/steer-agent-run.json";
 import treeFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
@@ -214,6 +215,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
       await click("[data-assistant-conversation-history]");
       await click(`[data-assistant-conversation-entry="${conversationId}"]`);
     },
+    draft: () => host.querySelector("textarea")!.value,
     type: async (text: string) => {
       host.querySelector("textarea")!.focus();
       await applyTrustedInput({ operation: "insert_text", text });
@@ -523,4 +525,67 @@ it("gives the Proposal of the opened Run to the editor when the browser storage 
 
   expect({ opened: panel.opened, runId: panel.shownRunId(), unexpected: panel.unexpected, unused: panel.unused() })
     .toEqual({ opened: [PROPOSAL_1], runId: PROSE.runId, unexpected: [], unused: [] });
+});
+
+/** Makes the browser storage refuse each record that names `conversationId`, as a full storage refuses a large one. */
+function refuseRecordsOf(conversationId: string) {
+  const setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (this: Storage, key: string, value: string) {
+    if (value.includes(conversationId)) throw new DOMException("full", "QuotaExceededError");
+    setItem.call(this, key, value);
+  };
+  cleanup.push(async () => { Storage.prototype.setItem = setItem; });
+}
+
+it.each(["before", "after"] as const)(
+  "keeps the selected Conversation when the storage refuses its record and an earlier Run read answers %s it opens",
+  async (order) => {
+    let reads = 0;
+    const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+      "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null,
+      [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), OPENED_PROPOSAL, OPENED_PROPOSAL][reads++]!(),
+      [PROPOSAL_READ_1]: null } });
+    const heldRead = `${runRoute(RUNNING)}#2`;
+    panel.hold(heldRead);
+    await panel.poll();
+    // The check of the author finds the Run completed, and the list of Conversations becomes usable.
+    await panel.click("button[data-assistant-inspect]");
+    const beforeSelection = [...panel.opened];
+    refuseRecordsOf(A);
+    if (order === "before") {
+      panel.hold(A_READ);
+      await panel.select(A);
+      await panel.release(heldRead, A_READ);
+    } else {
+      await panel.select(A);
+      await panel.release(heldRead);
+    }
+
+    expect({ opened: panel.opened, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+      unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ opened: beforeSelection, status: null,
+      shown: A_SHOWN, runId: RUNS[2]!.runId, unexpected: [], unused: [] });
+  });
+
+it("keeps the draft that the author typed after a later selection when an earlier guidance is retained", async () => {
+  let reads = 0;
+  const steer = `POST /agent-runs/${RUNNING.runId}/steering-inputs`;
+  const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+    [`POST /agent-runs/${RUNNING.runId}/cancel`]: null, [PROPOSAL_READ_1]: null,
+    [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), CANCELLED][reads++]!(),
+    [steer]: () => jsonResponse({ ...steerFixture, project_scope: scope,
+      receipt: { ...steerFixture.receipt, project_scope: scope },
+      effect: { ...steerFixture.effect, run_id: RUNNING.runId } }) } });
+  panel.hold(steer);
+  await panel.type("guide");
+  await panel.click("button.send-button");
+  // The scheduled read finds the Run settled, and the list of Conversations becomes usable.
+  await panel.poll();
+  await panel.select(A);
+  await panel.type(" for A");
+  const typed = panel.draft();
+  await panel.release(steer);
+
+  expect({ typed, draft: panel.draft(), reads, status: panel.status(), shown: panel.exchanges(),
+    unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ typed: "guide for A", draft: "guide for A",
+    reads: 2, status: null, shown: A_SHOWN, unexpected: [], unused: [] });
 });
