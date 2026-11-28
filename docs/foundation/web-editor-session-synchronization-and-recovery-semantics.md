@@ -105,8 +105,8 @@ no reconciliation, and it is one of these:
 
 A zero-authority group of another Chapter that a record follows is open work. A
 conflicted or refused Author Edit is open work, because the Server does not
-have its text. A Delete Chapter moves the Server base of each Editor Session
-on the removed Chapter to a later Snapshot. When the Server base of the stored Session
+have its text. A Delete Chapter that leaves a Current Chapter moves the Server
+base of each Editor Session on the removed Chapter to a later Snapshot. When the Server base of the stored Session
 has a later Project Activity Position than the base that the Journal stores,
 the check uses the stored base, because the Journal proves its groups against
 that base. When open work exists, the load keeps the stored Session and its
@@ -117,10 +117,11 @@ A command of an Editor Session moves only the base Snapshot of that Editor
 Session. An applied Author Edit or Undo moves that base to the new Revision
 when the base is on the same Chapter, also when the base is on an earlier
 Revision. An applied Acceptance moves that base only when the base is on the
-prior head. A Delete Chapter moves the base of each Editor Session on the
-removed Chapter to the head of the Current Chapter after the deletion. The base
-of each other Editor Session stays, because its Chapter stays and each Editor
-Session writes (ADR 0107). A Delete Volume removes no Chapter and moves no base.
+prior head. A Delete Chapter that leaves a Current Chapter moves the base of
+each Editor Session on the removed Chapter to the head of that Current Chapter.
+The base of each other Editor Session stays, because its Chapter stays and each
+Editor Session writes (ADR 0107). A Delete Chapter that leaves the Project with
+no Chapter moves no base. A Delete Volume removes no Chapter and moves no base.
 
 A page takes a Web Lock with the name of its Editor Session
 (`editorSessionLock`: `storyos-editor-session:<id>`). It ends the lock of an
@@ -1963,8 +1964,9 @@ advisory until their numerical values are accepted by the appropriate owner.
     only its exact permitted controls, and no result fabricates Proposal
     Acceptance.
 13. A command of an Editor Session moves only the base Snapshot of that
-    Editor Session. A Delete Chapter moves the base of each Editor Session
-    on the removed Chapter to the Current Chapter, and no other base.
+    Editor Session. A Delete Chapter that leaves a Current Chapter moves the
+    base of each Editor Session on the removed Chapter to that Chapter, and
+    no other base. Each other deletion moves no base.
 14. StoryOS creates no Recovery Draft ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)).
     Browser-only journal and in-memory bytes have no Release-1 Host
     ingress.

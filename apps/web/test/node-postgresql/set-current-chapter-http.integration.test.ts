@@ -4,8 +4,8 @@ import { test } from "vitest";
 
 import { activityStream, getChapter, getEditorSession, getManuscriptTree, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { UUID_V7, assertForeignRefused, createStory, deleteChapterInput, problemOf, serverForFile,
-} from "../support/http-harness.ts";
+import { UUID_V7, appliedVolume, assertForeignRefused, createStory, createVolumeInput, deleteChapterInput,
+  deleteVolumeInput, problemOf, serverForFile } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
 
 // The Profile Probe of the ChapterSelection settlement profile (ADR 0075).
@@ -168,7 +168,7 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   assert.equal(foreign.status, 404);
 });
 
-test("deleteChapter keeps the base of each Editor Session whose Chapter stays, and its next Author Edit applies",
+test("a deletion keeps the base of each Editor Session whose Chapter stays, and its next Author Edit applies",
   async () => {
     const story = await createStory(server, { title: "Delete Keep Novel",
       chapters: ["Chapter A", "Chapter B", "Chapter C"] });
@@ -187,6 +187,13 @@ test("deleteChapter keeps the base of each Editor Session whose Chapter stays, a
     const before = [await base(onA), await base(onB)];
     const removed = await story.send("deleteChapter", deleteChapterInput(story, chapterC, await story.treeRevision()));
     assert.equal(removed.response.effect.kind, "authoritative_applied");
+    assert.deepEqual([await base(onA), await base(onB)], before);
+    // A Volume deletion applies only to a Volume with no active Chapter, so it moves no base.
+    const volume = appliedVolume((await story.send("createVolume",
+      createVolumeInput(story, "Volume Empty", await story.treeRevision()))).response);
+    const removedVolume = await story.send("deleteVolume",
+      deleteVolumeInput(story, volume.volume_id, await story.treeRevision()));
+    assert.equal(removedVolume.response.effect.kind, "authoritative_applied");
     assert.deepEqual([await base(onA), await base(onB)], before);
 
     const edit = await story.send("applyAuthorEdit", { request: {

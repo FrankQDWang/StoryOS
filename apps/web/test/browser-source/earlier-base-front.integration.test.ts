@@ -6,6 +6,7 @@ import setCurrentChapterFixture from "../../../../generated/golden-wire/storyos-
 import openProposalsFixture
   from "../../../../generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import treeFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 import statisticsFixture
   from "../../../../generated/golden-wire/storyos-public-release-1/get-statistics.json";
 import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -105,6 +106,8 @@ function fakeServer(applies?: Revision | Revision[]) {
     }
     return sessions.get(key)! as Promise<typeof scenario.session>;
   };
+  // Each step of the fake Project is a Forward Author Action, so the Author Undo frontier is the latest position.
+  const frontier = (position: number) => position > 0 ? { author_undo_frontier_sequence: String(position) } : {};
   let creations = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const route = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
@@ -171,13 +174,13 @@ function fakeServer(applies?: Revision | Revision[]) {
     if (route === CREATION) {
       creations += 1;
       if (creations > 1) await gates.creation;
-      return jsonResponse(creations === 1 ? await session(SESSION, BASE, 0)
+      return jsonResponse({ ...creations === 1 ? await session(SESSION, BASE, 0)
         : world.current === CHAPTER_B ? await session(NEW_SESSION, IN_B, world.position, CHAPTER_B)
-          : await session(NEW_SESSION, world.head, world.position));
+          : await session(NEW_SESSION, world.head, world.position), ...frontier(world.position) });
     }
     if (route === `GET ${project}/editor-sessions/${SESSION}`) {
       return jsonResponse({ ...await session(SESSION, world.stored, world.storedPosition),
-        schema_id: "storyos.query.editor-session.response.v2" });
+        schema_id: "storyos.query.editor-session.response.v2", ...frontier(world.position) });
     }
     if (route === `GET ${project}/activity`) return emptyActivityStream();
     // The page also reads the statistics, the open Proposals, the assistance settings, the Skills, and the tree.
@@ -202,7 +205,8 @@ function fakeServer(applies?: Revision | Revision[]) {
     if (route === `GET ${project}/manuscript/tree`) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000014", project_scope: scope, tree_revision: "1",
-        snapshot: { snapshot_id: "018f0000-0000-7001-8000-000000000032", project_scope: scope },
+        snapshot: { ...treeFixture.snapshot, snapshot_id: "018f0000-0000-7001-8000-000000000032",
+          project_scope: scope },
         volumes: [{ volume_id: "018f0000-0000-7001-8000-000000000815", title: "Volume A", order: "1",
           chapters: [{ chapter_id: CHAPTER, title: "Chapter A", order: "1" },
             { chapter_id: CHAPTER_B, title: "Chapter B", order: "2" }] }] });
@@ -235,7 +239,7 @@ function fakeServer(applies?: Revision | Revision[]) {
         const { schema_id: _schema, correlation_id: _correlation, project_scope: _scope, ...state } =
           await session(request.editor_session_id as string, next, position);
         return jsonResponse({ ...answer, effect: { ...answer.effect, authoritative_revision: next },
-          editor_session_state: state });
+          editor_session_state: { ...state, ...frontier(position) } });
       }
       return jsonResponse({ ...answer, effect: { kind: "conflicted", reason: "stale_authoritative_head",
         current_authoritative_revision_id: head }, receipt: { ...answer.receipt, result: "conflicted",

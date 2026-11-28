@@ -241,7 +241,7 @@ pub(crate) async fn update_session_base(
 /// Chapter Revision `revision_id`. Each base gets a new canonical Snapshot of its own at
 /// `project_activity_position`, because the Snapshot ID is the key of a base row and a browser with
 /// no stored Activity cursor starts the Activity stream from its base Snapshot.
-pub(crate) async fn update_each_session_base(
+pub(crate) async fn update_session_bases_on_chapter(
     client: &Client,
     scope: &ProjectScope,
     removed_chapter_id: &str,
