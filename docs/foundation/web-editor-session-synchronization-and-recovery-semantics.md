@@ -166,7 +166,10 @@ catches up in a new Editor Session on the current Chapter:
 The catch-up runs at a load, when a save gets `stale_authoritative_head`, and
 when the tab comes to the front (`visibilitychange`). At the front, the tab
 waits for the end of an open IME composition, saves its input, then reads the
-Chapter one time. A live tab waits for the end
+Chapter one time. Input during that quiet step refuses it, so the check waits
+for the save of that input and runs again. The check compares the read with the
+Revision of the editor when the read ends, so a save that applied during the
+read starts no catch-up. A live tab waits for the end
 of an open IME composition, then ends input: the editor is read-only, and the
 controller starts no submission and no Author Undo, but captured input still
 enters the Journal. After the submission in flight ends, the tab takes the
@@ -185,9 +188,11 @@ button.
 When another tab set another Chapter current and the stored Editor Session has
 text that can catch up on the Chapter of its base, a load or a reopen sets that
 Chapter current again with that Editor Session, and then catches up on it. The
-later action wins, as for a block. When a save of another tab after the read
-gives `wrong_target_head`, the tab reads its Chapter again and sends the command
-one more time. A reopen that finds another Current Chapter reads that Chapter
+later action wins, as for a block. A conflict (`wrong_target_head` or
+`stale_current_chapter`) is a command of another tab after the reads, so the tab
+reads the Project and its Chapter again and sends the command again, at most 8
+times. When another tab set the Chapter current again, the tab sends nothing
+more. A reopen that finds another Current Chapter reads that Chapter
 only when it does not set its own Chapter current again. With no such text, a
 load or a reopen opens the Chapter that the other tab set current, in a new
 Editor Session when the records of the stored Session have no net change. A tab
@@ -202,7 +207,9 @@ the Chapter at a later position. When the page closes after that and before the
 copy of step 3, the records still bind the earlier base. When the base of the
 Journal is on the Chapter of the Server base and the text of its open work can
 catch up, the next load decides on the catch-up with the base of the Journal, so
-it catches up on the current Revision and does not reject the Journal. Else a
+it catches up on the current Revision and does not reject the Journal. When that
+text does not fit in one Author Edit, the stored Editor Session keeps the base of
+its Journal and shows its recovery state. Else a
 command of the Editor Session moved its base, as a Chapter switch (ADR 0105) or
 an Author Edit with a lost response does, and the load decides with the Server
 base as before.
