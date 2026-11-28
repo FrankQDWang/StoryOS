@@ -14,7 +14,7 @@ import { mountStage1View } from "../../src/stage1-view.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
 import { manuscriptEditor, manuscriptIsEditable } from "../support/manuscript-surface.ts";
 import {
-  BLOCK, CHAPTER, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases,
+  BLOCK, CHAPTER, OWNER, PROJECT, REVISION, SESSION, closeTrackedDatabases,
   createAppliedAuthorEditResponse, createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse,
   requestHeaders, requireRequestBody, trackDatabase,
 } from "./scenario.ts";
@@ -22,8 +22,14 @@ import {
 const P = `/api/v1/projects/${PROJECT}`;
 const AUTHOR_EDIT = `POST ${P}/manuscript/author-edits`;
 const ACTIVE_KEY = `active_session:${OWNER}:${PROJECT}`;
-// The Revision of the saved Chapter text edit: the default of `createAppliedAuthorEditResponse`.
 const SAVED_REVISION = "018f0000-0000-7001-8000-000000000034";
+// The first block of the Chapter. The open Proposal targets the second block, `BLOCK`.
+const FIRST = "018f0000-0000-7001-8000-0000000019a1";
+const revision = (revisionId: string, first: string) => ({ revision_id: revisionId, body: `${first}\nBase`,
+  blocks: [{ manuscript_block_id: FIRST, block_kind: "paragraph" as const, text: first },
+    { manuscript_block_id: BLOCK, block_kind: "paragraph" as const, text: "Base" }] });
+const BASE = revision(REVISION, "雨夜。");
+const SAVED = revision(SAVED_REVISION, "雨夜。!");
 const scenario = createBrowserScenario();
 const PROPOSAL = { ...proposalFixture.proposal, chapter_id: CHAPTER, manuscript_block_id: BLOCK,
   base_authoritative_revision_id: REVISION, operations: proposalFixture.proposal.operations
@@ -49,14 +55,22 @@ async function sha256(text: string): Promise<string> {
 }
 
 /**
- * A fake Server of one Project whose Chapter has one block and one open Proposal for it. The first Author Edit (Chapter
- * text) applies and moves the Editor Session base. Each later Author Edit gets no response, so the test sees that it
- * went out. It records each request, and it records and throws on each request that it does not serve.
+ * A fake Server of one Project whose Chapter has two blocks and one open Proposal for the second block. The first
+ * Author Edit, of the first block with no Proposal head, applies as on the Server and moves the Editor Session base.
+ * Each later Author Edit gets no response, so the test sees that it went out. It records each Author Edit request, and
+ * it records and throws on each request that it does not serve.
  */
-function fakeServer() {
+async function fakeServer() {
   const edits: Record<string, unknown>[] = [];
   const unexpected: string[] = [];
-  let session = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
+  const base = (at: typeof BASE, snapshotId: string, position: string, digest: string) => ({
+    ...scenario.session.base_snapshot, snapshot_id: snapshotId, project_activity_position: position,
+    authoritative_head_revision_id: at.revision_id, materialized_revision: at,
+    materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
+      value_hex_lowercase: digest } });
+  const created = { ...scenario.session,
+    base_snapshot: base(BASE, scenario.session.base_snapshot.snapshot_id, "0", await sha256(BASE.body)) };
+  let session = { ...created, schema_id: "storyos.query.editor-session.response.v2" };
   const fetchImpl: typeof fetch = async (input, init) => {
     const route = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     const scope = scenario.project.project_scope;
@@ -68,12 +82,14 @@ function fakeServer() {
           open: { kind: "current_chapter", current_chapter_id: CHAPTER } }] });
     }
     if (route === `GET ${P}`) return jsonResponse(scenario.project);
-    if (route === `GET ${P}/chapters/${CHAPTER}`) return jsonResponse(scenario.chapter);
+    if (route === `GET ${P}/chapters/${CHAPTER}`) {
+      return jsonResponse({ ...scenario.chapter, chapter: { ...scenario.chapter.chapter, current_revision: BASE } });
+    }
     if (route === `POST ${P}/anti-forgery-challenges`) {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: new Date(Date.now() + 60_000).toISOString(),
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
-    if (route === `POST ${P}/editor-sessions`) return jsonResponse(scenario.session);
+    if (route === `POST ${P}/editor-sessions`) return jsonResponse(created);
     if (route === `GET ${P}/editor-sessions/${SESSION}`) return jsonResponse(session);
     if (route === `GET ${P}/chapters/${CHAPTER}/open-proposals`) {
       return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
@@ -102,15 +118,12 @@ function fakeServer() {
       const request = requireRequestBody(init);
       edits.push(request);
       if (edits.length > 1) return new Promise<Response>(() => {});
-      const response = createAppliedAuthorEditResponse({ request, body: "Base!",
+      const response = createAppliedAuthorEditResponse({ request, authoritativeRevisionId: SAVED_REVISION,
         commandDigest: await digestApplyAuthorEdit(request as never),
         idempotencyKey: requestHeaders(init).get("idempotency-key")! });
-      session = { ...session, base_snapshot: { ...session.base_snapshot,
-        snapshot_id: "018f0000-0000-7001-8000-000000000080", project_activity_position: "1",
-        authoritative_head_revision_id: SAVED_REVISION, materialized_revision: chapterRevision(SAVED_REVISION, "Base!"),
-        materialized_payload_digest: { ...session.base_snapshot.materialized_payload_digest,
-          value_hex_lowercase: await sha256("Base!") } } };
-      return jsonResponse(response);
+      session = { ...session,
+        base_snapshot: base(SAVED, "018f0000-0000-7001-8000-000000000080", "1", await sha256(SAVED.body)) };
+      return jsonResponse({ ...response, effect: { ...response.effect, authoritative_revision: SAVED } });
     }
     unexpected.push(route);
     throw new Error(`unexpected request: ${route}`);
@@ -147,7 +160,7 @@ function caretAtEnd(surface: HTMLElement, name: "paragraph" | "blockProposal") {
 
 it("keeps Enter at the end of a candidate and the typing after it in the candidate after a saved Chapter text edit",
   async () => {
-    const server = fakeServer();
+    const server = await fakeServer();
     const { timers, fire } = manualTimers();
     const databases = new Set<IDBDatabase>();
     const open = IDBFactory.prototype.open;
@@ -182,13 +195,16 @@ it("keeps Enter at the end of a candidate and the typing after it in the candida
         await expect.poll(() => { fire(); return server.edits.length; }).toBe(2);
         await applyTrustedInput({ operation: "insert_text", text: "灯" });
 
-        expect({ block: editor().querySelector(`p[data-id="${BLOCK}"]`)?.textContent,
+        // The Server applies the first edit only with no Proposal head, because the edit does not name the target.
+        const [first, second] = server.edits;
+        expect({ blocks: [...editor().querySelectorAll(":scope > p")].map((block) => block.textContent),
+          first: [first?.expected_proposal_head_revision_ids, first?.observed_ownership_partition],
           candidate: candidate()?.querySelector(".block-proposal-text")?.textContent,
           editable: manuscriptIsEditable(editor()), save: status()?.getAttribute("data-save-state"),
           failure: status()?.getAttribute("data-editor-failure"),
-          target: (server.edits[1]?.proposal_target as { proposal_id?: string } | undefined)?.proposal_id,
+          target: (second?.proposal_target as { proposal_id?: string } | undefined)?.proposal_id,
           unexpected: server.unexpected })
-          .toEqual({ block: "Base!", candidate: `${PROPOSAL.candidate_text}\n灯`, editable: true, save: "saving",
+          .toEqual({ blocks: ["雨夜。!", "Base"], first: [[], "authoritative"], candidate: `${PROPOSAL.candidate_text}\n灯`, editable: true, save: "saving",
             failure: "", target: PROPOSAL.proposal_id, unexpected: [] });
       } finally {
         view.unmount();

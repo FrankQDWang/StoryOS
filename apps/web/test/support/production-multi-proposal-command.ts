@@ -323,6 +323,9 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const savedCandidate = (text: string) => expect.poll(async () => (await getProposal({ ...options, proposalId }))
       .proposal.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text,
     { timeout: 10_000 }).toBe(text);
+    // The Chapter read can answer before the client installs the saved base, and the candidate shows only after that.
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
     await caretInCandidate(unsplit.length);
     // The author presses Enter at the end of the candidate and types at once, while the candidate edit of Enter is in
     // progress. The input stays in the candidate, and the editor accepts more input (#1944).
