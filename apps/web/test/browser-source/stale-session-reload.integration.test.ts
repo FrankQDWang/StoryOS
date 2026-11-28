@@ -7,6 +7,7 @@ import { freezeOneIntentSubmission, openEditorWorkspace, submitOnePendingAuthorE
 import type { EditorReadyState } from "../../src/editor-types.ts";
 import { appendAuthorEdit } from "../../src/local-edit-journal.ts";
 import { captureManuscriptChange } from "../../src/manuscript-doc.ts";
+import { commitProtectedTransportSend } from "../../src/protected-transport-capsule.ts";
 import {
   BLOCK, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases, createAppliedAuthorEditResponse,
   createBrowserScenario, deleteJournal, jsonResponse, requestHeaders, requestResult, requireEditorReady,
@@ -303,9 +304,12 @@ const submitted = (workspace: EditorReadyState, server: Awaited<ReturnType<typeo
 
 // Each case leaves work in the Journal of the stored Session that the catch-up cannot put on the current Chapter.
 it.each([
-  ["a group that is not settled", undefined, async (workspace: EditorReadyState) => {
+  // The capsule and its transport attempt commit before the send, so the group can have gone out, and its result is
+  // unknown (#1964).
+  ["a group that went out with no result", undefined, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, EDIT);
-    await freezeOneIntentSubmission(workspace);
+    await commitProtectedTransportSend(workspace, await freezeOneIntentSubmission(workspace),
+      { nonce: "a".repeat(64), expires_at: "2026-08-15T09:00:00.000Z" });
   }],
   ["an Author Edit that conflicted for another reason", "proposal_head_present", submitted],
   ["Proposal candidate input that no group revised", undefined, async (workspace: EditorReadyState) => {

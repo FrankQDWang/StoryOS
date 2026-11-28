@@ -207,8 +207,9 @@ export const storyOSBrowserCommands = {
         await verifyProductionAuthorVoiceJourney(context.context);
       } else if (request.scenario === "stage11_journey") {
         await verifyProductionStage11Journey(context.context);
-      } else if (request.scenario === "chapter_switch_load") {
-        await verifyProductionChapterSwitchLoad(context.context);
+      } else if (request.scenario === "chapter_switch_load" || request.scenario === "chapter_switch_load_challenge") {
+        await verifyProductionChapterSwitchLoad(context.context,
+          request.scenario === "chapter_switch_load" ? "clock" : "challenge");
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {
