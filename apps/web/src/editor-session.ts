@@ -408,6 +408,11 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         // A settlement of an applied group reads the Editor Session again. That read is later than the read above,
         // which can come before the Server applied the group.
         if (stored !== undefined && stored.session !== read) sessionValue = stored.session;
+        // A group that stays unknown keeps the Journal base. The group can have moved the Server base, and that later
+        // base drops the records of the group, so the page shows them as saved and does not settle them.
+        else if (stored !== undefined && await lostGroupResult(stored).catch(() => undefined) === "unknown") {
+          sessionValue = stored.session;
+        }
       }
       return { kind: "started", database, active, sessionValue, creation, ...(claimed ? { claimed } : {}) };
     } catch (error) {

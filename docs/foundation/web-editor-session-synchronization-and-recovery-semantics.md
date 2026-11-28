@@ -255,7 +255,10 @@ fresh Command Challenge and no replay. The answer decides the Chapter:
 - `StillUnknown`, or no answer: the Session sends no command until the result is
   known. The load opens the Chapter of the group as its Current Chapter, as a tab
   that did not see the Set Current Chapter of the other tab does, and shows the
-  text. The Project keeps the Current Chapter of the other tab.
+  text. The Project keeps the Current Chapter of the other tab. The load keeps
+  the Journal base of the Session: the group can have moved the Server base, and
+  that later base drops the records of the group, so the page shows them as
+  saved and does not settle them.
 
 When another tab wrote a later Revision of the Chapter of such a group, the
 load opens that Chapter at the Server base of the stored Session, as a tab that

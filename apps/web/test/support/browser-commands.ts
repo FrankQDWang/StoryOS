@@ -215,9 +215,11 @@ export const storyOSBrowserCommands = {
       } else if (request.scenario === "stage11_journey") {
         await verifyProductionStage11Journey(context.context);
       } else if (request.scenario === "chapter_switch_load" || request.scenario === "chapter_switch_load_challenge"
-        || request.scenario === "chapter_switch_load_outcome") {
+        || request.scenario === "chapter_switch_load_outcome"
+        || request.scenario === "chapter_switch_load_outcome_unavailable") {
         await verifyProductionChapterSwitchLoad(context.context, request.scenario === "chapter_switch_load" ? "clock"
-          : request.scenario === "chapter_switch_load_challenge" ? "challenge" : "response");
+          : request.scenario === "chapter_switch_load_challenge" ? "challenge"
+            : request.scenario === "chapter_switch_load_outcome" ? "response" : "outcome_unavailable");
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {

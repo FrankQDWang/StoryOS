@@ -1085,15 +1085,17 @@ it("sends no Command Challenge and no Author Edit after a load for a group that 
     journal.close();
     const before = server.requests.length;
 
-    const { timers, fire } = manualTimers();
+    const { timers, fire, due } = manualTimers();
     await withReload(server, timers, async (root) => {
       await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
         save: "saving", failure: "", stored: SESSION });
-      await type(root, "。");
-      await expect.poll(() => unsettled(root)).toBe("2");
+      // The open sets the timer of the save of the group.
+      await expect.poll(() => due()).toBe(1);
       fire();
-      // The save of the group ends with no request. Before the fix, it sent a Challenge and the Author Edit again.
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(due()).toBe(0);
+      // A save attempt that leaves the group saving ends when it sets the timer of the next attempt. Before the fix,
+      // the attempt sent a Challenge and the Author Edit again.
+      await expect.poll(() => due()).toBe(1);
     });
     expect({ commands: commandsAfter(server, before), queries: server.requests.slice(before)
       .filter((request) => request.startsWith(OUTCOME)), switches: server.switches, unexpected: server.unexpected })
@@ -1156,6 +1158,37 @@ it("settles an applied group with a lost response at a load and opens the Chapte
         CREATION, `${CHAPTER_B_READ}/open-proposals`].sort(),
       edits: 1, switches: [], unexpected: [] });
   });
+
+// #1972: the Server applied the group, but the outcome Query of the load fails, so the result stays unknown. The Server
+// base of the Session moved to the applied Revision, and that base would drop the records of the group: the page would
+// show them as saved. The load keeps the Journal base, so the group stays in its recovery. Both orders of the Set
+// Current Chapter of the other tab go through the same load step.
+for (const order of ["before the load", "after the Project read of the load"] as const) {
+  it(`keeps the Journal base and shows the text of an applied group with a lost response in its recovery when the `
+    + `outcome Query of the load fails and another tab sets another Chapter current ${order}`, async () => {
+    const server = fakeServer(revision(APPLIED_REVISION, "雨夜。", "渡口。无人"));
+    await closeAfterLostResponse(server);
+    server.hooks.outcome = "unavailable";
+    if (order === "before the load") server.setCurrentInOtherTab(CHAPTER_B);
+    const before = server.requests.length;
+    const chapter = gate();
+    if (order !== "before the load") server.gates.chapter = chapter.opened;
+
+    await withReload(server, heldTimers, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+        save: "saving", failure: "", stored: SESSION });
+    }, order === "before the load" ? undefined : async () => {
+      const loading = load(server);
+      await expect.poll(() => server.requests.slice(before).includes(CHAPTER_READ)).toBe(true);
+      await expect.poll(() => server.requests.slice(before).includes(PROJECT_READ)).toBe(true);
+      server.setCurrentInOtherTab(CHAPTER_B);
+      chapter.open();
+      return loading;
+    });
+    expect({ commands: commandsAfter(server, before), switches: server.switches, unexpected: server.unexpected })
+      .toEqual({ commands: [], switches: [], unexpected: [] });
+  });
+}
 
 // #1972: the same load step with no Chapter switch. Before it, the load showed the text as saved, sent no outcome
 // Query, and the next input failed with "Author Edit acknowledgement does not converge".
