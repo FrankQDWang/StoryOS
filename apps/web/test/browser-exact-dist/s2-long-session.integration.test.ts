@@ -50,7 +50,10 @@ async function typeExpected(
   editor.focus();
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text: inserted });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(expected);
+  // The end of a Chapter switch can replace the editor after the key, so each step reads the editor that is on the
+  // screen (#1960).
+  await expect.poll(() => manuscriptBody(manuscriptEditor(root, applicationWindow(frame))), { timeout: 10_000 })
+    .toBe(expected);
   await waitSaved(root, before, { timeout: 30_000 });
 }
 
