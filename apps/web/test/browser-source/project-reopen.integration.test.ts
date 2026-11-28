@@ -1762,10 +1762,11 @@ it("uses the early list of open suggestions only while the tab learned of no Pro
     const changed = start();
     copies.proposalsChanged();
     const kept = start();
+    const other = start();
 
     expect({ changed: changed.takeSuggestions(CHAPTER), kept: kept.takeSuggestions(CHAPTER) !== undefined,
-      again: kept.takeSuggestions(CHAPTER), lists: lists.length }).toEqual({
-      changed: undefined, kept: true, again: undefined, lists: 2 });
+      again: kept.takeSuggestions(CHAPTER), other: other.takeSuggestions(CHAPTER_B), lists: lists.length }).toEqual({
+      changed: undefined, kept: true, again: undefined, other: undefined, lists: 3 });
   });
 
 it("reads the statistics one time at a reopen whose first tree has a new tree revision", async () => {
@@ -1790,6 +1791,28 @@ it("reads the statistics one time at a reopen whose first tree has a new tree re
   expect({ tree: after.filter((name) => name === TREE).length,
     statistics: after.filter((name) => name === STATISTICS).length, screen: screenState(workspace.root).statistics,
     unexpected: server.log.unexpected }).toEqual({ tree: 1, statistics: 1, screen: "ready", unexpected: [] });
+});
+
+it("reads the statistics at a reopen that keeps the editor part when each tree read fails", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, REJECTION],
+    proposals: true, statistics: true, unavailable: [TREE] });
+  const workspace = await openWorkspace(server);
+  const view = proposalView(workspace.root);
+  await expect.poll(() => view.reject()?.disabled).toBe(false);
+  await expect.poll(() => screenState(workspace.root).statistics).toBe("ready");
+  await expect.poll(server.inFlight).toEqual([]);
+  // The rejection is refused, so the page reopens with the same base of the Editor Session. No tree arrives.
+  server.decideElsewhere("revised");
+  const from = server.log.started.length;
+
+  view.reject()!.click();
+
+  await expect.poll(view.status).toBe(REFUSED_REJECTION);
+  await expect.poll(server.inFlight).toEqual([]);
+  const after = server.log.started.slice(from);
+  expect({ tree: after.filter((name) => name === TREE).length,
+    statistics: after.filter((name) => name === STATISTICS).length, unexpected: server.log.unexpected })
+    .toEqual({ tree: 1, statistics: 1, unexpected: [] });
 });
 
 it("reads the statistics again when the early statistics read of an applied Acceptance has another Current Chapter"
