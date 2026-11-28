@@ -434,16 +434,18 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
 
 /**
  * The open of the Project after an applied Acceptance whose response has the Editor Session state of the editor of
- * `state`, with no read (ADR 0106 section 3). The open writes the new base as the active base of the Journal of the
+ * `state`, with no read of the Editor Session (ADR 0106 section 3). The open writes the new base as the active base of the Journal of the
  * editor and keeps that Journal. It gives `undefined` when the response does not fit the editor: another Project, another
  * Current Chapter, another Editor Session, the Snapshot identity of the earlier base, a base that is not on the Revision of the
  * response, or a Journal whose active base is not the base of the editor. The page then opens the Project again, as after a response with no state.
- * The response has the Project title and no Project revision. When the title is not the title of `state`, as after a
- * rename in another tab, the open reads the Project list and takes the title and the revision of that read, so the next
- * rename names the current revision (#1967). It gives `undefined` when that read fails or does not have the Project.
+ * The response has the Project title and no Project revision. `shown` is the title and the revision that the workspace
+ * shows. When the response title is not the shown title, as after a rename in another tab, the open reads the Project
+ * list and takes the title and the revision of that read, so the next rename names the current revision (#1967). It
+ * gives `undefined` when that read fails or does not have the Project.
  */
 export async function acceptedProjectState(state: ProjectReadyState, accepted: AcceptProposalResponse,
-  query: { baseUrl: string; fetchImpl: typeof fetch }): Promise<ProjectReadyState | undefined> {
+  { shown, ...query }: { baseUrl: string; fetchImpl: typeof fetch; shown: { title: string; revision: string } })
+  : Promise<ProjectReadyState | undefined> {
   const { editor, profile } = state;
   const served = accepted.editor_session_state ?? undefined;
   const { effect } = accepted;
@@ -459,9 +461,9 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
   const chapter: GetChapterResponse = { ...state.chapter, project_activity_position: effect.project_activity_position,
     chapter: { ...state.chapter.chapter, current_revision: effect.authoritative_revision } };
   try {
-    let { revision } = state;
+    let { revision } = shown;
     let project = accepted.project;
-    if (project.title !== state.project.project.title) {
+    if (project.title !== shown.title) {
       const listed = (await listProjects(query)).projects
         .find((item) => item.project_scope.project_id === project.project_id);
       if (listed === undefined) return undefined;

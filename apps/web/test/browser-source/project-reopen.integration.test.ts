@@ -129,7 +129,8 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * the tree revision. A rename of the Project changes its title, advances its revision, and records the expected
  * revision. `renameElsewhere` is a rename of the Project in another tab. `switchElsewhere` is a switch to Chapter A in
  * another tab, so the Session base follows the switch. `failNext(names)` answers the next request of each given name
- * with a 503 problem. `releaseOnly(names)` releases only the held requests of the given names. With `proposalResult`,
+ * with a 503 problem. `omitFromNextList()` gives the next list read with no Project, as after a deletion in another
+ * tab. `releaseOnly(names)` releases only the held requests of the given names. With `proposalResult`,
  * the Run of the Conversation has a Proposal result with a change in Chapter A. With `third`, the Project also has
  * Chapter C. After `earlierChapterB(true)`, a Chapter B read gives the text of an earlier Revision. With
  * `responseState`, an applied Acceptance gives the Editor Session state of this page in its response; with
@@ -168,6 +169,7 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
   let holdEach = false;
   let answerFirst = new Set<string>();
   const failing = new Set<string>();
+  let omitList = false;
   const held: { name: string; resolve: () => void }[] = [];
   let creations = 0;
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
@@ -210,10 +212,12 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
     }
     if (name === PROTOCOL) return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
     if (name === LIST) {
+      const omitted = omitList;
+      omitList = false;
       return jsonResponse({ schema_id: "storyos.query.project-list.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000013", owner_user_id: OWNER,
-        projects: [{ project_scope: scope, title: state.projectTitle, revision: String(state.projectRevision),
-          open: open() }] });
+        projects: omitted ? [] : [{ project_scope: scope, title: state.projectTitle,
+          revision: String(state.projectRevision), open: open() }] });
     }
     if (name === PROJECT_READ) return jsonResponse({ ...scenario.project, project: project() });
     if (name === chapterRead(CHAPTER)) {
@@ -477,6 +481,7 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
     },
     changeTreeElsewhere() { state.treeRevision += 1; },
     failNext(names: string[]) { for (const name of names) failing.add(name); },
+    omitFromNextList() { omitList = true; },
     earlierChapterB(on: boolean) { state.earlierB = on; },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
     hold(names: string[]) { holding = new Set(names); },
@@ -1476,8 +1481,11 @@ it("shows the title of a Project rename in another tab after an applied acceptan
     .toEqual({ revisions: ["2"], unexpected: [] });
 });
 
-// The list read for the Project revision fails, so the page opens the Project again with each check of the first open.
-it("opens the Project again when the list read after an applied acceptance with a renamed Project fails", async () => {
+// The list read for the Project revision fails or has no Project, so the page opens the Project again with each check
+// of the first open.
+it.each([["fails", "failed"], ["has no Project", "omitted"]] as const)(
+  "opens the Project again when the list read after an applied acceptance with a renamed Project %s", async (_name,
+    list) => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE,
     ACCEPTANCE, PROJECT_RENAME], proposals: true, acceptance: "applied", responseState: true });
   const workspace = await openWorkspace(server);
@@ -1486,18 +1494,49 @@ it("opens the Project again when the list read after an applied acceptance with 
   await expect.poll(() => accept()?.disabled).toBe(false);
   const before = server.log.started.length;
   server.renameElsewhere("Project A, other tab");
-  server.failNext([LIST]);
+  if (list === "failed") server.failNext([LIST]);
+  else server.omitFromNextList();
 
   accept()!.click();
 
   await expect.poll(() => projectHeading(workspace.root)).toBe("Project A, other tab");
   await expect.poll(server.inFlight).toEqual([]);
+  // Each request from the click: the Challenge, the command, and the list read, in this order. Then the four reads of
+  // the open start at the same time, and the reads of the view start after them.
   const requests = server.log.started.slice(before);
-  expect({ steps: requests.slice(0, 3), open: openReads(requests.slice(3)).sort(), unexpected: server.log.unexpected })
-    .toEqual({ steps: [CHALLENGE, ACCEPTANCE, LIST], open: [LIST, PROJECT_READ].sort(), unexpected: [] });
+  expect({ steps: requests.slice(0, 3), open: requests.slice(3, 7).sort(), view: requests.slice(7).sort(),
+    unexpected: server.log.unexpected }).toEqual({ steps: [CHALLENGE, ACCEPTANCE, LIST],
+    open: reopenReads(CHAPTER).sort(), view: [...VIEW_READS].sort(), unexpected: [] });
 
   await renameProject(workspace.root, "Project A, renamed");
   expect(server.projectRenames).toEqual(["2"]);
+});
+
+// This tab renamed the Project, and another tab renamed it back to the title of the last open of this tab.
+it("shows the title of a rename back in another tab after an applied acceptance whose response has the Editor Session "
+  + "state", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE, ACCEPTANCE,
+    PROJECT_RENAME], proposals: true, acceptance: "applied", responseState: true });
+  const workspace = await openWorkspace(server);
+  const accept = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+  await expect.poll(() => accept()?.disabled).toBe(false);
+  await renameProject(workspace.root, "Project A, renamed");
+  server.renameElsewhere("Project A");
+  const before = server.log.started.length;
+
+  accept()!.click();
+
+  await expect.poll(() => ({ heading: projectHeading(workspace.root), revision: workspace.root
+    .querySelector("[data-authoritative-revision-id]")?.getAttribute("data-authoritative-revision-id") }))
+    .toEqual({ heading: "Project A", revision: ACCEPTED_REVISION });
+  await expect.poll(server.inFlight).toEqual([]);
+  const requests = server.log.started.slice(before);
+  expect({ steps: requests.slice(0, 3), view: requests.slice(3).sort(), unexpected: server.log.unexpected })
+    .toEqual({ steps: [CHALLENGE, ACCEPTANCE, LIST], view: [...VIEW_READS].sort(), unexpected: [] });
+
+  await renameProject(workspace.root, "Project A, renamed again");
+  expect(server.projectRenames).toEqual(["1", "3"]);
 });
 
 // Each check of the Editor Session state in an Acceptance response refuses it, and the page opens the Project again.

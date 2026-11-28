@@ -88,6 +88,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
   /** Holds a settled rename. It is false when the workspace holds a later revision, and the view keeps its values. */
   onRenamed: (projectId: string, title: string, revision: string) => boolean;
+  /** The Project title and revision that the workspace holds now: from the last taken state or a settled rename. */
+  heldProject: () => { projectId: string; title: string; revision: string } | undefined;
   unsavedNotice: ArrivalNotice;
 }
 
@@ -306,7 +308,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
   proposalLocatorStore, writingTimers, tree, treeOpen, treeReads, handle, onStatus, copies, unsavedNotice,
-  handOverStore, caretStore, waitingStore,
+  handOverStore, caretStore, waitingStore, heldProject,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -1130,10 +1132,13 @@ function ProjectEditorView({
         onDecisionEnd={copies.proposalsChanged}
         onAccepted={async (settled, accepted) => {
           // An applied Acceptance whose response has the Editor Session state shows its Revision with no read
-          // (ADR 0106 section 3). A decision with no settled response opens the Project with each check of the first
-          // open.
+          // (ADR 0106 section 3), and with a list read only for a Project title that is not the title on the screen
+          // (#1967). A decision with no settled response opens the Project with each check of the first open.
+          const held = heldProject();
+          const shown = held?.projectId === state.project.project.project_id ? held
+            : { title: state.project.project.title, revision: state.revision };
           const installed = accepted === undefined ? undefined : await acceptedProjectState(state, accepted,
-            { baseUrl, fetchImpl });
+            { baseUrl, fetchImpl, shown });
           onReopened(installed ?? await (settled ? reopen() : openControlledProject({ baseUrl,
             projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
         }}
@@ -1626,6 +1631,7 @@ function Stage1View({
         onReopened={take}
         onLocalRecoveryContinued={(next) => { take(next); setEditorGeneration((value) => value + 1); }}
         onRenamed={renamed}
+        heldProject={() => held.current}
         unsavedNotice={unsavedNotice}
       />
     );
