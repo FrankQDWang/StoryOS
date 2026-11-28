@@ -534,7 +534,7 @@ function ProjectEditorView({
       // Input during the quiet step refuses it, so the check waits for the end of that input and its save, and runs
       // again, with no limit: each wait is for the editor, not a timer. A tab that went to the background ends the
       // check, and its next return to the front starts a new one. A Revision that the tab installed during the read is
-      // at least as late as the read, so that read starts no catch-up.
+      // not earlier than the read, so that read starts no catch-up.
       const check = async () => {
         for (;;) {
           await writing.whenComposed();
