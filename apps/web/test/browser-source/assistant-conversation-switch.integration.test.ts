@@ -403,6 +403,11 @@ describe.each([
     await panel.poll();
     await panel.click("button[data-assistant-inspect]");
   }, { "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null }],
+  // The check of the author is held, and the scheduled read finds the Run completed.
+  ["the check of the author", OPENED_PROPOSAL, async (panel: Panel) => {
+    await panel.click("button[data-assistant-inspect]");
+    await panel.poll();
+  }, { "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null }],
   // The read after the run control is held, and the scheduled read finds the Run cancelled.
   ["the Run read after a run control", CANCELLED, async (panel: Panel) => {
     await panel.click("button[data-cancel-agent-run]");
@@ -479,3 +484,43 @@ it.each(["the Run read", "the later selection"] as const)(
       unused: panel.unused() }).toEqual({ beforeSelection: [PROPOSAL_1], opened: [PROPOSAL_1], shown: A_SHOWN,
       unexpected: [], unused: [] });
   });
+
+it.each(["before", "after"] as const)(
+  "shows no result of a run control whose answer arrives after a later selection, %s the selected Conversation opens",
+  async (order) => {
+    let reads = 0;
+    const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+      [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), CANCELLED][reads++]!(),
+      [PROPOSAL_READ_1]: null } });
+    const cancel = `POST /agent-runs/${RUNNING.runId}/cancel`;
+    panel.hold(cancel);
+    await panel.click("button[data-cancel-agent-run]");
+    // The scheduled read finds the Run cancelled, and the list of Conversations becomes usable.
+    await panel.poll();
+    if (order === "before") {
+      panel.hold(A_READ);
+      await panel.select(A);
+      await panel.release(cancel, A_READ);
+    } else {
+      await panel.select(A);
+      await panel.release(cancel);
+    }
+
+    expect({ reads, status: panel.status(), shown: panel.exchanges(), unexpected: panel.unexpected,
+      unused: panel.unused() }).toEqual({ reads: 2, status: null, shown: A_SHOWN, unexpected: [], unused: [] });
+  });
+
+it("gives the Proposal of the opened Run to the editor when the browser storage is full", async () => {
+  const panel = await openPanel({ conversations: [P], answers: {
+    [runRoute(PROSE)]: () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: PROSE.runId,
+      conversation_id: P, status: "completed", results: [], decision: { ...PROSE.decision, locations: [],
+        opened_proposal: { kind: "present", proposal_id: PROPOSAL_1 } } }),
+    [PROPOSAL_READ_1]: null, [PROPOSAL_READ_2]: null } });
+  const setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = () => { throw new DOMException("full", "QuotaExceededError"); };
+  cleanup.push(async () => { Storage.prototype.setItem = setItem; });
+  await panel.select(P);
+
+  expect({ opened: panel.opened, runId: panel.shownRunId(), unexpected: panel.unexpected, unused: panel.unused() })
+    .toEqual({ opened: [PROPOSAL_1], runId: PROSE.runId, unexpected: [], unused: [] });
+});

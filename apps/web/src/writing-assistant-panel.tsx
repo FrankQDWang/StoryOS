@@ -475,16 +475,18 @@ export function WritingAssistantPanel({
         proposalId: proposal.proposalId, runId: result.run_id, decisionId: proposal.decisionId,
       });
     }
-    // A Proposal that needs no read goes to the editor only while its Conversation is the selected one.
-    if (!stillCurrent()) return false;
+    // A Proposal that needs no read goes to the editor only while its Conversation is the selected one. A full
+    // browser storage keeps the earlier record, so this check does not read the record (#1696).
+    if (selection !== openSequence.current) return false;
     give();
     return true;
   };
 
-  /** Reads the Run of `current`. The failure of a read that a later Conversation selection overtook is not a part of
-   * that Conversation, so the read then gives no failure. */
-  const inspectInSelection = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
-    const selection = openSequence.current;
+  /** Reads the Run of `current` for the Conversation selection `selection`. The failure of a read that a later
+   * Conversation selection overtook is not a part of that Conversation, so the read then gives no failure. */
+  const inspectInSelection = async (current: RequestReference,
+    selection = openSequence.current): Promise<GetAgentRunResponse | undefined> => {
+    if (selection !== openSequence.current) return undefined;
     try {
       return await inspect(current);
     } catch (error) {
@@ -557,6 +559,9 @@ export function WritingAssistantPanel({
     setListOpen(false);
     setStatus("");
     setOpenFailed(false);
+    // A Run check of the earlier Conversation shows no result on this selection.
+    inspectSequence.current += 1;
+    setResultUnavailable(false);
     setOpening({ sequence, conversationId, runs: {} });
     try {
       const options = { scope: context.scope, baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, conversationId };
@@ -904,10 +909,13 @@ export function WritingAssistantPanel({
         <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
           context={context} available={availability === "available"} sending={busy} current={reference} run={run}
           skills={skills}
-          onSend={submit} onRefresh={async () => {
+          onSend={submit} onRunControl={() => {
             const selection = openSequence.current;
-            if (reference !== undefined) await inspectInSelection(reference);
-            return selection === openSequence.current;
+            const current = reference;
+            return {
+              selected: () => selection === openSequence.current,
+              refresh: async () => { if (current !== undefined) await inspectInSelection(current, selection); },
+            };
           }}
           onGuidanceRetained={(steeringInputId, labels, references) => {
             const latest = context === undefined ? undefined : readReference(context.scope);

@@ -20,7 +20,7 @@ import { useSkillPicker } from "./skill-picker.tsx";
 const sentReferences = (entries: readonly DraftReference[]) => ({ references: entries.map((entry) => entry.reference),
   labels: draftLabels(entries), keys: entries.map((entry) => entry.key) });
 
-export function AssistantComposer({ context, available, sending, current, run, skills, onSend, onRefresh, onStatus,
+export function AssistantComposer({ context, available, sending, current, run, skills, onSend, onRunControl, onStatus,
   onGuidanceRetained }: {
   context?: AssistantContext | undefined;
   available: boolean;
@@ -31,8 +31,11 @@ export function AssistantComposer({ context, available, sending, current, run, s
   skills?: readonly SkillCatalogEntry[] | undefined;
   onSend: (message: string, acknowledged: () => void, frozen?: SentReferences, recorded?: () => void,
     selected?: SentSkills) => void;
-  /** Reads the Run again. Gives false when the author selected another Conversation during the read. */
-  onRefresh: () => Promise<boolean>;
+  /**
+   * Starts a run control in the current Conversation selection. `refresh` reads the Run again. `selected` gives false
+   * after the author selected another Conversation, and the composer then shows no result of the run control.
+   */
+  onRunControl: () => { refresh: () => Promise<void>; selected: () => boolean };
   onStatus: (status: string) => void;
   /** Keeps the labels and the references of a retained steering input for the history. */
   onGuidanceRetained?: (steeringInputId: string, labels: string[], references: SelectionReference[]) => void;
@@ -70,6 +73,9 @@ export function AssistantComposer({ context, available, sending, current, run, s
 
   const submitControl = async (intent: RunControlIntent) => {
     if (context === undefined) return;
+    const control = onRunControl();
+    // A result of the run control shows only in the Conversation selection where it started.
+    const say = (text: string) => { if (alive.current && control.selected()) onStatus(text); };
     saveRunControl(intent);
     edited.current = false;
     setPending(intent);
@@ -86,18 +92,17 @@ export function AssistantComposer({ context, available, sending, current, run, s
       if (response.effect.kind === "retained" && intent.kind === "guidance") {
         setMessage("");
         clearDraftReferences(intent.scope, intent.referenceKeys ?? []);
-        onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
+        if (control.selected()) onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
           intent.request.steer_agent_run_input.selection_references ?? []);
       }
-      let selected: boolean;
       try {
-        selected = await onRefresh();
+        await control.refresh();
       } catch {
-        if (alive.current) onStatus(response.effect.kind === "conflicted" && intent.kind === "guidance"
+        say(response.effect.kind === "conflicted" && intent.kind === "guidance"
           ? "消息未发送，任务状态暂不可读取。请稍后重新发送。" : "操作已确认，任务状态暂不可读取。请稍后检查。");
         return;
       }
-      if (!alive.current || !selected) return;
+      if (!alive.current || !control.selected()) return;
       if (response.effect.kind === "conflicted" && intent.kind === "guidance" && !edited.current) {
         setResend(intent);
         return;
@@ -108,14 +113,14 @@ export function AssistantComposer({ context, available, sending, current, run, s
     } catch (error) {
       if (!alive.current) return;
       if (historicalAcknowledgementUnavailable(error)) {
-        onStatus(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
+        say(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
       } else if (error instanceof StoryOSProtocolError && error.code === "command_http_error"
         && error.status !== undefined && error.status >= 400 && error.status < 500) {
         clearRunControl(intent);
         setPending(undefined);
-        onStatus("这次操作未被接收。请检查当前任务和写作权限。");
+        say("这次操作未被接收。请检查当前任务和写作权限。");
       } else {
-        onStatus("操作结果待确认。重新打开后将检查同一条操作，不会创建新任务。");
+        say("操作结果待确认。重新打开后将检查同一条操作，不会创建新任务。");
       }
     } finally {
       if (alive.current) setBusy(false);
