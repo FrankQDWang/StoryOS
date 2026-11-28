@@ -127,6 +127,8 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
 type WaitingSelection = { chapterId: string; contents: boolean };
 
 const noChanges = () => () => {};
+// Each attempt of a front check after input waits for the save of that input, so a few attempts are sufficient.
+const FRONT_CHECK_ATTEMPTS = 4;
 
 /** Resolves when no IME composition is open in the Arrival Input `typed`, after the capture of its end. */
 function compositionEnded(typed: ArrivalInput): Promise<void> {
@@ -516,12 +518,25 @@ function ProjectEditorView({
       if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
         || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
         || catchingUpRef.current) return;
-      const read = writing.whenComposed().then(() => writing.runAfterQuiesce("settled", async (projection) => {
-        const chapter = await readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions,
-          state.project.project.project_id, currentChapterId, state.project.project_scope.owner_user_id);
-        return chapter.chapter.current_revision.revision_id === projection.authoritative_revision_id ? undefined
-          : chapter;
-      })).then((quiet) => quiet.kind === "ran" ? quiet.result : undefined, () => undefined);
+      // Input during the quiet step refuses it, so the check waits for the end of that input and its save, and runs
+      // again. Input after each attempt has its own save, which finds a later Revision too. The check compares the read
+      // with the Revision of the editor when the read ends, so a save that applied during the read starts no catch-up.
+      const check = async () => {
+        for (let attempt = 1; attempt <= FRONT_CHECK_ATTEMPTS; attempt += 1) {
+          await writing.whenComposed();
+          const quiet = await writing.runAfterQuiesce("settled", () => readCurrentChapter({ baseUrl, fetchImpl } as
+            StoryOSQueryOptions, state.project.project.project_id, currentChapterId,
+          state.project.project_scope.owner_user_id));
+          if (quiet.kind === "ran") {
+            return quiet.result.chapter.current_revision.revision_id
+              === writing.snapshot().projection.authoritative_revision_id ? undefined : quiet.result;
+          }
+          if (quiet.reason !== "incomplete_semantic_intent" || catchingUpRef.current) return undefined;
+          await writing.whenIdle();
+        }
+        return undefined;
+      };
+      const read = check().catch(() => undefined);
       frontReadRef.current = read;
       void read.then((chapter) => {
         frontReadRef.current = undefined;

@@ -264,6 +264,40 @@ it("puts the text on the base of the new Editor Session when another tab saves b
     text: "Base!", stored: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, CREATION] });
 });
 
+it("keeps the stored Editor Session with the base of its Journal at a load when the text after Set Current Chapter "
+  + "does not fit in one Author Edit", async () => {
+  const id = (index: number) => `018f0000-0000-7001-8000-0000000b${index.toString(16).padStart(4, "0")}`;
+  const block = (index: number, text: string) => ({ manuscript_block_id: id(index), block_kind: "paragraph" as const,
+    text });
+  // A, 100 blocks, and D. The tab changes A and pastes 140 blocks after it, then joins the 100 blocks into the last
+  // pasted block. The catch-up needs one replacement with 100 joins, 140 splits, and its text: more primitives than
+  // one Author Edit can have.
+  const base = [block(0, "甲。"), ...Array.from({ length: 100 }, (_, index) => block(1 + index, `第${index}段。`)),
+    block(101, "丁。")];
+  const pasted = Array.from({ length: 140 }, (_, index) => block(0x200 + index, `新${index}。`));
+  const revision = (revisionId: string) => ({ revision_id: revisionId, body: base.map(({ text }) => text).join("\n"),
+    blocks: base });
+  const server = await prepare(undefined, "chapter", async (workspace) => {
+    const steps = [base, [block(0, "甲，雨夜。"), ...pasted, ...base.slice(1)],
+      [block(0, "甲，雨夜。"), ...pasted.slice(0, -1), { ...pasted.at(-1)!, text: "新，渡口。" }, base.at(-1)!]];
+    for (const [index, next] of steps.slice(1).entries()) {
+      await appendAuthorEdit(workspace, { ...captureManuscriptChange(steps[index]!, next)!, inputOrigin: "selection_replacement",
+        undoGroupId: UNDO_GROUP, createdAt: "2026-08-15T08:00:00.000Z" });
+    }
+  }, { base: revision(REVISION), later: revision(LATER_REVISION) });
+  const bases = async () => (await journalRows("metadata") as { key: string; value: { snapshot_id?: string } }[])
+    .filter(({ key }) => key.startsWith("active_base:")).map(({ value }) => value.snapshot_id);
+  const [records, before] = [await journalRows("intents"), await bases()];
+
+  const state = await load(server);
+
+  expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests,
+    bases: await bases() }).toEqual({ kind: "editor-read-only-recovery", stored: SESSION, requests: [SESSION_READ],
+    bases: before });
+  if (state.kind === "editor-ready") state.database.close();
+  expect(await journalRows("intents")).toEqual(records);
+});
+
 const submitted = (workspace: EditorReadyState, server: Awaited<ReturnType<typeof fakeServer>>) =>
   appendAuthorEdit(workspace, EDIT).then(() => submit(workspace, server));
 

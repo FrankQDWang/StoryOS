@@ -272,11 +272,15 @@ async function openProjectWorkspace(
   }
 }
 
+/** One author makes the commands of the tabs, so each conflict of `setChapterBack` is rare. */
+const SET_CHAPTER_BACK_ATTEMPTS = 8;
+
 /**
  * Sets the Chapter of the stored Editor Session current again, with that Session. `read` is a read of that Chapter,
- * when the reopen has one. A save of another tab after the read gives `wrong_target_head`, and the tab then reads the
- * Chapter again and sends the command one more time. It gives the Project and the Chapter after the command, or
- * `undefined` when the command had no effect.
+ * when the reopen has one. A conflict (`wrong_target_head` or `stale_current_chapter`) is a command of another tab
+ * after the reads, so the tab reads the Project and the Chapter again and sends again, at most
+ * `SET_CHAPTER_BACK_ATTEMPTS` times. When another tab set the Chapter current again, the tab sends nothing more. It
+ * gives the Project and the Chapter after the command, or `undefined` when the command had no effect.
  */
 async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse,
   other: { chapterId: string; editorSessionId: string }, read: GetChapterResponse | undefined) {
@@ -286,16 +290,21 @@ async function setChapterBack(options: ProjectOpenOptions, project: GetProjectRe
   if (open.kind !== "current_chapter") return undefined;
   const readChapter = () =>
     readCurrentChapter(queryOptions, projectId, other.chapterId, project.project_scope.owner_user_id);
-  const send = (target: GetChapterResponse) => setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
-    chapterId: other.chapterId, expectedCurrentChapterId: open.current_chapter_id,
-    expectedTargetRevisionId: target.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });
+  let current = open.current_chapter_id;
   let chapter = read?.chapter.chapter_id === other.chapterId ? read : await readChapter();
-  let switched = await send(chapter);
-  if (switched.effect.kind === "conflicted" && switched.effect.reason === "wrong_target_head") {
+  for (let attempt = 1; ; attempt += 1) {
+    const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
+      chapterId: other.chapterId, expectedCurrentChapterId: current,
+      expectedTargetRevisionId: chapter.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });
+    if (switched.effect.kind === "authoritative_applied") break;
+    if (switched.effect.kind !== "conflicted" || attempt === SET_CHAPTER_BACK_ATTEMPTS) return undefined;
+    const now = await readSessionProject(queryOptions, projectId, "together");
+    const reopened = now?.project.project.open;
+    if (reopened?.kind !== "current_chapter") return undefined;
+    current = reopened.current_chapter_id;
     chapter = await readChapter();
-    switched = await send(chapter);
+    if (current === other.chapterId) return { read: now!, chapter };
   }
-  if (switched.effect.kind !== "authoritative_applied") return undefined;
   const after = await readSessionProject(queryOptions, projectId, "together");
   const reopened = after?.project.project.open;
   return reopened?.kind === "current_chapter" && reopened.current_chapter_id === other.chapterId

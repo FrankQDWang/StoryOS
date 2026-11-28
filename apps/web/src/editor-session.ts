@@ -536,6 +536,9 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
     && await earlierBaseText(stored, journal!.chapter_id, shown).catch(() => undefined) !== undefined;
   if (start.kind === "started" && start.active
     && baseIsNotChapter(journalBound ? stored!.session : start.sessionValue, chapter)) {
+    // When the text does not fit in one Author Edit, the stored Session stays with the base of its Journal, so the
+    // records keep their base and the recovery shows them.
+    if (journalBound) start = { ...start, sessionValue: stored!.session };
     try {
       if (stored === undefined) throw new Error("The Journal of the stored Editor Session is not readable");
       if (!await partitionHasOpenWork(stored)) {
