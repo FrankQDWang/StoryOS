@@ -1,20 +1,23 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import { openEditorWorkspace, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
-import { editorSessionLock } from "../../src/editor-session-lock.ts";
-import { freezeUnsentVersion5Groups } from "../../src/journal-version-5-upgrade.ts";
+import { editorSessionLock, releaseEarlierEditorSessions, releaseEditorSession } from "../../src/editor-session-lock.ts";
+import { freezeUnsentVersion5Groups, recordSessionTransfer } from "../../src/journal-version-5-upgrade.ts";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
+import { updateClipboardPermission } from "../support/browser-command-client.ts";
 import candidateFixture from "../../../../fixtures/local-edit-journal/version-5-candidate-record.json";
 import identifierFixture from "../../../../fixtures/local-edit-journal/version-5-identifier-text-group.json";
 import inFlightFixture from "../../../../fixtures/local-edit-journal/version-5-in-flight-group.json";
 import sentFixture from "../../../../fixtures/local-edit-journal/version-5-sent-group.json";
 import unsentFixture from "../../../../fixtures/local-edit-journal/version-5-unsent-group.json";
+import type { GetChapterResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
-  OWNER, PROJECT, SESSION, closeTrackedDatabases, createBrowserScenario, deleteJournal, jsonResponse, requestHeaders,
-  requestResult, requireEditorReady, requireRequestBody, trackDatabase,
+  BLOCK, OWNER, PROJECT, SESSION, closeTrackedDatabases, createBrowserScenario, deleteJournal,
+  jsonResponse, requestHeaders, requestResult, requireEditorReady, requireRequestBody, trackDatabase,
 } from "./scenario.ts";
 
 // The Journals of these tests are rows that the released client of `main` `54525595` wrote at version 5 (ADR 0099
@@ -30,6 +33,11 @@ const OUTCOME = `GET /api/v1/projects/${PROJECT}/manuscript/author-edit-outcomes
 const V2 = "storyos.command.apply-author-edit.request.v2";
 const NEW_SESSION = "018f0000-0000-7001-8000-0000000000e1";
 const OTHER_SESSION = "018f0000-0000-7001-8000-0000000000e2";
+const LATER_REVISION = "018f0000-0000-7001-8000-0000000000e3";
+const LATER_BLOCK = "018f0000-0000-7001-8000-0000000000e4";
+// The partition of the Session that another tab created. No test reads it.
+const OTHER_PARTITION = "018f0000-0000-7001-8000-0000000000e5";
+const NEW_SESSION_READ = `GET /api/v1/projects/${PROJECT}/editor-sessions/${NEW_SESSION}`;
 
 const databases = new Set<IDBDatabase>();
 const scenario = createBrowserScenario();
@@ -60,12 +68,19 @@ function rows(fixture: Fixture, store: string) {
 
 /**
  * A fake Server that serves only the `allowed` requests of a test and throws on each other request. It serves the read
- * and the creation of an Editor Session, a Challenge, an Author Edit, and an outcome Query, and records each request.
+ * and the creation of an Editor Session, a Command Challenge, an Author Edit, and an outcome Query, and records each
+ * request. A read of a created Editor Session gives the response of its creation.
  * It holds the Author Edit response. It holds the outcome Query response, or it answers that the Server rejected the
- * command (`rejected`). A `missing` Session read answers 404.
+ * command (`rejected`). A `missing` Session read answers 404. With `later`, each creation gives a new Editor Session, first
+ * `NEW_SESSION` and then `OTHER_SESSION`, on the Revision of `later`, as after a save of another tab. A request in
+ * `refused` answers 404.
  */
-function fakeServer(allowed: readonly string[], answers: { outcome?: "rejected"; session?: "missing" } = {}) {
+function fakeServer(allowed: readonly string[],
+  answers: { outcome?: "rejected"; session?: "missing"; later?: GetChapterResponse } = {}) {
+  let creations = 0;
+  const created = new Map<string, unknown>();
   const requests: string[] = [];
+  const refused = new Set<string>();
   const nonces: (string | null)[] = [];
   const challenges: Record<string, unknown>[] = [];
   const edits: { body: Record<string, unknown>; key: string | null }[] = [];
@@ -73,14 +88,31 @@ function fakeServer(allowed: readonly string[], answers: { outcome?: "rejected";
     const name = `${init?.method ?? "GET"} ${new URL(input instanceof Request ? input.url : input).pathname}`;
     requests.push(name);
     if (!allowed.includes(name)) throw new Error(`unexpected request: ${name}`);
+    if (refused.has(name)) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404);
+    }
     if (name === SESSION_READ) {
       return answers.session === "missing"
         ? jsonResponse({ schema_id: "storyos.problem.v1", code: "resource_unavailable", message: "Not found." }, 404)
         : jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === SESSION_CREATE) {
-      return jsonResponse({ ...scenario.session,
-        editor_session: { ...scenario.session.editor_session, editor_session_id: NEW_SESSION } });
+      creations += 1;
+      const editor_session = { ...scenario.session.editor_session,
+        editor_session_id: answers.later !== undefined && creations > 1 ? OTHER_SESSION : NEW_SESSION };
+      const revision = answers.later?.chapter.current_revision;
+      const response = revision === undefined ? { ...scenario.session, editor_session } : { ...scenario.session,
+        editor_session, base_snapshot: { ...scenario.session.base_snapshot, snapshot_id: crypto.randomUUID(),
+          project_activity_position: answers.later!.project_activity_position,
+          authoritative_head_revision_id: revision.revision_id, materialized_revision: revision,
+          materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
+            value_hex_lowercase: await sha256(revision.body) } } };
+      created.set(editor_session.editor_session_id, response);
+      return jsonResponse(response);
+    }
+    const read = created.get(name.slice(`GET /api/v1/projects/${PROJECT}/editor-sessions/`.length));
+    if (name.startsWith("GET ") && read !== undefined) {
+      return jsonResponse({ ...read as object, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === CHALLENGE) {
       challenges.push(requireRequestBody(init));
@@ -93,18 +125,30 @@ function fakeServer(allowed: readonly string[], answers: { outcome?: "rejected";
     }
     nonces.push(requestHeaders(init).get("x-storyos-anti-forgery"));
     return answers.outcome === "rejected" ? jsonResponse({
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       correlation_id: "018f0000-0000-7001-8000-000000000082", project_scope: scenario.project.project_scope,
       outcome: { outcome_kind: "rejected", reason: "challenge_expired_unconsumed" } }) : new Promise<Response>(() => {});
   };
-  return { fetchImpl, requests, challenges, edits, nonces };
+  return { fetchImpl, requests, refused, challenges, edits, nonces };
 }
 
+async function sha256(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** The Chapter after a save of another tab: a later Revision with a second block. */
+const LATER_CHAPTER: GetChapterResponse = { ...scenario.chapter, project_activity_position: "1",
+  chapter: { ...scenario.chapter.chapter, current_revision: { revision_id: LATER_REVISION, body: "Base\nLater",
+    blocks: [{ manuscript_block_id: BLOCK, block_kind: "paragraph", text: "Base" },
+      { manuscript_block_id: LATER_BLOCK, block_kind: "paragraph", text: "Later" }] } } };
+
 /** Opens the editor. A null `active` is a tab with no Editor Session in its session storage. */
-async function openStored(server: ReturnType<typeof fakeServer>, active: string | null = SESSION) {
+async function openStored(server: ReturnType<typeof fakeServer>, active: string | null = SESSION,
+  chapter = scenario.chapter) {
   if (active !== null) sessionStorage.setItem(ACTIVE_KEY, active);
   const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-    chapter: scenario.chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+    chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
   requireEditorReady(state);
   trackDatabase(state.database, databases);
   return state;
@@ -183,6 +227,23 @@ it("opens the Session of the version 5 rows in a tab that has no stored Editor S
     .toEqual({ body: "Base!?", requests: [SESSION_READ] });
 });
 
+/** Holds the lock of `editorSessionId` in another page, as an open tab that has that Session. It gives the end. */
+async function holdInOtherPage(editorSessionId: string): Promise<() => void> {
+  const frame = document.createElement("iframe");
+  document.body.append(frame);
+  let release!: () => void;
+  await new Promise<void>((held) => {
+    void frame.contentWindow!.navigator.locks.request(editorSessionLock(editorSessionId), () => {
+      held();
+      return new Promise<void>((done) => { release = done; });
+    });
+  });
+  return () => {
+    release();
+    frame.remove();
+  };
+}
+
 /** `fixture` with the Editor Session `OTHER_SESSION`. The rows of this Session are not read, so no digest is checked. */
 function otherSession(fixture: Fixture): Fixture {
   return JSON.parse(JSON.stringify(fixture).replaceAll(SESSION, OTHER_SESSION)) as Fixture;
@@ -195,16 +256,7 @@ it.each([["no stored Editor Session", null], ["the same stored Editor Session", 
     stored) => {
   const fixture = otherSession(unsentFixture as Fixture);
   await restore(fixture);
-  const lock = editorSessionLock(OTHER_SESSION);
-  const frame = document.createElement("iframe");
-  document.body.append(frame);
-  let release!: () => void;
-  await new Promise<void>((held) => {
-    void frame.contentWindow!.navigator.locks.request(lock, () => {
-      held();
-      return new Promise<void>((done) => { release = done; });
-    });
-  });
+  const release = await holdInOtherPage(OTHER_SESSION);
   const server = fakeServer([CHALLENGE, SESSION_CREATE]);
   try {
     const state = await openStored(server, stored);
@@ -213,7 +265,6 @@ it.each([["no stored Editor Session", null], ["the same stored Editor Session", 
       requests: server.requests }).toEqual({ body: "Base", session: NEW_SESSION, requests: [CHALLENGE, SESSION_CREATE] });
   } finally {
     release();
-    frame.remove();
   }
 });
 
@@ -241,6 +292,171 @@ it("puts the text of the Session of the version 5 rows in local recovery when th
   expect({ body: (await openStored(stored)).openedProjection.body, requests: stored.requests })
     .toEqual({ body: "Base!?", requests: [SESSION_READ] });
 });
+
+it("puts the text of the stored Session of the version 5 rows in local recovery when the Server refuses its read",
+  async () => {
+    // The session storage of the tab names the Session of the version 5 rows, as at a reload after the upgrade.
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([SESSION_READ, CHALLENGE, SESSION_CREATE], { session: "missing" });
+
+    const state = await openStored(server);
+
+    expect({ body: state.openedProjection.body, session: state.session.editor_session.editor_session_id,
+      active: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ body: "Base",
+      session: NEW_SESSION, active: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, SESSION_CREATE] });
+    expect(await recoveryItems(state, 1)).toEqual([["正文修改", "Base!?"]]);
+  });
+
+it("puts the text of the version 5 rows in one Author Edit when a second tab opens after the catch-up of the first",
+  async () => {
+    // Another tab saved the Chapter, so the Session of the version 5 rows has an earlier base. Tab 1 claims that
+    // Session and puts its text on the later Revision in a new Editor Session.
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, AUTHOR_EDIT], { later: LATER_CHAPTER });
+    const first = await openStored(server, null, LATER_CHAPTER);
+    expect({ body: first.openedProjection.body, session: first.session.editor_session.editor_session_id,
+      requests: server.requests }).toEqual({ body: "Base!?\nLater", session: NEW_SESSION,
+      requests: [CHALLENGE, SESSION_READ, SESSION_CREATE] });
+
+    // Tab 2 is a new tab in another page. Tab 1 keeps its Session open, so an iframe holds the lock of that Session
+    // in the place of the page of tab 1. Tab 2 does not claim the Session whose text tab 1 copied, and it does not
+    // claim the Session of tab 1.
+    releaseEditorSession(NEW_SESSION);
+    const release = await holdInOtherPage(NEW_SESSION);
+    try {
+      sessionStorage.removeItem(ACTIVE_KEY);
+      const second = await openStored(server, null, LATER_CHAPTER);
+      expect({ body: second.openedProjection.body, session: second.session.editor_session.editor_session_id,
+        requests: server.requests }).toEqual({ body: "Base\nLater", session: OTHER_SESSION,
+        requests: [CHALLENGE, SESSION_READ, SESSION_CREATE, CHALLENGE, SESSION_CREATE] });
+      await expect(submitOnePendingAuthorEdit({ workspace: second, baseUrl: location.origin,
+        fetchImpl: server.fetchImpl, cryptoImpl: crypto })).rejects.toThrow("One pending Author Edit is required");
+    } finally {
+      release();
+    }
+
+    void submitOnePendingAuthorEdit({ workspace: first, baseUrl: location.origin, fetchImpl: server.fetchImpl,
+      cryptoImpl: crypto });
+    await expect.poll(() => server.edits.length).toBe(1);
+    expect({ requests: server.requests, editor: server.edits[0]!.body.editor_session_id }).toEqual({
+      requests: [CHALLENGE, SESSION_READ, SESSION_CREATE, CHALLENGE, SESSION_CREATE, CHALLENGE, AUTHOR_EDIT],
+      editor: NEW_SESSION });
+  });
+
+// After the catch-up, a tab can still have the source Session in its session storage: a duplicated tab, or the same tab
+// after a stop before it stored the new Session.
+it("goes on in the new Session when the session storage still names the Session whose text a catch-up copied",
+  async () => {
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ], { later: LATER_CHAPTER });
+    const first = await openStored(server, null, LATER_CHAPTER);
+    expect({ body: first.openedProjection.body, session: first.session.editor_session.editor_session_id,
+      requests: [...server.requests] }).toEqual({ body: "Base!?\nLater", session: NEW_SESSION,
+      requests: [CHALLENGE, SESSION_READ, SESSION_CREATE] });
+    closeTrackedDatabases(databases);
+
+    const again = await openStored(server, SESSION, LATER_CHAPTER);
+
+    expect({ body: again.openedProjection.body, session: again.session.editor_session.editor_session_id,
+      active: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ body: "Base!?\nLater",
+      session: NEW_SESSION, active: NEW_SESSION,
+      requests: [CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ] });
+  });
+
+// A tab with no stored Session claimed the Session of the version 5 rows and copied its text to a new Session. The page
+// stopped after the transfer and before the tab stored the new Session, so the reload has no stored Session.
+it("opens the new Session in a tab with no stored Session after a stop before the tab stored the new Session",
+  async () => {
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ], { later: LATER_CHAPTER });
+    const first = await openStored(server, null, LATER_CHAPTER);
+    expect({ body: first.openedProjection.body, session: first.session.editor_session.editor_session_id,
+      requests: [...server.requests] }).toEqual({ body: "Base!?\nLater", session: NEW_SESSION,
+      requests: [CHALLENGE, SESSION_READ, SESSION_CREATE] });
+    closeTrackedDatabases(databases);
+    sessionStorage.removeItem(ACTIVE_KEY);
+    releaseEarlierEditorSessions("");
+
+    const again = await openStored(server, null, LATER_CHAPTER);
+
+    expect({ body: again.openedProjection.body, session: again.session.editor_session.editor_session_id,
+      active: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ body: "Base!?\nLater",
+      session: NEW_SESSION, active: NEW_SESSION,
+      requests: [CHALLENGE, SESSION_READ, SESSION_CREATE, CHALLENGE, NEW_SESSION_READ] });
+  });
+
+// The same tab after that stop still has the source Session stored, and the Server refuses the read of the new Session.
+it("puts the text of the new Session in local recovery when the Server refuses its read after a transfer", async () => {
+  await restore(unsentFixture as Fixture);
+  const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ], { later: LATER_CHAPTER });
+  const first = await openStored(server, null, LATER_CHAPTER);
+  expect({ body: first.openedProjection.body, session: first.session.editor_session.editor_session_id,
+    requests: [...server.requests] }).toEqual({ body: "Base!?\nLater", session: NEW_SESSION,
+    requests: [CHALLENGE, SESSION_READ, SESSION_CREATE] });
+  closeTrackedDatabases(databases);
+  releaseEarlierEditorSessions("");
+  server.refused.add(NEW_SESSION_READ);
+
+  const again = await openStored(server, SESSION, LATER_CHAPTER);
+
+  expect({ body: again.openedProjection.body, session: again.session.editor_session.editor_session_id,
+    active: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ body: "Base\nLater",
+    session: OTHER_SESSION, active: OTHER_SESSION,
+    requests: [CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ, CHALLENGE, SESSION_CREATE] });
+  expect(await recoveryItems(again, 1)).toEqual([["正文修改", "Base!?\nLater"]]);
+  expect(await copiedRecoveryText(again)).toBe("Base!?\nLater");
+  });
+
+// A transfer record is only for a Session of the version 5 rows (#1965). A version 6 Session keeps its open.
+it("records no transfer for a Session that is not a Session of the version 5 rows", async () => {
+  await restore(unsentFixture as Fixture);
+  const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, NEW_SESSION_READ], { session: "missing" });
+  expect({ session: (await openStored(server, null)).session.editor_session.editor_session_id,
+    requests: [...server.requests] }).toEqual({ session: NEW_SESSION,
+    requests: [CHALLENGE, SESSION_READ, CHALLENGE, SESSION_CREATE] });
+  closeTrackedDatabases(databases);
+  const database = await requestResult(indexedDB.open(scenario.journalName));
+  try {
+    await recordSessionTransfer(database, NEW_SESSION, { editor_session_id: OTHER_SESSION,
+      journal_partition_id: OTHER_PARTITION });
+  } finally {
+    database.close();
+  }
+
+  const again = await openStored(server, NEW_SESSION);
+
+  expect({ session: again.session.editor_session.editor_session_id, requests: server.requests })
+    .toEqual({ session: NEW_SESSION, requests: [CHALLENGE, SESSION_READ, CHALLENGE, SESSION_CREATE, NEW_SESSION_READ] });
+});
+
+it("does not claim a Session of the version 5 rows that another tab transferred after this tab read the Sessions",
+  async () => {
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([CHALLENGE, SESSION_CREATE]);
+    // The lock request of this tab comes after another tab copied the text of the Session and ended its lock.
+    const request = navigator.locks.request.bind(navigator.locks);
+    const spy = vi.spyOn(navigator.locks, "request").mockImplementation(async (...args: unknown[]) => {
+      if (args[0] === editorSessionLock(SESSION)) {
+        const database = await requestResult(indexedDB.open(scenario.journalName));
+        try {
+          await recordSessionTransfer(database, SESSION, { editor_session_id: OTHER_SESSION,
+            journal_partition_id: OTHER_PARTITION });
+        } finally {
+          database.close();
+        }
+      }
+      return (request as (...values: unknown[]) => Promise<unknown>)(...args);
+    });
+    try {
+      const state = await openStored(server, null);
+
+      expect({ body: state.openedProjection.body, session: state.session.editor_session.editor_session_id,
+        requests: server.requests }).toEqual({ body: "Base", session: NEW_SESSION,
+        requests: [CHALLENGE, SESSION_CREATE] });
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
 // Two tabs opened the version 5 Journal at the same time, and both read the marker of the unsent group. The first tab
 // completed the new freeze before the second tab read the group, or after that read and before the write of the second
@@ -360,6 +576,26 @@ async function recoveryItems(state: Awaited<ReturnType<typeof openStored>>, coun
     await expect.poll(() => host.querySelectorAll("[data-local-recovery-text]").length).toBe(count);
     return [...host.querySelectorAll("article")].map((item) => [item.querySelector("p")?.textContent,
       item.querySelector("[data-local-recovery-text]")?.textContent]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+}
+
+/** Shows the local recovery panel of `state`, pushes the copy button of its one item, and returns the clipboard text. */
+async function copiedRecoveryText(state: Awaited<ReturnType<typeof openStored>>) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(LocalRecoveryPanel, { workspace: state, refreshKey: "0",
+      onContinue: async () => {} })));
+    await expect.poll(() => host.querySelectorAll("[data-local-recovery-copy]").length).toBe(1);
+    const shown = host.querySelector("[data-local-recovery-text]")!.textContent;
+    await updateClipboardPermission({ action: "grant" });
+    await userEvent.click(host.querySelector<HTMLButtonElement>("[data-local-recovery-copy]")!);
+    await expect.poll(() => navigator.clipboard.readText()).toBe(shown);
+    return navigator.clipboard.readText();
   } finally {
     await act(async () => root.unmount());
     host.remove();
