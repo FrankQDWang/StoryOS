@@ -840,7 +840,10 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
       proposalId: opened.proposal.proposal_id, fetchImpl,
       idempotencyKey: id(`${ns}0352`), antiForgery: nonce, request: firstRequest,
     });
-    assert.deepEqual(firstAccepted, durableResponse);
+    if (durableResponse === undefined) throw new Error("expected the lost response");
+    // A replay gives no Editor Session state (ADR 0106 section 3).
+    const { editor_session_state: _lostState, ...durableReplay } = durableResponse;
+    assert.deepEqual(firstAccepted, durableReplay);
     assert.deepEqual(await retainedHistory(), originalHistory);
     assert.equal(firstAccepted.effect.kind, "applied");
     const afterFirst = await getProposal({

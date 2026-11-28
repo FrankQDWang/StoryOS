@@ -95,7 +95,9 @@ test("A repeated Author Edit Challenge request across a rate policy revision ret
     const edit = { baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery: original.nonce, request };
     const applied = await applyAuthorEdit(edit);
     assert.equal(applied.effect.kind, "authoritative_applied");
-    assert.deepEqual(await applyAuthorEdit(edit), applied);
+    // A replay gives no Editor Session state (ADR 0106 section 3).
+    const { editor_session_state: _firstState, ...replayed } = applied;
+    assert.deepEqual(await applyAuthorEdit(edit), replayed);
     assert.deepEqual(await state(), { issued: 1, admissions: 1, consumed: 1 });
 
     const expiredRequest = await authorEditRequest(started, context, { kind: "replace_selection", from: 5, to: 5, text: "!" },
