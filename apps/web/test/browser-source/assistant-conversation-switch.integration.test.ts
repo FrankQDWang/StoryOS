@@ -8,6 +8,7 @@ import conversationFixture from "../../../../generated/golden-wire/storyos-publi
 import listFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-project-conversations.json";
 import proposalFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-proposal.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import treeFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
 import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
@@ -21,6 +22,7 @@ const [A, B, C, P] = [id("e61"), id("e62"), id("e63"), id("e64")];
 const [PROPOSAL_1, PROPOSAL_2] = [id("e71"), id("e72")];
 const LOADING = "正在读取结果…";
 const OPEN_FAILED = "无法打开这段对话，请稍后再试。";
+const NEXT_IS_NEW = "下一条消息将开始新对话。";
 
 type StoredRun = { runId: string; conversationId: string; message: string; decision?: object };
 const run = (suffix: string, conversationId: string, message: string): StoredRun =>
@@ -122,6 +124,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
     answer === null ? [] : [[route, answer]]));
   const unexpected: string[] = [];
   const requests: Request[] = [];
+  const bodies: Record<string, unknown> = {};
   const holds = new Map<string, { promise: Promise<void>; release: () => void }>();
   const hold = (...held: string[]) => {
     for (const request of held) {
@@ -143,6 +146,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
     const count = `${request}#${requests.filter((entry) => entry.request === request).length + 1}`;
     const key = holds.has(request) ? request : holds.has(count) ? count : undefined;
     const holding = key === undefined ? undefined : holds.get(key);
+    if (typeof init?.body === "string") bodies[request] = JSON.parse(init.body);
     const entry: Request = { request, ...key === undefined ? {} : { hold: key }, held: holding !== undefined,
       answered: false };
     requests.push(entry);
@@ -188,7 +192,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
   };
   const button = (selector: string) => host.querySelector<HTMLButtonElement>(selector)!;
   return {
-    unexpected, opened, hold, click,
+    unexpected, opened, hold, click, bodies,
     /** Runs the next scheduled read of the current Run. */
     poll: async () => {
       await act(async () => { scheduled.shift()!(); });
@@ -223,6 +227,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
     shownRunId: () => host.querySelector("[data-assistant-current-run]") === null ? null
       : host.querySelector("#writing-assistant-panel")!.getAttribute("data-assistant-run-id"),
     status: () => host.querySelector("[role=status]")?.textContent ?? null,
+    lines: () => [...host.querySelectorAll(".assistant-status")].map((line) => line.textContent),
     controls: () => ({ send: !button("button.send-button").disabled,
       newConversation: !button("[data-assistant-new-conversation]").disabled,
       history: !button("[data-assistant-conversation-history]").disabled }),
@@ -333,6 +338,12 @@ it.each([
 const OTHER_CONVERSATION = () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNS[1]!.runId,
   conversation_id: B, status: "completed", results: [] });
 
+// A send after the failure: the fake answers the steps of a send up to the AgentRun command, which it holds.
+const SEND = { "GET /manuscript/tree": () => jsonResponse({ ...treeFixture, project_scope: scope,
+  snapshot: { ...treeFixture.snapshot, project_scope: scope } }),
+"POST /anti-forgery-challenges": () => jsonResponse(challengeFixture),
+"POST /agent-runs": () => jsonResponse({ code: "not_reached" }, 500) };
+
 it.each([
   ["a failed Conversation read", "", { [A_READ]: SERVICE_UNAVAILABLE, [A1]: null, [A2]: null, [A3]: null,
     [A3_SOURCES]: null }, []],
@@ -342,19 +353,40 @@ it.each([
   ["a failed Run read", " after the newest Run", { [A2]: SERVICE_UNAVAILABLE }, [A2]],
   ["a Run read of another Conversation", " before the newest Run", { [A2]: OTHER_CONVERSATION, [A3_SOURCES]: null }, [A3]],
   ["a Run read of another Conversation", " after the newest Run", { [A2]: OTHER_CONVERSATION }, [A2]],
-] as const)("gives the sentence of today for %s%s, and the panel shows the Conversation of before the selection",
+] as const)("gives the sentence of today for %s%s, shows no Conversation, and the next message starts a new one",
   async (_, __, answers, late) => {
-    const panel = await openPanel({ conversations: [A], answers });
+    // The coordinator decided on #1966 that a failed open sets the new Conversation choice.
+    const panel = await openPanel({ conversations: [A], answers: { ...answers, ...SEND } });
     await panel.type("Next request");
-    panel.hold(...late);
+    panel.hold(...late, "POST /agent-runs");
     await panel.select(A);
     await panel.release(...late);
+    const failed = { status: panel.status(), shown: panel.exchanges(), lines: panel.lines(),
+      controls: panel.controls() };
+    await panel.click("button.send-button");
 
-    expect({ status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(), controls: panel.controls(),
+    const request = panel.bodies["POST /agent-runs"] as { create_agent_run_input: { conversation: unknown } };
+    expect({ failed, conversation: request.create_agent_run_input.conversation,
+      earlierShown: panel.exchanges().flat().includes(STORED.message),
       unexpected: panel.unexpected, unused: panel.unused() }).toEqual({
-      status: OPEN_FAILED, shown: B_SHOWN, runId: STORED.runId,
-      controls: { send: true, newConversation: true, history: true }, unexpected: [], unused: [] });
+      failed: { status: OPEN_FAILED, shown: [], lines: [NEXT_IS_NEW],
+        controls: { send: true, newConversation: false, history: true } },
+      conversation: { kind: "new" }, earlierShown: false, unexpected: [], unused: [] });
   });
+
+it("changes nothing when the read of a selection fails after a later selection", async () => {
+  const panel = await openPanel({ conversations: [A, C], answers: { [A_READ]: SERVICE_UNAVAILABLE, [A1]: null,
+    [A2]: null, [A3]: null, [A3_SOURCES]: null }, held: [A_READ] });
+  await panel.select(A);
+  await panel.select(C);
+  const selected = { shown: panel.exchanges(), runId: panel.shownRunId() };
+  await panel.release(A_READ);
+
+  expect({ selected, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+    lines: panel.lines(), unexpected: panel.unexpected, unused: panel.unused() }).toEqual({
+    selected: { shown: C_SHOWN, runId: RUNS[3]!.runId }, status: null, shown: C_SHOWN, runId: RUNS[3]!.runId,
+    lines: [], unexpected: [], unused: [] });
+});
 
 it.each([
   ["fails", SERVICE_UNAVAILABLE],

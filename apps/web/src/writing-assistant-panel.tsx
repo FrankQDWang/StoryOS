@@ -338,6 +338,8 @@ export function WritingAssistantPanel({
   const [storedReadDone, setStoredReadDone] = useState(reference === undefined);
   const requestedOpened = useRef(false);
   const [opening, setOpening] = useState<OpeningConversation>();
+  // A failed open leaves no Conversation on the panel, so the next message starts a new one.
+  const [openFailed, setOpenFailed] = useState(false);
   // The number of the last Conversation selection. A later selection wins.
   const openSequence = useRef(0);
   // A send waits for the Retry-After of a Command Challenge rate limit. Leaving the Project ends the wait (#1679).
@@ -529,7 +531,8 @@ export function WritingAssistantPanel({
    * exchanges of no other Conversation: the author messages come with the Conversation read, and the result of each
    * Run with its Run read. The Run reads go together. The newest Run is the current exchange. When all Run reads
    * answered, the panel records the Conversation as the current request.
-   * A failure shows the panel as it was before the selection. The answers of an earlier selection change nothing.
+   * A failure shows no Conversation, and the next message starts a new one (#1966). The answers of an earlier
+   * selection change nothing.
    */
   const openConversation = async (conversationId: string, failure: string) => {
     if (context === undefined) return;
@@ -541,6 +544,7 @@ export function WritingAssistantPanel({
     const latest = () => sequence === openSequence.current;
     setListOpen(false);
     setStatus("");
+    setOpenFailed(false);
     setOpening({ sequence, conversationId, runs: {} });
     try {
       const options = { scope: context.scope, baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, conversationId };
@@ -574,7 +578,13 @@ export function WritingAssistantPanel({
       void showProposals(next, newest.run).catch(() => {});
     } catch {
       if (!latest()) return;
+      // The record of the earlier Conversation goes, so that no message goes into a Conversation off the screen.
+      inspectSequence.current += 1;
+      globalThis.sessionStorage?.removeItem(storageKey(context.scope));
       setOpening(undefined);
+      setReference(undefined);
+      setRun(undefined);
+      setOpenFailed(true);
       setStatus(failure);
     }
   };
@@ -875,7 +885,7 @@ export function WritingAssistantPanel({
               {resultUnavailable && opening === undefined ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
             </section>
           )}
-          {reference?.conversationChoice === "new" && opening === undefined
+          {(reference?.conversationChoice === "new" || (reference === undefined && openFailed)) && opening === undefined
             ? <p className="assistant-status">下一条消息将开始新对话。</p> : null}
           {status.length > 0 ? <p role="status">{status}</p> : null}
         </div>
