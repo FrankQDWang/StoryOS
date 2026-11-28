@@ -31,8 +31,10 @@ impl PersistInput for StructuralInput {
 /// The Editor Session base Snapshots that move to the new canonical Snapshot.
 pub(super) enum SessionBaseRebind<'a> {
     Keep,
-    /// The base of each Editor Session of the Project moves to the current head of the Chapter.
-    EachSession {
+    /// The base of each Editor Session on the removed Chapter moves to the current head of the
+    /// Chapter.
+    SessionsOnRemovedChapter {
+        removed_chapter_id: &'a str,
         chapter_id: &'a str,
     },
     /// The base of the Editor Session moves to the Chapter Revision. A missing session base is a
@@ -146,7 +148,10 @@ pub(super) async fn persist_structural_records(
     .map_err(unavailable)?;
     match records.session_base {
         SessionBaseRebind::Keep => {}
-        SessionBaseRebind::EachSession { chapter_id } => {
+        SessionBaseRebind::SessionsOnRemovedChapter {
+            removed_chapter_id,
+            chapter_id,
+        } => {
             let head = client
                 .query_opt(
                     "SELECT head.current_revision_id::text
@@ -167,6 +172,7 @@ pub(super) async fn persist_structural_records(
             update_each_session_base(
                 client,
                 scope,
+                removed_chapter_id,
                 chapter_id,
                 &head,
                 records.project_activity_position,

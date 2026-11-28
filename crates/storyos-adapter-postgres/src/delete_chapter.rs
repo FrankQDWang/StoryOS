@@ -180,7 +180,9 @@ impl ProjectCommand for DeleteChapterInput {
                 resulting_tree_revision: applied.tree_revision,
                 identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
                 current_chapter,
-                session_base: SessionBase::RebindToCurrentChapter,
+                session_base: SessionBase::RebindFromRemovedChapter(
+                    self.chapter_id.as_ref().to_owned(),
+                ),
                 activity: serde_json::json!({
                     "chapter_id": self.chapter_id.as_ref(),
                     "volume_id": volume_id,

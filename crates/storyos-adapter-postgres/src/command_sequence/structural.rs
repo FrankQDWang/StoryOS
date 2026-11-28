@@ -37,7 +37,9 @@ pub(crate) enum CurrentChapterChange {
 /// Whether the Editor Session base Snapshots move to the new canonical Snapshot.
 pub(crate) enum SessionBase {
     Keep,
-    RebindToCurrentChapter,
+    /// The base of each Editor Session on the removed Chapter moves to the Current Chapter. The
+    /// base of each other Editor Session stays (ADR 0107: each Editor Session writes).
+    RebindFromRemovedChapter(String),
 }
 
 /// The applied writes that one structural command returns. The profile writes every authority record.
@@ -105,10 +107,13 @@ impl SettlementProfile for Structural {
             ),
         };
         let session_base = match (&write.session_base, resulting_current) {
-            (SessionBase::RebindToCurrentChapter, Some(chapter_id)) => {
-                SessionBaseRebind::EachSession { chapter_id }
+            (SessionBase::RebindFromRemovedChapter(removed_chapter_id), Some(chapter_id)) => {
+                SessionBaseRebind::SessionsOnRemovedChapter {
+                    removed_chapter_id,
+                    chapter_id,
+                }
             }
-            (SessionBase::Keep, _) | (SessionBase::RebindToCurrentChapter, None) => {
+            (SessionBase::Keep, _) | (SessionBase::RebindFromRemovedChapter(_), None) => {
                 SessionBaseRebind::Keep
             }
         };

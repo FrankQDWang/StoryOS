@@ -111,7 +111,7 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   const [chapterAId = "", chapterBId = "", chapterCId = ""] = story.chapterIds;
   const session = await story.openEditorSession();
   assert.equal(session.base_snapshot.chapter_id, chapterAId);
-  // A second Editor Session of the Project (ADR 0107). A deletion that changes the Current Chapter moves each base.
+  // A second Editor Session of the Project (ADR 0107). A deletion of the Chapter of a base moves that base.
   const other = await story.openEditorSession();
 
   const removedB = (await story.send("deleteChapter", deleteChapterInput(story, chapterBId, "5"))).response;
