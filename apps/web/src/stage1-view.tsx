@@ -1132,7 +1132,8 @@ function ProjectEditorView({
           // An applied Acceptance whose response has the Editor Session state shows its Revision with no read
           // (ADR 0106 section 3). A decision with no settled response opens the Project with each check of the first
           // open.
-          const installed = accepted === undefined ? undefined : await acceptedProjectState(state, accepted);
+          const installed = accepted === undefined ? undefined : await acceptedProjectState(state, accepted,
+            { baseUrl, fetchImpl });
           onReopened(installed ?? await (settled ? reopen() : openControlledProject({ baseUrl,
             projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
         }}
