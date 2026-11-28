@@ -413,9 +413,11 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
         const base = stored.session.base_snapshot;
         if (keep) return { chapterId: base.chapter_id, editorSessionId: start.active };
-        // A tab with no text to send opens the Current Chapter that the other tab set.
+        // A tab with no text to send opens the Current Chapter that the other tab set. Open work that a catch-up cannot
+        // take, as a group with an unknown result, also goes back to its Chapter, so its recovery shows its text there
+        // (#1972). The recovery does not send that work again.
         const text = await earlierBaseText(stored, base.chapter_id, shown);
-        return text === undefined || paragraphsEqual(text.shown, text.base) ? undefined
+        return text !== undefined && paragraphsEqual(text.shown, text.base) ? undefined
           : { chapterId: base.chapter_id, editorSessionId: start.active };
       } catch {
         // An unreadable Journal keeps the stored Session, so its recovery runs.

@@ -35,6 +35,8 @@ const PROJECT_READ = `GET /api/v1/projects/${PROJECT}`;
 const CHAPTER_B_READ = `GET /api/v1/projects/${PROJECT}/chapters/${CHAPTER_B}`;
 const CREATION = `POST /api/v1/projects/${PROJECT}/editor-sessions`;
 const CHALLENGE = `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`;
+const OUTCOME = `GET /api/v1/projects/${PROJECT}/manuscript/author-edit-outcomes/`;
+const SWITCH = `PUT /api/v1/projects/${PROJECT}/current-chapter`;
 const scenario = createBrowserScenario();
 
 const APPLIED_REVISION = "018f0000-0000-7001-8000-000000000a66";
@@ -78,7 +80,7 @@ function gate() {
  * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
  * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them.
  * Each Set Current Chapter first runs the next action of `beforeSwitch`, and each Project read the next action of
- * `beforeProjectRead`. It records each request and
+ * `beforeProjectRead`. An outcome Query of an Author Edit gets no response, so its result stays unknown. It records each request and
  * the body of each Author Edit, and it records and throws on each request that it does not serve.
  */
 function fakeServer(applies?: Revision | Revision[]) {
@@ -251,6 +253,7 @@ function fakeServer(applies?: Revision | Revision[]) {
         prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [], authoritative_revision_ids: [],
         authoritative_commit_ids: [], author_action_sequence: null } });
     }
+    if (route.startsWith(`GET ${project}/manuscript/author-edit-outcomes/`)) return new Promise<Response>(() => {});
     unexpected.push(route);
     throw new Error(`unexpected request: ${route}`);
   };
@@ -875,9 +878,10 @@ it("opens the Chapter that another tab set current at a load when the tab has no
 
 /**
  * Types "无人" in Chapter A and starts its save. `held` holds the Command Challenge of the save, or else the save, and
- * the page closes. Then another tab sets Chapter B current. The request log stays, so each count covers each page.
+ * the page closes. Then another tab sets Chapter B current, when `setB` is true. The request log stays, so each count
+ * covers each page.
  */
-async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, held: "challenge" | "edit") {
+async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, held: "challenge" | "edit", setB = true) {
   const { timers, fire } = manualTimers();
   await withView(server, async (root) => {
     await type(root, "无人");
@@ -889,7 +893,7 @@ async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, hel
       .toBe(held === "challenge" ? challenges + 1 : 1);
   }, timers);
   delete server.gates.challenge;
-  server.setCurrentInOtherTab(CHAPTER_B);
+  if (setB) server.setCurrentInOtherTab(CHAPTER_B);
 }
 
 // The real-Server journey `chapter_switch_load_challenge` proves the stored text after a new load.
@@ -931,24 +935,83 @@ it("puts the text of the group that never went to the Server on the later Revisi
     requests: 1, editors: [[NEW_SESSION, LATER_REVISION]], switches: 1, unexpected: [] });
 });
 
-it("does not send again a group with an unknown result when the page closed during its save and another tab set "
-  + "another Chapter current", async () => {
+// #1972: the load goes back to the Chapter of the unknown result, as for the text that never went to the Server (#1953),
+// and shows the recovery of today there: the text, and an outcome Query of the group. The page does not send the
+// group again.
+it("sets its Chapter current again at a load and shows the text of a group with an unknown result in the recovery "
+  + "state when the page closed during its save and another tab set another Chapter current", async () => {
   const server = fakeServer();
   await closeDuringSaveAndSetB(server, "edit");
+  const before = server.requests.length;
 
-  // The load keeps the recovery of the stored Editor Session, so the editor takes no input and has no save to start.
-  const { timers, fire, due } = manualTimers();
+  const { timers, fire } = manualTimers();
   const { databases, openSpy } = trackOpens();
   try {
     const loaded = await load(server);
     const view = mountStage1View(loaded.root, { ...loaded, writingTimers: timers });
     try {
-      await expect.poll(() => shown(loaded.root), { timeout: 10_000 }).toMatchObject({ editable: false,
-        save: "needs_attention", stored: SESSION });
-      expect(due()).toBe(0);
+      await expect.poll(() => shown(loaded.root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人",
+        editable: true, save: "saving", failure: "", stored: SESSION });
+      // The timer of the save runs. The save asks the outcome of the group and sends no Author Edit.
       fire();
-      expect({ edits: count(server, AUTHOR_EDIT), switches: server.switches, unexpected: server.unexpected })
-        .toEqual({ edits: 1, switches: [], unexpected: [] });
+      await expect.poll(() => server.requests.some((request) => request.startsWith(OUTCOME))).toBe(true);
+      expect(shown(loaded.root)).toEqual({ text: "雨夜。\n渡口。无人", editable: true, save: "saving", failure: "",
+        stored: SESSION });
+      const requests = server.requests.slice(before);
+      const outcome = requests.find((request) => request.startsWith(OUTCOME))!;
+      const at = (request: string) => requests.indexOf(request);
+      // The Set Current Chapter of the load comes before the open of Chapter A and its outcome Query.
+      expect(at(CHALLENGE) < at(SWITCH) && at(SWITCH) < at(`${CHAPTER_READ}/open-proposals`)
+        && at(SWITCH) < at(outcome)).toBe(true);
+      expect({ requests: [...requests].sort(), switches: server.switches, unexpected: server.unexpected }).toEqual({
+        requests: ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
+          `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`,
+          CHAPTER_B_READ, `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, CHALLENGE,
+          SWITCH, PROJECT_READ, "GET /api/v1/projects",
+          `${CHAPTER_READ}/open-proposals`, `${PROJECT_READ}/activity`, outcome].sort(),
+        switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, expected_target_revision_id: REVISION,
+          editor_session_id: SESSION }], unexpected: [] });
+    } finally {
+      view.unmount();
+    }
+  } finally {
+    closeTrackedDatabases(databases);
+    openSpy.mockRestore();
+  }
+});
+
+// #1972, the other order: another tab sets Chapter B current after the Project read of the load named Chapter A. The
+// load opens Chapter A, so it sets no Chapter current, and shows the same recovery.
+it("shows the text of a group with an unknown result in the recovery state when another tab sets another Chapter "
+  + "current after the Project read of the load", async () => {
+  const server = fakeServer();
+  await closeDuringSaveAndSetB(server, "edit", false);
+  const before = server.requests.length;
+  const chapter = gate();
+  server.gates.chapter = chapter.opened;
+
+  const { timers, fire } = manualTimers();
+  const { databases, openSpy } = trackOpens();
+  try {
+    const loading = load(server);
+    await expect.poll(() => server.requests.slice(before).includes(CHAPTER_READ)).toBe(true);
+    await expect.poll(() => server.requests.slice(before).includes(PROJECT_READ)).toBe(true);
+    server.setCurrentInOtherTab(CHAPTER_B);
+    chapter.open();
+    const loaded = await loading;
+    const view = mountStage1View(loaded.root, { ...loaded, writingTimers: timers });
+    try {
+      await expect.poll(() => shown(loaded.root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人",
+        editable: true, save: "saving", failure: "", stored: SESSION });
+      fire();
+      await expect.poll(() => server.requests.some((request) => request.startsWith(OUTCOME))).toBe(true);
+      const requests = server.requests.slice(before);
+      expect({ requests: [...requests].sort(), switches: server.switches, unexpected: server.unexpected }).toEqual({
+        requests: ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
+          `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`,
+          `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, `${CHAPTER_READ}/open-proposals`,
+          `${PROJECT_READ}/activity`, requests.find((request) => request.startsWith(OUTCOME))!].sort(),
+        switches: [], unexpected: [] });
     } finally {
       view.unmount();
     }
