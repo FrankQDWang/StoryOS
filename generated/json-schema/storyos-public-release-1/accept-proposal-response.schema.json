@@ -501,8 +501,7 @@
         {
           "type": "null"
         }
-      ],
-      "description": "Only the first run of an applied Acceptance that moved the base of its Editor Session has it."
+      ]
     },
     "effect": {
       "$ref": "#/$defs/AcceptProposalEffect"

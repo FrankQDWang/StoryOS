@@ -293,7 +293,8 @@ pub struct ApplyAuthorEditResponse {
     pub effect: ApplyAuthorEditEffect,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: String,
-    /// Only the first run of an applied edit has it. A replay and the outcome Query have none.
+    // Only the first run of an applied edit has it. A replay and the outcome Query have none. A doc comment would
+    // go into the generated client.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor_session_state: Option<EditorSessionState>,
 }

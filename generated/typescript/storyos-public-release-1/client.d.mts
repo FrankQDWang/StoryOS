@@ -255,11 +255,7 @@ export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_sele
 
 export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
 
-export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, 
-/**
- * Only the first run of an applied edit has it. A replay and the outcome Query have none.
- */
-editor_session_state?: EditorSessionState | null, };
+export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, editor_session_state?: EditorSessionState | null, };
 
 export type AcceptProposalInput = { proposal_revision_id: string, validation_receipt_id: string, selected_operation_ids: Array<string>, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -279,11 +275,7 @@ export type AcceptanceTargetResolution = "exact_base" | "block_replacement";
 
 export type AcceptProposalEffect = { "kind": "applied", author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, target_resolution: AcceptanceTargetResolution, } | { "kind": "invalid", reason: AcceptProposalInvalidReason, } | { "kind": "conflicted", reason: AcceptProposalConflictReason, } | { "kind": "refused", reason: AcceptProposalRefusalReason, };
 
-export type AcceptProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: AcceptanceReceipt, project: ControlledProject, effect: AcceptProposalEffect, 
-/**
- * Only the first run of an applied Acceptance that moved the base of its Editor Session has it.
- */
-editor_session_state?: EditorSessionState | null, };
+export type AcceptProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: AcceptanceReceipt, project: ControlledProject, effect: AcceptProposalEffect, editor_session_state?: EditorSessionState | null, };
 
 export type BoundedAuthorNote = { "kind": "omitted" } | { "kind": "present", text: string, };
 

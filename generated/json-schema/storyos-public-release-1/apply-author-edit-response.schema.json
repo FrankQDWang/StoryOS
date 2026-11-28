@@ -527,8 +527,7 @@
         {
           "type": "null"
         }
-      ],
-      "description": "Only the first run of an applied edit has it. A replay and the outcome Query have none."
+      ]
     },
     "effect": {
       "$ref": "#/$defs/ApplyAuthorEditEffect"

@@ -154,7 +154,7 @@ pub struct AcceptProposalResponse {
     pub receipt: AcceptanceReceipt,
     pub project: ControlledProject,
     pub effect: AcceptProposalEffect,
-    /// Only the first run of an applied Acceptance that moved the base of its Editor Session has it.
+    // Only the first run of an applied Acceptance that moved the base of its Editor Session has it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor_session_state: Option<crate::release1::EditorSessionState>,
 }
