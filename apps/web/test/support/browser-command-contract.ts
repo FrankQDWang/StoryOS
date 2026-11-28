@@ -37,12 +37,12 @@ export type TrustedInputResult = Readonly<{ kind: "trusted_input_applied" }>;
 export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_updated" }>;
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
 /**
- * `hold_set_current_chapter` holds the Set Current Chapter command requests in place of the Author Edit commands. With
- * `lose_set_current_chapter`, the Server gets the next two Set Current Chapter command requests, and their responses do
- * not arrive.
+ * `hold_set_current_chapter` holds the Set Current Chapter command requests in place of the Author Edit commands, and
+ * `hold_chapter_read` holds the Chapter reads (`GET .../chapters/<id>`). With `lose_set_current_chapter`, the Server
+ * gets the next two Set Current Chapter command requests, and their responses do not arrive.
  */
 export type AuthorEditSubmissionHoldRequest = Readonly<{
-  action: "hold" | "hold_set_current_chapter" | "lose_set_current_chapter" | "release";
+  action: "hold" | "hold_set_current_chapter" | "hold_chapter_read" | "lose_set_current_chapter" | "release";
 }>;
 type AuthorEditSubmissionHoldResult = Readonly<{
   kind: "author_edit_submission_hold_updated";
@@ -225,8 +225,8 @@ export function parseAuthorEditSubmissionHoldRequest(
 ): AuthorEditSubmissionHoldRequest {
   const request = exactObject(value, ["action"], "Author Edit submission hold request");
   const action = property(request, "action");
-  if (action !== "hold" && action !== "hold_set_current_chapter" && action !== "lose_set_current_chapter"
-    && action !== "release") {
+  if (action !== "hold" && action !== "hold_set_current_chapter" && action !== "hold_chapter_read"
+    && action !== "lose_set_current_chapter" && action !== "release") {
     throw new TypeError("Author Edit submission hold action is unsupported");
   }
   return { action };
