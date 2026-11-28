@@ -40,8 +40,9 @@ import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-sessio
 import { recoveryPrefix } from "./local-recovery-record.ts";
 import { groupNeverSent } from "./protected-transport-capsule.ts";
 import {
-  claimVersion5Session, freezeUnsentVersion5Groups, recordSessionTransfer, releaseVersion5Session,
-  retainVersion5PartitionText, sessionTransferTarget, upgradeVersion5Journal, type Version5Session,
+  claimVersion5Session, freezeUnsentVersion5Groups, listedVersion5Session, recordSessionTransfer,
+  releaseVersion5Session, retainVersion5PartitionText, sessionTransferTarget, upgradeVersion5Journal,
+  type Version5Session,
 } from "./journal-version-5-upgrade.ts";
 
 export {
@@ -364,6 +365,8 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       for (let target = active ? await sessionTransferTarget(database, active) : undefined; target !== undefined;
         target = active ? await sessionTransferTarget(database, active) : undefined) {
         active = await lockEditorSession(target) ? target : null;
+        // The target has the text, so its text goes to local recovery when it does not open.
+        claimed = active ? await listedVersion5Session(database, active) ?? claimed : claimed;
       }
       // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active

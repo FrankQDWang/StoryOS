@@ -185,8 +185,7 @@ export interface Version5Session { editor_session_id: string; journal_partition_
  */
 export async function claimVersion5Session(database: IDBDatabase, stored: string | null | undefined):
   Promise<{ active: string | null | undefined; claimed?: Version5Session }> {
-  const listed = async (editorSessionId: string) => (await version5Sessions(database))
-    .find((item) => item.editor_session_id === editorSessionId);
+  const listed = (editorSessionId: string) => listedVersion5Session(database, editorSessionId);
   const sessions = await version5Sessions(database);
   if (stored) {
     if (!sessions.some((item) => item.editor_session_id === stored)) return { active: stored };
@@ -201,6 +200,12 @@ export async function claimVersion5Session(database: IDBDatabase, stored: string
     releaseEditorSession(editorSessionId);
   }
   return { active: stored };
+}
+
+/** The Session `editorSessionId` in the Sessions of the version 5 rows, if it is one of them. */
+export async function listedVersion5Session(database: IDBDatabase, editorSessionId: string)
+  : Promise<Version5Session | undefined> {
+  return (await version5Sessions(database)).find((item) => item.editor_session_id === editorSessionId);
 }
 
 async function version5Sessions(database: IDBDatabase): Promise<Version5Session[]> {
