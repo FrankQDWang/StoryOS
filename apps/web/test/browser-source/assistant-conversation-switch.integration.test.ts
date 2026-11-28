@@ -1,5 +1,5 @@
 import { act, createElement } from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import cancelFixture from "../../../../generated/golden-wire/storyos-public-release-1/cancel-agent-run.json";
@@ -8,6 +8,8 @@ import conversationFixture from "../../../../generated/golden-wire/storyos-publi
 import listFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-project-conversations.json";
 import proposalFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-proposal.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import steerFixture from "../../../../generated/golden-wire/storyos-public-release-1/steer-agent-run.json";
+import treeFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
 import { openPanelHost, seedProseRequest } from "./assistant-panel-harness.ts";
@@ -21,6 +23,7 @@ const [A, B, C, P] = [id("e61"), id("e62"), id("e63"), id("e64")];
 const [PROPOSAL_1, PROPOSAL_2] = [id("e71"), id("e72")];
 const LOADING = "正在读取结果…";
 const OPEN_FAILED = "无法打开这段对话，请稍后再试。";
+const NEXT_IS_NEW = "下一条消息将开始新对话。";
 
 type StoredRun = { runId: string; conversationId: string; message: string; decision?: object };
 const run = (suffix: string, conversationId: string, message: string): StoredRun =>
@@ -55,7 +58,7 @@ afterEach(async () => {
 });
 
 /** One request to the fake Server. It is answered when the panel read the whole response body. */
-type Request = { request: string; held: boolean; answered: boolean };
+type Request = { request: string; hold?: string; held: boolean; answered: boolean };
 
 type Setup = {
   conversations: readonly string[];
@@ -122,6 +125,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
     answer === null ? [] : [[route, answer]]));
   const unexpected: string[] = [];
   const requests: Request[] = [];
+  const bodies: Record<string, unknown> = {};
   const holds = new Map<string, { promise: Promise<void>; release: () => void }>();
   const hold = (...held: string[]) => {
     for (const request of held) {
@@ -139,8 +143,13 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
       unexpected.push(request);
       throw new Error(`Unexpected request ${request}`);
     }
-    const holding = holds.get(request);
-    const entry: Request = { request, held: holding !== undefined, answered: false };
+    // A hold of `<route>#<n>` holds only the request number n of the route.
+    const count = `${request}#${requests.filter((entry) => entry.request === request).length + 1}`;
+    const key = holds.has(request) ? request : holds.has(count) ? count : undefined;
+    const holding = key === undefined ? undefined : holds.get(key);
+    if (typeof init?.body === "string") bodies[request] = JSON.parse(init.body);
+    const entry: Request = { request, ...key === undefined ? {} : { hold: key }, held: holding !== undefined,
+      answered: false };
     requests.push(entry);
     await holding?.promise;
     const response = answer();
@@ -184,7 +193,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
   };
   const button = (selector: string) => host.querySelector<HTMLButtonElement>(selector)!;
   return {
-    unexpected, opened, hold, click,
+    unexpected, opened, hold, click, bodies,
     /** Runs the next scheduled read of the current Run. */
     poll: async () => {
       await act(async () => { scheduled.shift()!(); });
@@ -198,7 +207,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
       for (const request of held) {
         holds.get(request)!.release();
         holds.delete(request);
-        for (const entry of requests) if (entry.request === request) entry.held = false;
+        for (const entry of requests) if (entry.hold === request) entry.held = false;
       }
       await settle();
     },
@@ -206,6 +215,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
       await click("[data-assistant-conversation-history]");
       await click(`[data-assistant-conversation-entry="${conversationId}"]`);
     },
+    draft: () => host.querySelector("textarea")!.value,
     type: async (text: string) => {
       host.querySelector("textarea")!.focus();
       await applyTrustedInput({ operation: "insert_text", text });
@@ -219,11 +229,14 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
     shownRunId: () => host.querySelector("[data-assistant-current-run]") === null ? null
       : host.querySelector("#writing-assistant-panel")!.getAttribute("data-assistant-run-id"),
     status: () => host.querySelector("[role=status]")?.textContent ?? null,
+    lines: () => [...host.querySelectorAll(".assistant-status")].map((line) => line.textContent),
     controls: () => ({ send: !button("button.send-button").disabled,
       newConversation: !button("[data-assistant-new-conversation]").disabled,
       history: !button("[data-assistant-conversation-history]").disabled }),
   };
 }
+
+type Panel = Awaited<ReturnType<typeof openPanel>>;
 
 const B_SHOWN = [["B first", "Answer to B first"]];
 const A_SHOWN = [["A first", "Answer to A first"], ["A second", "Answer to A second"], ["A third", "Answer to A third"]];
@@ -329,6 +342,12 @@ it.each([
 const OTHER_CONVERSATION = () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNS[1]!.runId,
   conversation_id: B, status: "completed", results: [] });
 
+// A send after the failure: the fake answers the steps of a send up to the AgentRun command, which it holds.
+const SEND = { "GET /manuscript/tree": () => jsonResponse({ ...treeFixture, project_scope: scope,
+  snapshot: { ...treeFixture.snapshot, project_scope: scope } }),
+"POST /anti-forgery-challenges": () => jsonResponse(challengeFixture),
+"POST /agent-runs": () => jsonResponse({ code: "not_reached" }, 500) };
+
 it.each([
   ["a failed Conversation read", "", { [A_READ]: SERVICE_UNAVAILABLE, [A1]: null, [A2]: null, [A3]: null,
     [A3_SOURCES]: null }, []],
@@ -338,19 +357,93 @@ it.each([
   ["a failed Run read", " after the newest Run", { [A2]: SERVICE_UNAVAILABLE }, [A2]],
   ["a Run read of another Conversation", " before the newest Run", { [A2]: OTHER_CONVERSATION, [A3_SOURCES]: null }, [A3]],
   ["a Run read of another Conversation", " after the newest Run", { [A2]: OTHER_CONVERSATION }, [A2]],
-] as const)("gives the sentence of today for %s%s, and the panel shows the Conversation of before the selection",
+] as const)("gives the sentence of today for %s%s, shows no Conversation, and the next message starts a new one",
   async (_, __, answers, late) => {
-    const panel = await openPanel({ conversations: [A], answers });
+    // The coordinator decided on #1966 that a failed open sets the new Conversation choice.
+    const panel = await openPanel({ conversations: [A], answers: { ...answers, ...SEND } });
     await panel.type("Next request");
-    panel.hold(...late);
+    panel.hold(...late, "POST /agent-runs");
     await panel.select(A);
     await panel.release(...late);
+    const failed = { status: panel.status(), shown: panel.exchanges(), lines: panel.lines(),
+      controls: panel.controls() };
+    await panel.click("button.send-button");
 
-    expect({ status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(), controls: panel.controls(),
+    const request = panel.bodies["POST /agent-runs"] as { create_agent_run_input: { conversation: unknown } };
+    expect({ failed, conversation: request.create_agent_run_input.conversation,
+      earlierShown: panel.exchanges().flat().includes(STORED.message),
       unexpected: panel.unexpected, unused: panel.unused() }).toEqual({
-      status: OPEN_FAILED, shown: B_SHOWN, runId: STORED.runId,
-      controls: { send: true, newConversation: true, history: true }, unexpected: [], unused: [] });
+      failed: { status: OPEN_FAILED, shown: [], lines: [NEXT_IS_NEW],
+        controls: { send: true, newConversation: false, history: true } },
+      conversation: { kind: "new" }, earlierShown: false, unexpected: [], unused: [] });
   });
+
+it("changes nothing when the read of a selection fails after a later selection", async () => {
+  const panel = await openPanel({ conversations: [A, C], answers: { [A_READ]: SERVICE_UNAVAILABLE, [A1]: null,
+    [A2]: null, [A3]: null, [A3_SOURCES]: null }, held: [A_READ] });
+  await panel.select(A);
+  await panel.select(C);
+  const selected = { shown: panel.exchanges(), runId: panel.shownRunId() };
+  await panel.release(A_READ);
+
+  expect({ selected, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+    lines: panel.lines(), unexpected: panel.unexpected, unused: panel.unused() }).toEqual({
+    selected: { shown: C_SHOWN, runId: RUNS[3]!.runId }, status: null, shown: C_SHOWN, runId: RUNS[3]!.runId,
+    lines: [], unexpected: [], unused: [] });
+});
+
+const runningRead = (status: string, decision: object) => () => jsonResponse({ ...agentRunFixture, project_scope: scope,
+  run_id: RUNNING.runId, conversation_id: B, status, results: [], decision });
+// The Run settles with a Proposal that the editor gets with no Proposal read.
+const OPENED_PROPOSAL = runningRead("completed", { ...PROSE.decision, locations: [],
+  opened_proposal: { kind: "present", proposal_id: PROPOSAL_1 } });
+const CANCELLED = runningRead("cancelled", { kind: "absent" });
+
+describe.each([
+  // The scheduled read is held, and the check of the author finds the Run completed.
+  ["a scheduled Run read", OPENED_PROPOSAL, async (panel: Panel) => {
+    await panel.poll();
+    await panel.click("button[data-assistant-inspect]");
+  }, { "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null }],
+  // The check of the author is held, and the scheduled read finds the Run completed.
+  ["the check of the author", OPENED_PROPOSAL, async (panel: Panel) => {
+    await panel.click("button[data-assistant-inspect]");
+    await panel.poll();
+  }, { "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null }],
+  // The read after the run control is held, and the scheduled read finds the Run cancelled.
+  ["the Run read after a run control", CANCELLED, async (panel: Panel) => {
+    await panel.click("button[data-cancel-agent-run]");
+    await panel.poll();
+  }, {}],
+] as const)("%s that started before a selection", (_, settled, start, unusedRoutes) => {
+  it.each([
+    ["fails", "before", SERVICE_UNAVAILABLE], ["fails", "after", SERVICE_UNAVAILABLE],
+    ["answers", "before", settled], ["answers", "after", settled],
+  ] as const)("%s %s the selected Conversation opens, and shows nothing", async (__, order, late) => {
+    let reads = 0;
+    const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: { ...unusedRoutes,
+      // In the order of the answers: the first read finds the Run running, the read that is not held finds it
+      // settled, and the held read answers last.
+      [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), settled, late][reads++]!(),
+      [PROPOSAL_READ_1]: null } });
+    const heldRead = `${runRoute(RUNNING)}#2`;
+    panel.hold(heldRead);
+    await start(panel);
+    const beforeSelection = [...panel.opened];
+    if (order === "before") {
+      panel.hold(A_READ);
+      await panel.select(A);
+      await panel.release(heldRead, A_READ);
+    } else {
+      await panel.select(A);
+      await panel.release(heldRead);
+    }
+
+    expect({ opened: panel.opened, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+      unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ opened: beforeSelection, status: null,
+      shown: A_SHOWN, runId: RUNS[2]!.runId, unexpected: [], unused: [] });
+  });
+});
 
 it.each([
   ["the first Proposal read", PROPOSAL_READ_1, PROPOSAL_READ_2],
@@ -393,3 +486,106 @@ it.each(["the Run read", "the later selection"] as const)(
       unused: panel.unused() }).toEqual({ beforeSelection: [PROPOSAL_1], opened: [PROPOSAL_1], shown: A_SHOWN,
       unexpected: [], unused: [] });
   });
+
+it.each(["before", "after"] as const)(
+  "shows no result of a run control whose answer arrives after a later selection, %s the selected Conversation opens",
+  async (order) => {
+    let reads = 0;
+    const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+      [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), CANCELLED][reads++]!(),
+      [PROPOSAL_READ_1]: null } });
+    const cancel = `POST /agent-runs/${RUNNING.runId}/cancel`;
+    panel.hold(cancel);
+    await panel.click("button[data-cancel-agent-run]");
+    // The scheduled read finds the Run cancelled, and the list of Conversations becomes usable.
+    await panel.poll();
+    if (order === "before") {
+      panel.hold(A_READ);
+      await panel.select(A);
+      await panel.release(cancel, A_READ);
+    } else {
+      await panel.select(A);
+      await panel.release(cancel);
+    }
+
+    expect({ reads, status: panel.status(), shown: panel.exchanges(), unexpected: panel.unexpected,
+      unused: panel.unused() }).toEqual({ reads: 2, status: null, shown: A_SHOWN, unexpected: [], unused: [] });
+  });
+
+it("gives the Proposal of the opened Run to the editor when the browser storage is full", async () => {
+  const panel = await openPanel({ conversations: [P], answers: {
+    [runRoute(PROSE)]: () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: PROSE.runId,
+      conversation_id: P, status: "completed", results: [], decision: { ...PROSE.decision, locations: [],
+        opened_proposal: { kind: "present", proposal_id: PROPOSAL_1 } } }),
+    [PROPOSAL_READ_1]: null, [PROPOSAL_READ_2]: null } });
+  const setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = () => { throw new DOMException("full", "QuotaExceededError"); };
+  cleanup.push(async () => { Storage.prototype.setItem = setItem; });
+  await panel.select(P);
+
+  expect({ opened: panel.opened, runId: panel.shownRunId(), unexpected: panel.unexpected, unused: panel.unused() })
+    .toEqual({ opened: [PROPOSAL_1], runId: PROSE.runId, unexpected: [], unused: [] });
+});
+
+/** Makes the browser storage refuse each record that names `conversationId`, as a full storage refuses a large one. */
+function refuseRecordsOf(conversationId: string) {
+  const setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (this: Storage, key: string, value: string) {
+    if (value.includes(conversationId)) throw new DOMException("full", "QuotaExceededError");
+    setItem.call(this, key, value);
+  };
+  cleanup.push(async () => { Storage.prototype.setItem = setItem; });
+}
+
+it.each(["before", "after"] as const)(
+  "keeps the selected Conversation when the storage refuses its record and an earlier Run read answers %s it opens",
+  async (order) => {
+    let reads = 0;
+    const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+      "POST /anti-forgery-challenges": null, [`POST /agent-runs/${RUNNING.runId}/cancel`]: null,
+      [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), OPENED_PROPOSAL, OPENED_PROPOSAL][reads++]!(),
+      [PROPOSAL_READ_1]: null } });
+    const heldRead = `${runRoute(RUNNING)}#2`;
+    panel.hold(heldRead);
+    await panel.poll();
+    // The check of the author finds the Run completed, and the list of Conversations becomes usable.
+    await panel.click("button[data-assistant-inspect]");
+    const beforeSelection = [...panel.opened];
+    refuseRecordsOf(A);
+    if (order === "before") {
+      panel.hold(A_READ);
+      await panel.select(A);
+      await panel.release(heldRead, A_READ);
+    } else {
+      await panel.select(A);
+      await panel.release(heldRead);
+    }
+
+    expect({ opened: panel.opened, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+      unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ opened: beforeSelection, status: null,
+      shown: A_SHOWN, runId: RUNS[2]!.runId, unexpected: [], unused: [] });
+  });
+
+it("keeps the draft that the author typed after a later selection when an earlier guidance is retained", async () => {
+  let reads = 0;
+  const steer = `POST /agent-runs/${RUNNING.runId}/steering-inputs`;
+  const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+    [`POST /agent-runs/${RUNNING.runId}/cancel`]: null, [PROPOSAL_READ_1]: null,
+    [runRoute(RUNNING)]: () => [runningRead("claimed", { kind: "absent" }), CANCELLED][reads++]!(),
+    [steer]: () => jsonResponse({ ...steerFixture, project_scope: scope,
+      receipt: { ...steerFixture.receipt, project_scope: scope },
+      effect: { ...steerFixture.effect, run_id: RUNNING.runId } }) } });
+  panel.hold(steer);
+  await panel.type("guide");
+  await panel.click("button.send-button");
+  // The scheduled read finds the Run settled, and the list of Conversations becomes usable.
+  await panel.poll();
+  await panel.select(A);
+  await panel.type(" for A");
+  const typed = panel.draft();
+  await panel.release(steer);
+
+  expect({ typed, draft: panel.draft(), reads, status: panel.status(), shown: panel.exchanges(),
+    unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ typed: "guide for A", draft: "guide for A",
+    reads: 2, status: null, shown: A_SHOWN, unexpected: [], unused: [] });
+});

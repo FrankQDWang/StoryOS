@@ -338,6 +338,8 @@ export function WritingAssistantPanel({
   const [storedReadDone, setStoredReadDone] = useState(reference === undefined);
   const requestedOpened = useRef(false);
   const [opening, setOpening] = useState<OpeningConversation>();
+  // A failed open leaves no Conversation on the panel, so the next message starts a new one.
+  const [openFailed, setOpenFailed] = useState(false);
   // The number of the last Conversation selection. A later selection wins.
   const openSequence = useRef(0);
   // A send waits for the Retry-After of a Command Challenge rate limit. Leaving the Project ends the wait (#1679).
@@ -384,8 +386,10 @@ export function WritingAssistantPanel({
   const inspect = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
     if (context === undefined) return;
     const selection = openSequence.current;
-    const stillCurrent = () =>
-      readReference(current.scope)?.correlationId === current.correlationId;
+    // A later selection ends the read before the record check, because a full browser storage keeps the earlier
+    // record (#1696).
+    const stillCurrent = () => selection === openSequence.current
+      && readReference(current.scope)?.correlationId === current.correlationId;
     let runId = current.runId;
     if (runId === undefined) {
       if (current.snapshotId === undefined) return;
@@ -473,8 +477,24 @@ export function WritingAssistantPanel({
         proposalId: proposal.proposalId, runId: result.run_id, decisionId: proposal.decisionId,
       });
     }
+    // A Proposal that needs no read goes to the editor only while its Conversation is the selected one. A full
+    // browser storage keeps the earlier record, so this check does not read the record (#1696).
+    if (selection !== openSequence.current) return false;
     give();
     return true;
+  };
+
+  /** Reads the Run of `current` for the Conversation selection `selection`. The failure of a read that a later
+   * Conversation selection overtook is not a part of that Conversation, so the read then gives no failure. */
+  const inspectInSelection = async (current: RequestReference,
+    selection = openSequence.current): Promise<GetAgentRunResponse | undefined> => {
+    if (selection !== openSequence.current) return undefined;
+    try {
+      return await inspect(current);
+    } catch (error) {
+      if (selection === openSequence.current) throw error;
+      return undefined;
+    }
   };
 
   const inspectResult = async (): Promise<void> => {
@@ -486,7 +506,7 @@ export function WritingAssistantPanel({
       && readReference(context.scope)?.correlationId === current.correlationId;
     setResultUnavailable(false);
     try {
-      if (await inspect(current) === undefined && stillCurrent()) setResultUnavailable(true);
+      if (await inspectInSelection(current) === undefined && stillCurrent()) setResultUnavailable(true);
     } catch {
       if (stillCurrent()) setResultUnavailable(true);
     }
@@ -494,7 +514,7 @@ export function WritingAssistantPanel({
 
   useEffect(() => {
     if (reference === undefined || context === undefined) return;
-    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"))
+    void inspectInSelection(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"))
       .finally(() => setStoredReadDone(true));
     return () => { inspectSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
@@ -514,7 +534,7 @@ export function WritingAssistantPanel({
   useEffect(() => {
     if (reference?.runId === undefined || terminal || context === undefined) return;
     return scheduleRefresh(() => {
-      void inspect(reference).catch(() => {
+      void inspectInSelection(reference).catch(() => {
         setStatus("无法确认请求结果，请稍后检查。");
         setFailedReads((count) => count + 1);
       });
@@ -527,7 +547,8 @@ export function WritingAssistantPanel({
    * exchanges of no other Conversation: the author messages come with the Conversation read, and the result of each
    * Run with its Run read. The Run reads go together. The newest Run is the current exchange. When all Run reads
    * answered, the panel records the Conversation as the current request.
-   * A failure shows the panel as it was before the selection. The answers of an earlier selection change nothing.
+   * A failure shows no Conversation, and the next message starts a new one (#1966). The answers of an earlier
+   * selection change nothing.
    */
   const openConversation = async (conversationId: string, failure: string) => {
     if (context === undefined) return;
@@ -539,6 +560,10 @@ export function WritingAssistantPanel({
     const latest = () => sequence === openSequence.current;
     setListOpen(false);
     setStatus("");
+    setOpenFailed(false);
+    // A Run check of the earlier Conversation shows no result on this selection.
+    inspectSequence.current += 1;
+    setResultUnavailable(false);
     setOpening({ sequence, conversationId, runs: {} });
     try {
       const options = { scope: context.scope, baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, conversationId };
@@ -572,7 +597,13 @@ export function WritingAssistantPanel({
       void showProposals(next, newest.run).catch(() => {});
     } catch {
       if (!latest()) return;
+      // The record of the earlier Conversation goes, so that no message goes into a Conversation off the screen.
+      inspectSequence.current += 1;
+      globalThis.sessionStorage?.removeItem(storageKey(context.scope));
       setOpening(undefined);
+      setReference(undefined);
+      setRun(undefined);
+      setOpenFailed(true);
       setStatus(failure);
     }
   };
@@ -873,14 +904,21 @@ export function WritingAssistantPanel({
               {resultUnavailable && opening === undefined ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
             </section>
           )}
-          {reference?.conversationChoice === "new" && opening === undefined
+          {(reference?.conversationChoice === "new" || (reference === undefined && openFailed)) && opening === undefined
             ? <p className="assistant-status">下一条消息将开始新对话。</p> : null}
           {status.length > 0 ? <p role="status">{status}</p> : null}
         </div>
         <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
           context={context} available={availability === "available"} sending={busy} current={reference} run={run}
           skills={skills}
-          onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onSend={submit} onRunControl={() => {
+            const selection = openSequence.current;
+            const current = reference;
+            return {
+              selected: () => selection === openSequence.current,
+              refresh: async () => { if (current !== undefined) await inspectInSelection(current, selection); },
+            };
+          }}
           onGuidanceRetained={(steeringInputId, labels, references) => {
             const latest = context === undefined ? undefined : readReference(context.scope);
             if (latest === undefined || (labels.length === 0 && references.length === 0)) return;
