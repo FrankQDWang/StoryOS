@@ -67,6 +67,19 @@ export async function readAvailableCommandProof(
   return proofs[0]!;
 }
 
+/**
+ * Tells if `group` never went to the Server. The Journal commits the capsule and the first transport attempt of a group
+ * in one transaction before each send, so an unsettled group with no reconciliation, no capsule, and no attempt sent
+ * nothing (foundation document, section 3.5). A group with send evidence has an unknown result until it settles.
+ */
+export async function groupNeverSent(workspace: EditorWorkspace, group: JournalSubmissionGroup): Promise<boolean> {
+  if (group.settlement.kind !== "unsettled" || group.reconciliation !== undefined) return false;
+  const transaction = workspace.database.transaction([CAPSULE_STORE, ATTEMPT_STORE], "readonly");
+  const counts = await Promise.all([CAPSULE_STORE, ATTEMPT_STORE].map((store) =>
+    requestResult(transaction.objectStore(store).index("group").count(group.journal_submission_group_id))));
+  return counts.every((count) => count === 0);
+}
+
 export async function commitProtectedTransportSend(
   workspace: EditorWorkspace,
   group: JournalSubmissionGroup,
