@@ -215,7 +215,8 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     // The case of the instance (#1934). A Journal of a later version does not open, so the tab opens in read-only
     // local recovery, and it shows Chapter B read-only. The display of Chapter B records the fact "no open
     // suggestion". A removal of Chapter A opens the Project again with a ready editor of Chapter C, and the Arriving
-    // Chapter B accepts a key at once: the switch reads no list of Chapter B.
+    // Chapter B accepts a key at once, before the Chapter read of the switch answers: the switch reads no list of
+    // Chapter B (#1968).
     const journal = (await theta.indexedDB.databases()).map((database) => database.name)
       .find((name) => name?.startsWith("storyos-local-edit-journal:") === true && name.endsWith(`:${projectId}`)) ?? "";
     const home = nextFrameLoad(frame);
@@ -238,7 +239,7 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     root().querySelector<HTMLButtonElement>(`[data-confirm-delete-chapter="${a}"]`)?.click();
     await expect.poll(() => shown(manuscriptEditor(root(), recoveryWindow)), { timeout: SWITCH_WAIT })
       .toEqual({ title: "Chapter C", body: "Theta", editable: true });
-    await updateAuthorEditSubmissionHold({ action: "hold_set_current_chapter" });
+    await updateAuthorEditSubmissionHold({ action: "hold_chapter_read" });
     // Each request of the page from the selection to the key, recorded when it starts.
     await recordFrameRequests({ action: "start" });
     await selectTreeChapter(root(), b, { arrival: "in-progress" });
@@ -256,7 +257,6 @@ it("stores the input of the earlier Chapter at the selection, stores the keys in
     expect({ thetaStep, atKey, shown: shown(manuscriptEditor(iotaLoad, iota)),
       stored: await storedText(iota, projectId, b) }).toEqual({
       thetaStep: { shown: { title: "Chapter C", body: "Theta", editable: true }, stored: ["Theta"] },
-      // The switch reads no list of Chapter B: the Chapter read, the Challenge, and the held command.
-      atKey: ["GET /api/v1/projects/P/chapters/B", "POST /api/v1/projects/P/anti-forgery-challenges",
-        "PUT /api/v1/projects/P/current-chapter"], shown: { title: "Chapter B", body: "Beta Iota", editable: true }, stored: ["Beta Iota"] });
+      // The switch reads no list of Chapter B, and the key goes while its Chapter read is held: no command went yet.
+      atKey: ["GET /api/v1/projects/P/chapters/B"], shown: { title: "Chapter B", body: "Beta Iota", editable: true }, stored: ["Beta Iota"] });
   }, 300_000);

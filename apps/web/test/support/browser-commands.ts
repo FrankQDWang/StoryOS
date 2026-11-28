@@ -42,6 +42,7 @@ import { assertProjectReceipts } from "./project-receipts.ts";
 const CLIENT_SESSION_COOKIE = "storyos_session";
 const AUTHOR_EDIT_COMMAND_PATH = /^\/api\/v1\/projects\/[^/]+\/manuscript\/author-edits$/u;
 const SET_CURRENT_CHAPTER_PATH = /^\/api\/v1\/projects\/[^/]+\/current-chapter$/u;
+const CHAPTER_READ_PATH = /^\/api\/v1\/projects\/[^/]+\/chapters\/[^/]+$/u;
 
 function authorEditCommand(url: URL): boolean {
   return AUTHOR_EDIT_COMMAND_PATH.test(url.pathname);
@@ -49,6 +50,10 @@ function authorEditCommand(url: URL): boolean {
 
 function setCurrentChapterCommand(url: URL): boolean {
   return SET_CURRENT_CHAPTER_PATH.test(url.pathname);
+}
+
+function chapterRead(url: URL): boolean {
+  return CHAPTER_READ_PATH.test(url.pathname);
 }
 
 // The record of the requests of the application frame, from `start` to `read`.
@@ -76,10 +81,12 @@ export const storyOSBrowserCommands = {
       const request = parseAuthorEditSubmissionHoldRequest(value);
       if (request.action !== "release") {
         if (authorEditHold !== undefined) throw new Error("Author Edit submissions are already held");
-        const current = request.action !== "hold";
+        const reading = request.action === "hold_chapter_read";
+        const current = request.action !== "hold" && !reading;
         const losing = request.action === "lose_set_current_chapter";
         let lost = 0;
-        const routed = current ? setCurrentChapterCommand : authorEditCommand;
+        const routed = reading ? chapterRead : current ? setCurrentChapterCommand : authorEditCommand;
+        const heldMethod = reading ? "GET" : current ? "PUT" : "POST";
         let release = (): void => undefined;
         const released = new Promise<void>((resolve) => {
           release = resolve;
@@ -93,9 +100,9 @@ export const storyOSBrowserCommands = {
             await route.abort("failed");
             return;
           }
-          if (!losing && held.method() === (current ? "PUT" : "POST") && held.frame() !== orchestrator) {
+          if (!losing && held.method() === heldMethod && held.frame() !== orchestrator) {
             // The test waits for this count before its next step.
-            if (current) {
+            if (current || reading) {
               await held.frame().evaluate(() => {
                 const root = document.documentElement;
                 root.dataset.storyosHeldRequests = String(Number(root.dataset.storyosHeldRequests ?? "0") + 1);
