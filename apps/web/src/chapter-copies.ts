@@ -41,8 +41,16 @@ export interface ChapterCopies {
   suggestionRead(chapterId: string): (heads: readonly string[] | undefined) => void;
   /** Reads the open suggestions of a Chapter, with no command, and records the list as `suggestionRead` does. */
   readSuggestions(chapterId: string): Promise<void>;
-  /** The tab learned of a new or changed Proposal of the Project. */
-  proposalsChanged(): void;
+  /**
+   * The tab learned of a new or changed Proposal of the Project. `decision` is the end of a decision of this tab: its
+   * own command, and no news from the Server.
+   */
+  proposalsChanged(cause?: "decision"): void;
+  /**
+   * A check that is true while the tab learned of no new or changed Proposal after this call. The end of a decision of
+   * this tab is no news.
+   */
+  mark(): () => boolean;
   /** The Project Activity events that the tab consumed. A Run can make Proposals, so a new Run event is a change. */
   activity(events: readonly { event_id: string; event_kind: string }[]): void;
   /** The pointer came onto (`inside`) or left a Chapter of the contents. */
@@ -102,6 +110,8 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
   const reading = new Set<string>();
   // Each Proposal change starts a new epoch. A read of an earlier epoch records no fact.
   let epoch = 0;
+  // Each Proposal change that the tab learned from the Server.
+  let learned = 0;
   let closed = false;
   const copies: ChapterCopies = {
     get(chapterId) {
@@ -140,10 +150,15 @@ export function createChapterCopies({ scope, baseUrl, fetchImpl, timers = {} }: 
         if (listed.kind === "listed") record(listed.complete ? listed.heads : undefined);
       });
     },
-    proposalsChanged() {
+    proposalsChanged(cause) {
       epoch += 1;
+      if (cause !== "decision") learned += 1;
       noSuggestion.clear();
       changed();
+    },
+    mark() {
+      const started = learned;
+      return () => started === learned;
     },
     activity(events) {
       const runs = events.filter((event) => event.event_kind.startsWith("agent_run_")

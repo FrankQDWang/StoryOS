@@ -18,7 +18,7 @@ it("keeps the editor editable when a Proposal navigation only reorders the known
       decisionId: proposalFixture.proposal.source.decision_id }));
   const reads: string[] = [];
   let readsSettled!: () => void;
-  let settled = new Promise<void>((resolve) => { readsSettled = resolve; });
+  const settled = new Promise<void>((resolve) => { readsSettled = resolve; });
   const fetchImpl: typeof fetch = async (input) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const proposalId = path.split("/").at(-1)!;
@@ -50,13 +50,14 @@ it("keeps the editor editable when a Proposal navigation only reorders the known
     });
     observer.observe(surface, { attributes: true, attributeFilter: ["contenteditable"] });
     const before = { projection: writing.snapshot().projection, text: surface.textContent };
-    // The same refresh has a read of each Proposal, so a new order of the locators reads nothing again (#1937).
+    // The same refresh has a read of each Proposal, so a new order of the locators reads nothing again (#1937). The
+    // display starts each Proposal read in its effect, and act runs that effect, so the count is final after act.
     await act(async () => { root.render(createElement(BlockProposalDisplay, { ...props, locators: [...locators].reverse() })); });
-    await act(async () => { await new Promise((resolve) => { setTimeout(resolve); }); });
+    const reordered = reads.length;
     await expect.poll(() => surface.getAttribute("contenteditable")).toBe("true");
     transitions.push(...observer.takeRecords().map((record) => (record.target as Element).getAttribute("contenteditable")));
     observer.disconnect();
-    expect({ reads: reads.length, transitions, projection: writing.snapshot().projection, text: surface.textContent })
+    expect({ reads: reordered, transitions, projection: writing.snapshot().projection, text: surface.textContent })
       .toEqual({ reads: 2, transitions: [], ...before });
   } finally {
     await act(async () => { root.unmount(); });

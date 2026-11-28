@@ -7,6 +7,7 @@ import rejectionFixture from "../../../../generated/golden-wire/storyos-public-r
 import setCurrentChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/set-current-chapter.json";
 import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
 import skillsFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-skills.json";
+import statisticsFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-statistics.json";
 import updateChapterFixture from "../../../../generated/golden-wire/storyos-public-release-1/update-chapter.json";
 import updateProjectFixture from "../../../../generated/golden-wire/storyos-public-release-1/update-project.json";
 import { digestAcceptProposal, digestRejectProposalOperations }
@@ -16,8 +17,9 @@ import type { AcceptProposalRequest, GetEditorSessionResponse, RejectProposalOpe
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { openControlledProject } from "../../src/boot.ts";
-import { POINTER_STAY_MS } from "../../src/chapter-copies.ts";
+import { POINTER_STAY_MS, createChapterCopies } from "../../src/chapter-copies.ts";
 import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
+import { startProjectReads } from "../../src/project-reads.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import {
@@ -87,6 +89,8 @@ const SOURCES_READ = `GET ${P}/agent-runs/${RUN}/research-sources`;
 /** The reads of the Project that an open starts with the Chapter read (#1937). The first open of a page also reads
  * for the assistant panel. */
 const PROJECT_READS = [TREE, STATISTICS];
+/** The character count of each Chapter in the statistics of the fake. */
+const CHAPTER_COUNTS: Record<string, string> = { [CHAPTER]: "5", [CHAPTER_B]: "17" };
 /** The reads of the open of Chapter A and of its panels. */
 const OPEN_READS = [PROTOCOL, LIST, PROJECT_READ, chapterRead(CHAPTER), openProposalsRead(CHAPTER), ...PANEL_READS];
 const ACCEPTANCE = `POST ${P}/proposals/${PROPOSAL.proposal_id}/acceptances`;
@@ -132,9 +136,15 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  */
 function fakeServer({ reads, commands = [], proposals = false, acceptance = "refused", switchAfterAcceptance = false,
   assistant, unavailable = [], lost = [], rejection = "resolved", other = false, proposalResult = false,
-  third = false }: {
+  third = false, staleSession = false, sessions = [SESSION], statistics = false }: {
   reads: string[]; commands?: string[]; proposals?: boolean;
   acceptance?: "refused" | "applied" | "late"; switchAfterAcceptance?: boolean;
+  /** After an applied Acceptance, the Editor Session of the page keeps the base of before the Acceptance. */
+  staleSession?: boolean;
+  /** The Editor Session of each creation, in order. A creation after the last one gets the last one. */
+  sessions?: string[];
+  /** The statistics read gives the counts of the Current Chapter at the time of the read. */
+  statistics?: boolean;
   assistant?: "available" | "unavailable"; unavailable?: string[]; lost?: string[];
   rejection?: "resolved" | "conflicted" | "refused"; other?: boolean; proposalResult?: boolean; third?: boolean;
 }) {
@@ -156,6 +166,7 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
   let answerFirst = new Set<string>();
   const failing = new Set<string>();
   const held: { name: string; resolve: () => void }[] = [];
+  let creations = 0;
   const open = () => ({ kind: "current_chapter" as const, current_chapter_id: state.current });
   const current = () => state.revised ? REVISED_PROPOSAL : PROPOSAL;
   const session = (): GetEditorSessionResponse => {
@@ -227,8 +238,10 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
     }
     if (name === SESSION_CREATE) {
       // After the switch of another tab, a creation gives a new Editor Session with the base of that switch.
+      const created = sessions[Math.min(creations, sessions.length - 1)]!;
+      creations += 1;
       return jsonResponse({ ...session(), schema_id: scenario.session.schema_id, editor_session:
-        { ...scenario.session.editor_session, editor_session_id: state.storedBase ? LATER_SESSION : SESSION } });
+        { ...scenario.session.editor_session, editor_session_id: state.storedBase ? LATER_SESSION : created } });
     }
     if (name === SESSION_READ) {
       if (state.late !== undefined) state.late.session = true;
@@ -271,6 +284,11 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
               revision_id: PROPOSAL.revision_id, validation_receipt_id: "018f0000-0000-7001-8000-000000000897" } }] }]
           : [], decision: { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000893",
           selected: true, text: "Keep the voice of Chapter A.", continuation: { kind: "absent" } } });
+    }
+    if (name === STATISTICS && statistics) {
+      const count = CHAPTER_COUNTS[state.current]!;
+      return jsonResponse({ ...statisticsFixture, project_scope: scope,
+        current_chapter: { chapter_id: state.current, character_count: count, word_count: "1" } });
     }
     // A test that is not about these panels shows that their read is unavailable.
     if ([STATISTICS, ASSISTANCE, SKILLS].includes(name)) {
@@ -340,6 +358,7 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
         state.late = { chapter: false, session: false };
       }
       const applied = acceptance === "applied";
+      if (applied && staleSession) state.storedBase = session();
       if (applied) {
         state.accepted = true;
         settle(ACCEPTANCE_SNAPSHOT);
@@ -440,10 +459,13 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
       else state.rejected = true;
     },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
-    switchElsewhere() {
-      state.current = CHAPTER;
+    switchElsewhere(chapterId = CHAPTER) {
+      // As on the Server, the switch of another tab moves only the base of the Editor Session of that tab.
+      if (chapterId !== CHAPTER) state.storedBase = session();
+      state.current = chapterId;
       settle(ELSEWHERE_SWITCH_SNAPSHOT);
     },
+    changeTreeElsewhere() { state.treeRevision += 1; },
     failNext(names: string[]) { for (const name of names) failing.add(name); },
     earlierChapterB(on: boolean) { state.earlierB = on; },
     holdAfter(trigger: string, names: string[]) { armed = { trigger, names }; },
@@ -451,6 +473,8 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
     holdEach(on: boolean) { holdEach = on; },
     held: () => held.length,
     release() { for (const { resolve } of held.splice(0)) resolve(); },
+    /** Answers the held requests in the reverse order of their start. */
+    releaseReverse() { for (const { resolve } of held.splice(0).reverse()) resolve(); },
     releaseOnly(names: string[]) {
       for (const entry of held.filter(({ name }) => names.includes(name))) {
         held.splice(held.indexOf(entry), 1);
@@ -1508,18 +1532,23 @@ it("removes the fact of no open suggestion when a reload finds an applied Accept
 
 // Fewer steps in series for the open, an Acceptance, and a Rejection (#1937).
 
+/** The two orders in which the fake answers the requests of one step. */
+const ORDERS = ["start", "reverse"] as const;
+
 /**
  * Proves the steps of an action. The fake holds each request. The requests of step `n` must all start, and no other
- * request, before the fake answers them. Then the fake answers them, and `after(n)` runs. When the screen shows the
- * end of the action (`settled`), the action sends no other request.
+ * request, before the fake answers them. Then the fake answers them in `order` (the order of their start, or the
+ * reverse order), and `after(n)` runs. When the screen shows the end of the action (`settled`), the action sends no
+ * other request.
  */
 async function expectSteps(server: ReturnType<typeof fakeServer>, from: number, steps: string[][],
-  settled: () => unknown, after: (step: number) => Promise<void> = async () => {}) {
+  settled: () => unknown, order: (typeof ORDERS)[number], after: (step: number) => Promise<void> = async () => {}) {
   let start = from;
   for (const [index, step] of steps.entries()) {
     await expect.poll(() => sorted(server.log.started.slice(start)), { timeout: 3_000 }).toEqual(sorted(step));
     start += step.length;
-    server.release();
+    if (order === "start") server.release();
+    else server.releaseReverse();
     await after(index + 1);
   }
   await expect.poll(settled).toBe(true);
@@ -1573,23 +1602,26 @@ function screenState(root: HTMLElement | undefined) {
       `${card.dataset.proposalId}:${card.textContent}`),
     chapters: [...root?.querySelectorAll<HTMLElement>("button[data-chapter-id]") ?? []].map((button) =>
       button.textContent),
-    statistics: root?.querySelector("[data-manuscript-statistics]")?.getAttribute("data-statistics-outcome") };
+    statistics: root?.querySelector("[data-manuscript-statistics]")?.getAttribute("data-statistics-outcome"),
+    count: root?.querySelector("[data-manuscript-statistics]")?.getAttribute("data-statistics-chapter-characters") };
 }
 
-it("opens a new tab with the reads of the Project in the step of the Chapter read", async () => {
+it.each(ORDERS)("opens a new tab with the reads of the Project in the step of the Chapter read (answers in %s order)",
+  async (order) => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE], proposals: true });
   await deleteJournal(server.scenario.journalName);
   const tab = loadHeld(server);
 
-  await expectSteps(server, 0, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1,
+  await expectSteps(server, 0, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1, order,
     async (step) => { if (step === OPEN_ENDS) await tab.mount(); });
 
   expect(screenState(tab.root())).toMatchObject({ title: "Chapter A", save: "saved", revision: REVISION });
 });
 
-it("opens a second tab of a Project that another tab writes in with the steps of a new tab and no takeover",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE], proposals: true });
+it.each(ORDERS)("opens a second tab of a Project that another tab writes in with the steps of a new tab and no"
+  + " takeover (answers in %s order)", async (order) => {
+    const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE], proposals: true,
+      sessions: [SESSION, LATER_SESSION] });
     await openWorkspace(server);
     // The second tab has its own session storage, so it has no Editor Session (ADR 0107).
     sessionStorage.clear();
@@ -1597,10 +1629,15 @@ it("opens a second tab of a Project that another tab writes in with the steps of
     const from = server.log.started.length;
     const tab = loadHeld(server);
 
-    await expectSteps(server, from, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1,
+    await expectSteps(server, from, NEW_TAB_STEPS, () => screenState(tab.root()).cards.length === 1, order,
       async (step) => { if (step === OPEN_ENDS) await tab.mount(); });
 
-    expect(screenState(tab.root())).toMatchObject({ title: "Chapter A", save: "saved", revision: REVISION });
+    // Each tab has its own Editor Session and its own Journal partition.
+    const partitions = (await journalRows(server)).partitions as [string, { editor_session_id: string }][];
+    expect({ screen: screenState(tab.root()), stored: sessionStorage.getItem(`active_session:${OWNER}:${PROJECT}`),
+      partitions: partitions.map(([, partition]) => partition.editor_session_id).sort() }).toMatchObject({
+      screen: { title: "Chapter A", save: "saved", revision: REVISION }, stored: LATER_SESSION,
+      partitions: [SESSION, LATER_SESSION].sort() });
   });
 
 it.each([
@@ -1610,8 +1647,9 @@ it.each([
       [ACTIVITY_READ, PROPOSAL_READ, OTHER_READ]] },
   { decision: "rejection", command: REJECTION, button: "reject", reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ],
     steps: [[CHALLENGE], [REJECTION], [openProposalsRead(CHAPTER), PROPOSAL_READ, OTHER_READ]] },
-])("settles the $decision of a Proposal in three steps, then the reads that need an answer of step 3", async ({
-  command, button, reads, steps }) => {
+].flatMap((row) => ORDERS.map((order) => ({ ...row, order }))))("settles the $decision of a Proposal in three steps,"
+  + " then the reads that need an answer of step 3 (answers in $order order)", async ({
+  command, button, reads, steps, order }) => {
   const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied",
     other: true });
   const workspace = await openWorkspace(server);
@@ -1624,7 +1662,7 @@ it.each([
 
   control()!.click();
 
-  await expectSteps(server, from, steps, () => canonicalCards(workspace.root) === OTHER.proposal_id);
+  await expectSteps(server, from, steps, () => canonicalCards(workspace.root) === OTHER.proposal_id, order);
 });
 
 const canonicalCards = (root: HTMLElement) => screenState(root).cards.map((card) => card.split(":")[0]).join("|");
@@ -1639,12 +1677,12 @@ it.each([
 ])("shows the same screen after the $decision with no read that repeats a read of the action", async ({ command,
   button, revision, reads, card }) => {
   const server = fakeServer({ reads, commands: [SESSION_CREATE, command], proposals: true, acceptance: "applied",
-    other: true });
+    other: true, statistics: true });
   const workspace = await openWorkspace(server);
   const control = () => workspace.root.querySelector<HTMLButtonElement>(
     `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-${button}]`);
   await expect.poll(() => control()?.disabled).toBe(false);
-  await expect.poll(() => screenState(workspace.root).statistics).toBe("unavailable");
+  await expect.poll(() => screenState(workspace.root).statistics).toBe("ready");
 
   control()!.click();
 
@@ -1652,7 +1690,7 @@ it.each([
   await expect.poll(server.inFlight).toEqual([]);
   expect({ screen: screenState(workspace.root), unexpected: server.log.unexpected }).toEqual({
     screen: { title: "Chapter A", save: "saved", revision, cards: [card], chapters: ["Chapter A", "Chapter B"],
-      statistics: "unavailable" }, unexpected: [] });
+      statistics: "ready", count: CHAPTER_COUNTS[CHAPTER] }, unexpected: [] });
 });
 
 it("reads the open suggestions of the Current Chapter of the Project read after an applied Acceptance, and does not"
@@ -1677,6 +1715,111 @@ it("reads the open suggestions of the Current Chapter of the Project read after 
   expect({ cards: screenState(workspace.root).cards, lists: server.log.started.slice(from)
     .filter((name) => name.endsWith("/open-proposals")).sort(), unexpected: server.log.unexpected })
     .toEqual({ cards: [], lists: [openProposalsRead(CHAPTER), openProposalsRead(CHAPTER_B)].sort(), unexpected: [] });
+});
+
+it("reads the open suggestions again after the creation of a new Editor Session in the reopen of an applied"
+  + " Acceptance", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
+    commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied", other: true, staleSession: true });
+  const workspace = await openWorkspace(server);
+  const control = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+  await expect.poll(() => control()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  const from = server.log.events.length;
+
+  control()!.click();
+
+  // The Editor Session of the page has the base of before the Acceptance, so the reopen creates a new Editor Session.
+  // Its base Snapshot is later than the list read of the reopen, so the display reads the list again after it.
+  await expect.poll(() => canonicalCards(workspace.root)).toBe(OTHER.proposal_id);
+  await expect.poll(server.inFlight).toEqual([]);
+  const events = server.log.events.slice(from);
+  const lists = events.flatMap((event, index) => event === `start ${openProposalsRead(CHAPTER)}` ? [index] : []);
+  expect({ lists: lists.length, afterCreation: lists.at(-1)! > events.indexOf(`end ${SESSION_CREATE}`),
+    stored: sessionStorage.getItem(`active_session:${OWNER}:${PROJECT}`), unexpected: server.log.unexpected })
+    .toEqual({ lists: 2, afterCreation: true, stored: LATER_SESSION, unexpected: [] });
+});
+
+it("uses the early list of open suggestions only while the tab learned of no Proposal change after its start",
+  async () => {
+    const scope = createBrowserScenario().project.project_scope;
+    const lists: string[] = [];
+    // The fake serves only the reads of the Project and the list of Chapter A.
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const name = `${init?.method ?? "GET"} ${new URL(String(input)).pathname}`;
+      if (![...PROJECT_READS, openProposalsRead(CHAPTER)].includes(name)) throw new Error(`unexpected: ${name}`);
+      if (name === openProposalsRead(CHAPTER)) lists.push(name);
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
+        503);
+    };
+    const copies = createChapterCopies({ scope, baseUrl: location.origin, fetchImpl });
+    const start = () => {
+      const unchanged = copies.mark();
+      return startProjectReads({ baseUrl: location.origin, projectId: PROJECT, fetchImpl },
+        { suggestions: { scope, chapterId: CHAPTER, usable: unchanged } });
+    };
+    const changed = start();
+    copies.proposalsChanged();
+    const kept = start();
+
+    expect({ changed: changed.takeSuggestions(CHAPTER), kept: kept.takeSuggestions(CHAPTER) !== undefined,
+      again: kept.takeSuggestions(CHAPTER), lists: lists.length }).toEqual({
+      changed: undefined, kept: true, again: undefined, lists: 2 });
+  });
+
+it("reads the statistics one time at a reopen whose first tree has a new tree revision", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, REJECTION],
+    proposals: true, statistics: true });
+  const workspace = await openWorkspace(server);
+  const view = proposalView(workspace.root);
+  await expect.poll(() => view.reject()?.disabled).toBe(false);
+  await expect.poll(() => screenState(workspace.root).statistics).toBe("ready");
+  await expect.poll(server.inFlight).toEqual([]);
+  // Another tab renames a Chapter and edits the candidate text, so the rejection is refused and the page reopens. The
+  // editor part stays, because the base of the Editor Session does not change.
+  server.changeTreeElsewhere();
+  server.decideElsewhere("revised");
+  const from = server.log.started.length;
+
+  view.reject()!.click();
+
+  await expect.poll(view.status).toBe(REFUSED_REJECTION);
+  await expect.poll(server.inFlight).toEqual([]);
+  const after = server.log.started.slice(from);
+  expect({ tree: after.filter((name) => name === TREE).length,
+    statistics: after.filter((name) => name === STATISTICS).length, screen: screenState(workspace.root).statistics,
+    unexpected: server.log.unexpected }).toEqual({ tree: 1, statistics: 1, screen: "ready", unexpected: [] });
+});
+
+it("reads the statistics again when the early statistics read of an applied Acceptance has another Current Chapter"
+  + " than the Project read", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ, chapterRead(CHAPTER_B),
+    openProposalsRead(CHAPTER_B)], commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied",
+  statistics: true });
+  const workspace = await openWorkspace(server);
+  const control = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+  await expect.poll(() => control()?.disabled).toBe(false);
+  await expect.poll(server.inFlight).toEqual([]);
+  const from = server.log.started.length;
+  const consumed = server.log.consumed.length;
+  server.holdAfter(ACCEPTANCE, reopenReads(CHAPTER));
+
+  control()!.click();
+
+  // The early statistics read answers with Chapter A. Then another tab switches to Chapter B, and the Project read of
+  // the reopen names Chapter B.
+  await expect.poll(() => server.log.consumed.slice(consumed).includes(STATISTICS)).toBe(true);
+  await expect.poll(server.inFlight).toEqual(sorted(reopenReads(CHAPTER)));
+  server.switchElsewhere(CHAPTER_B);
+  server.release();
+
+  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ count: screenState(workspace.root).count,
+    statistics: server.log.started.slice(from).filter((name) => name === STATISTICS).length,
+    unexpected: server.log.unexpected }).toEqual({ count: CHAPTER_COUNTS[CHAPTER_B], statistics: 2, unexpected: [] });
 });
 
 it("reads a Proposal again at a change of its locator when its read in the same refresh failed", async () => {

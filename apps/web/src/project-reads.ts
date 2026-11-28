@@ -25,7 +25,10 @@ type EarlyReadValues = {
  */
 export interface ProjectReads {
   take<Key extends keyof EarlyReadValues>(key: Key): Promise<EarlyReadValues[Key]> | undefined;
-  /** The read of the open suggestions of `chapterId`, when the open started one for that Chapter. */
+  /**
+   * The read of the open suggestions of `chapterId`, when the open started one for that Chapter and its `usable` check
+   * is true.
+   */
   takeSuggestions(chapterId: string): Promise<OpenProposalList> | undefined;
 }
 
@@ -33,10 +36,12 @@ export interface ProjectReads {
  * Starts the tree read and the statistics read of the Project. `panels` also starts the reads of the assistant panel,
  * which reads them only at its first open. `suggestions` also starts the read of the open suggestions of a Chapter.
  * Only an open that has a base Snapshot earlier than the start of this call can use that read: the Project Activity
- * from that Snapshot gives each later Proposal (ADR 0105).
+ * from that Snapshot gives each later Proposal (ADR 0105). Its `usable` check is false when that is not true, or when
+ * the tab learned of a Proposal change after the start, for example from the activity stream of the earlier view.
  */
 export function startProjectReads(options: { baseUrl: string; projectId: string; fetchImpl: typeof fetch },
-  { panels = false, suggestions }: { panels?: boolean; suggestions?: { scope: ProjectScope; chapterId: string } } = {})
+  { panels = false, suggestions }: { panels?: boolean;
+    suggestions?: { scope: ProjectScope; chapterId: string; usable: () => boolean } } = {})
   : ProjectReads {
   const reads: { [Key in keyof EarlyReadValues]?: Promise<EarlyReadValues[Key]> } = {
     tree: readManuscriptTree(options),
@@ -45,7 +50,7 @@ export function startProjectReads(options: { baseUrl: string; projectId: string;
   };
   // A read that the view does not take fails with no unhandled rejection.
   for (const read of Object.values(reads)) read.catch(() => {});
-  let list = suggestions === undefined ? undefined : { chapterId: suggestions.chapterId,
+  let list = suggestions === undefined ? undefined : { chapterId: suggestions.chapterId, usable: suggestions.usable,
     read: readOpenProposalList(suggestions.scope, suggestions.chapterId, options.baseUrl, options.fetchImpl) };
   return {
     take(key) {
@@ -54,8 +59,8 @@ export function startProjectReads(options: { baseUrl: string; projectId: string;
       return read;
     },
     takeSuggestions(chapterId) {
-      const taken = list?.chapterId === chapterId ? list.read : undefined;
-      if (taken !== undefined) list = undefined;
+      const taken = list?.chapterId === chapterId && list.usable() ? list.read : undefined;
+      list = undefined;
       return taken;
     },
   };

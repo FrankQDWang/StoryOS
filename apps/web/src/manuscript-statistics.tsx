@@ -37,6 +37,7 @@ export function ManuscriptStatisticsPanel({
   fetchImpl: typeof fetch;
   currentChapterId: string;
   saveState: string;
+  /** The revision of the tree of this open, or `undefined` before the tree read of this open gave it. */
   treeRevision: string | undefined;
   /** Each open of the Project reads the statistics again. */
   open: unknown;
@@ -57,7 +58,8 @@ export function ManuscriptStatisticsPanel({
     const early = reads?.take("statistics");
     if (saveState === "saving") return;
     const earlier = last.current;
-    // The read does not wait for the tree read, so the first tree of an open does not start a second read.
+    // The read does not wait for the tree read, so the first tree of an open does not start a second read. A later
+    // tree of the same open, for example after a new Chapter, reads again.
     if (earlier !== undefined && earlier.open === open && earlier.chapterId === currentChapterId
       && earlier.treeRevision === undefined && treeRevision !== undefined) {
       last.current = { ...earlier, treeRevision };
@@ -68,7 +70,11 @@ export function ManuscriptStatisticsPanel({
     const current = () => mounted.current && last.current?.sequence === sequence;
     void (async () => {
       try {
-        const page = await (early ?? getStatistics({ baseUrl, projectId, fetchImpl }));
+        const read = () => getStatistics({ baseUrl, projectId, fetchImpl });
+        let page = await (early ?? read());
+        // An early read can start before the Project read of a reopen, so it can have another Current Chapter.
+        if (early !== undefined && page.current_chapter !== null
+          && page.current_chapter.chapter_id !== currentChapterId && current()) page = await read();
         if (current()) setOutcome({ kind: "ready", page });
       } catch (error) {
         if (!current()) return;

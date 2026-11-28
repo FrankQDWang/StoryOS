@@ -74,8 +74,18 @@ it("opens the URL-selected Project and fails closed before invalid entry request
       });
     }
     if (path.endsWith("/activity")) return emptyActivityStream();
+    // The test is not about the statistics, the assistant panel, and the open suggestions, so their reads are
+    // unavailable.
+    if ([`/api/v1/projects/${PROJECT}/manuscript/statistics`, `/api/v1/projects/${PROJECT}/assistance`,
+      `/api/v1/projects/${PROJECT}/skills`,
+      `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}/open-proposals`].includes(path)) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
+        503);
+    }
+    unexpected.push(path);
     throw new Error(`unexpected request: ${path}`);
   };
+  const unexpected: string[] = [];
   const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
@@ -123,6 +133,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     ]);
     expect(requests.slice(0, 8).every(({ init }) => init?.credentials === "same-origin"))
       .toBe(true);
+    expect(unexpected).toEqual([]);
     if (state.kind === "project-ready" && state.editor.kind === "editor-ready") {
       state.editor.database.close();
     }

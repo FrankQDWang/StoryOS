@@ -134,8 +134,10 @@ const settle = <Value,>(promise: Promise<Value>): Promise<ReadResult<Value>> => 
 export async function openControlledProject(options: ProjectOpenOptions & {
   /** The first open of the page also reads for the assistant panel, which reads only at its mount. */
   panels?: boolean;
+  /** `false` for an open whose state no view shows, for example the first open of a Proposal navigation. */
+  viewReads?: boolean;
 }): Promise<ControlledProjectState> {
-  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, panels = false } = options;
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, panels = false, viewReads = true } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   // The protocol profile, the Project, and the list of Projects are independent reads.
   const booted = bootProtectedWebClient(queryOptions);
@@ -146,7 +148,7 @@ export async function openControlledProject(options: ProjectOpenOptions & {
   if (read.kind === "failed") return projectUnavailable(read.error);
   if (read.value === undefined) return projectUnavailable();
   // The reads of the Project start with the Chapter read. The open suggestions wait for the Editor Session (#1937).
-  const reads = read.value.project.project.open.kind === "current_chapter"
+  const reads = viewReads && read.value.project.project.open.kind === "current_chapter"
     ? startProjectReads({ baseUrl, projectId, fetchImpl }, { panels }) : undefined;
   return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision, undefined,
     undefined, reads);
