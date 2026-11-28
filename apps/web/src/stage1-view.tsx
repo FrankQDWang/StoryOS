@@ -14,9 +14,10 @@ import type {
   GetManuscriptTreeResponse,
   GetProjectResponse,
   ProjectListItem,
+  StoryOSQueryOptions,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { openControlledProject, reopenControlledProject } from "./boot.ts";
+import { openControlledProject, readCurrentChapter, reopenControlledProject } from "./boot.ts";
 import {
   CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
@@ -476,33 +477,95 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[]) => reopenControlledProject({ baseUrl,
-    fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project }, chapterId, shown });
+  const opened = { profile: state.profile, project: state.project };
+  const reopen = (chapterId?: string) => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened, chapterId });
 
-  // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107, section 2).
+  // The tab found a later Revision: it opens again on it with its text, and shows no sentence (ADR 0107, section 2).
   // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
   // read-only. It lets the captured input enter the Journal and the submission in flight settle, and closes the
-  // controller before the reopen. The close abandons an Author Undo, so the Undo is not sent after the reopen.
+  // controller before the reopen. The close abandons an Author Undo, so the Undo is not sent after the reopen. The
+  // reopen uses `chapter`, or else the read of a front check in flight. When the reopen keeps the Chapter and opens
+  // nothing, the editor stays read-only with its text, and the next return to the front reads the Chapter and opens
+  // again (`keptRef`).
   const catchingUpRef = useRef(false);
   const [catchingUp, setCatchingUp] = useState(false);
-  const catchUp = () => {
+  const frontReadRef = useRef<Promise<GetChapterResponse | undefined>>(undefined);
+  const keptRef = useRef<readonly ManuscriptParagraph[]>(undefined);
+  const reopenWith = async (shown: readonly ManuscriptParagraph[], read: GetChapterResponse | undefined) => {
+    const next = await reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened, shown, chapter: read });
+    if (next.kind === "chapter-kept") keptRef.current = shown;
+    else onReopened(next);
+  };
+  const catchUp = (chapter?: GetChapterResponse) => {
     if (catchingUpRef.current || writing === undefined) return;
     catchingUpRef.current = true;
+    const front = frontReadRef.current;
     void (async () => {
       await writing.whenComposed();
       writing.endInput();
       // The editor is read-only at once, so no input comes after the end of input.
       flushSync(() => { setCatchingUp(true); });
       await writing.whenIdle();
+      const read = chapter ?? await front;
       const shown = writing.snapshot().projection.blocks;
       writing.close();
-      onReopened(await reopen(undefined, shown));
+      await reopenWith(shown, read);
     })();
   };
   // A structural command in flight catches up when its quiet step refuses with `earlier_base`.
   onEarlierBaseRef.current = () => {
     if (!structureInFlightRef.current) catchUp();
   };
+  // When the tab comes to the front, it waits for the end of an open IME composition, saves its input, and reads the
+  // Chapter one time. At a later Revision, the reopen uses that read. A save that finds a later Revision during the
+  // check also uses it.
+  useEffect(() => {
+    if (writing === undefined) return undefined;
+    const front = () => {
+      const kept = keptRef.current;
+      if (document.visibilityState === "visible" && kept !== undefined) {
+        keptRef.current = undefined;
+        void readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions, state.project.project.project_id,
+          currentChapterId, state.project.project_scope.owner_user_id).then((read) => reopenWith(kept, read),
+          () => { keptRef.current = kept; });
+        return;
+      }
+      if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
+        || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
+        || catchingUpRef.current) return;
+      // Input during the quiet step refuses it, so the check waits for the end of that input and its save, and runs
+      // again, with no limit: each wait is for the editor, not a timer. A tab that went to the background ends the
+      // check, and its next return to the front starts a new one. A Revision that the tab installed during the read is
+      // not earlier than the read, so that read starts no catch-up.
+      const check = async () => {
+        for (;;) {
+          await writing.whenComposed();
+          if (document.visibilityState !== "visible") return undefined;
+          let installed: string | undefined;
+          const quiet = await writing.runAfterQuiesce("settled", () => {
+            installed = writing.snapshot().projection.authoritative_revision_id;
+            return readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions, state.project.project.project_id,
+              currentChapterId, state.project.project_scope.owner_user_id);
+          });
+          if (quiet.kind === "ran") {
+            const editor = writing.snapshot().projection.authoritative_revision_id;
+            return editor !== installed || quiet.result.chapter.current_revision.revision_id === editor
+              ? undefined : quiet.result;
+          }
+          if (quiet.reason !== "incomplete_semantic_intent" || catchingUpRef.current) return undefined;
+          await writing.whenIdle();
+        }
+      };
+      const read = check().catch(() => undefined);
+      frontReadRef.current = read;
+      void read.then((chapter) => {
+        frontReadRef.current = undefined;
+        if (chapter !== undefined && !structureInFlightRef.current) catchUp(chapter);
+      });
+    };
+    document.addEventListener("visibilitychange", front);
+    return () => { document.removeEventListener("visibilitychange", front); };
+  }, [writing]);
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
