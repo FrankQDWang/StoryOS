@@ -456,9 +456,13 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
             project_activity_position: 14,
         }
     );
+    // A replay gives no Editor Session state.
     assert_eq!(
         store.apply_author_edit(&existing_command).await.unwrap(),
-        existing
+        storyos_application::AuthorEditSettlement {
+            editor_session: None,
+            ..existing
+        }
     );
     assert_eq!(
         read_settlement_owned_state(&admin, &owner_user_id, &project_id, &chapter_id).await,
