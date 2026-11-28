@@ -246,9 +246,9 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
  * sets A current again, puts its text on the later Revision of A, and sends it. The journey has its own Project, so its
  * Command Challenges stay in the budget of one Project.
  *
- * With `held` "challenge" (#1964), the save of page 1 freezes its group and its Command Challenge gets no response
- * before the page closes, so the group never went to the Server. Page 2 only selects Chapter B. The new load of page 1
- * sets A current again with its stored Editor Session and sends the group.
+ * With `held` "challenge" (#1964), the save of page 1 freezes its group, and page 1 leaves its document before the
+ * Command Challenge answers, so the group never went to the Server. Then page 2 only selects Chapter B. The new load of
+ * page 1 sets A current again with its stored Editor Session and sends the group.
  */
 export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext,
   held: "clock" | "challenge" = "clock"): Promise<void> {
@@ -317,7 +317,13 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     // stay (ADR 0107, section 2).
     await writer.keyboard.insertText(" Unsent on page one.");
     await writer.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
-    if (held === "challenge") await challengeHeld;
+    if (held === "challenge") {
+      await challengeHeld;
+      // Page 1 leaves its document while its Command Challenge has no response. The tab keeps its sessionStorage, so its
+      // next load has its stored Editor Session.
+      await writer.unrouteAll({ behavior: "ignoreErrors" });
+      await writer.goto("about:blank");
+    }
 
     if (held === "clock") await typeAndSave(observer, "start", "Later: ");
     await addChapter("Chapter B");
@@ -326,9 +332,8 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     await observer.locator("button[data-chapter-id]", { hasText: "Chapter B" }).click();
     assert.equal((await selected).status(), 200);
 
-    // The reload closes the page while its Command Challenge has no response.
-    await writer.unrouteAll({ behavior: "ignoreErrors" });
-    await writer.reload();
+    if (held === "clock") await writer.reload();
+    else assert.equal((await writer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
     if (held === "clock") await late.clock.resume();
     const afterLoad = `${held === "clock" ? "Later: " : ""}The first block.\nThe second block. Unsent on page one.`;
     await writer.waitForFunction((expected) => {

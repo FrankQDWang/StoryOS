@@ -864,7 +864,7 @@ it("opens the Chapter that another tab set current at a load when the tab has no
 
 /**
  * Types "无人" in Chapter A and starts its save. `held` holds the Command Challenge of the save, or else the save, and
- * the page closes. Then another tab sets Chapter B current.
+ * the page closes. Then another tab sets Chapter B current. The request log stays, so each count covers each page.
  */
 async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, held: "challenge" | "edit") {
   const { timers, fire } = manualTimers();
@@ -879,7 +879,6 @@ async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, hel
   }, timers);
   delete server.gates.challenge;
   server.setCurrentInOtherTab(CHAPTER_B);
-  server.requests.length = 0;
 }
 
 // The real-Server journey `chapter_switch_load_challenge` proves the stored text after a new load.
@@ -887,7 +886,7 @@ it("sets its Chapter current again at a load and sends the group that never went
   + "before the Challenge answered", async () => {
   const server = fakeServer(revision(APPLIED_REVISION, "雨夜。", "渡口。无人"));
   await closeDuringSaveAndSetB(server, "challenge");
-  expect(server.edits).toEqual([]);
+  expect(count(server, AUTHOR_EDIT)).toBe(0);
 
   const { timers, fire } = manualTimers();
   await withView(server, async (root) => {
@@ -897,8 +896,8 @@ it("sets its Chapter current again at a load and sends the group that never went
     await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id"))
       .toBe(APPLIED_REVISION);
   }, timers, true);
-  expect({ edits: server.edits.length, switches: server.switches, unexpected: server.unexpected }).toEqual({ edits: 1,
-    switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, expected_target_revision_id: REVISION,
+  expect({ edits: count(server, AUTHOR_EDIT), switches: server.switches, unexpected: server.unexpected }).toEqual({
+    edits: 1, switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, expected_target_revision_id: REVISION,
       editor_session_id: SESSION }], unexpected: [] });
 });
 
@@ -915,9 +914,10 @@ it("puts the text of the group that never went to the Server on the later Revisi
     fire();
     await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(1);
   }, timers, true);
-  expect({ editors: server.edits.map((edit) => [edit.editor_session_id, edit.expected_authoritative_revision_id]),
+  expect({ requests: count(server, AUTHOR_EDIT),
+    editors: server.edits.map((edit) => [edit.editor_session_id, edit.expected_authoritative_revision_id]),
     switches: server.switches.length, unexpected: server.unexpected }).toEqual({
-    editors: [[NEW_SESSION, LATER_REVISION]], switches: 1, unexpected: [] });
+    requests: 1, editors: [[NEW_SESSION, LATER_REVISION]], switches: 1, unexpected: [] });
 });
 
 it("does not send again a group with an unknown result when the page closed during its save and another tab set "
@@ -936,6 +936,8 @@ it("does not send again a group with an unknown result when the page closed duri
         save: "needs_attention", stored: SESSION });
       expect(due()).toBe(0);
       fire();
+      expect({ edits: count(server, AUTHOR_EDIT), switches: server.switches, unexpected: server.unexpected })
+        .toEqual({ edits: 1, switches: [], unexpected: [] });
     } finally {
       view.unmount();
     }
@@ -943,6 +945,4 @@ it("does not send again a group with an unknown result when the page closed duri
     closeTrackedDatabases(databases);
     openSpy.mockRestore();
   }
-  expect({ edits: server.edits.length, switches: server.switches, unexpected: server.unexpected })
-    .toEqual({ edits: 1, switches: [], unexpected: [] });
 });
