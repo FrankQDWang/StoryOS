@@ -225,11 +225,18 @@ function fakeServer(applies?: Revision | Revision[]) {
       // The answer has the state at the time when the Server classified the edit.
       const [position, head] = [world.position, world.head.revision_id];
       await gates.edit;
-      const answer = createAppliedAuthorEditResponse({ request, commandDigest: await digestApplyAuthorEdit(request as never),
+      const answer = { ...createAppliedAuthorEditResponse({ request,
+        commandDigest: await digestApplyAuthorEdit(request as never),
         idempotencyKey: requestHeaders(init).get("idempotency-key")!, priorRevisionId: expected as string,
         ...next === undefined ? {} : { authoritativeRevisionId: next.revision_id },
-        projectActivityPosition: String(position) });
-      if (applied) return jsonResponse({ ...answer, effect: { ...answer.effect, authoritative_revision: next } });
+        projectActivityPosition: String(position) }), schema_id: "storyos.command.apply-author-edit.response.v3" };
+      if (applied) {
+        // The first run of an applied edit gives the Editor Session state that a read right after it gives.
+        const { schema_id: _schema, correlation_id: _correlation, project_scope: _scope, ...state } =
+          await session(request.editor_session_id as string, next, position);
+        return jsonResponse({ ...answer, effect: { ...answer.effect, authoritative_revision: next },
+          editor_session_state: state });
+      }
       return jsonResponse({ ...answer, effect: { kind: "conflicted", reason: "stale_authoritative_head",
         current_authoritative_revision_id: head }, receipt: { ...answer.receipt, result: "conflicted",
         prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [], authoritative_revision_ids: [],
