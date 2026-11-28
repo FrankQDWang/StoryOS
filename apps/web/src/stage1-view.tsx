@@ -49,7 +49,6 @@ import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx"
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
-import { startProjectReads, type ProjectReads } from "./project-reads.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import {
@@ -477,9 +476,8 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[], reads?: ProjectReads) =>
-    reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-      opened: { profile: state.profile, project: state.project }, chapterId, shown, reads });
+  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[]) => reopenControlledProject({ baseUrl,
+    fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project }, chapterId, shown });
 
   // A save found a later Revision: the tab opens again on it with its text, and shows no sentence (ADR 0107, section 2).
   // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
@@ -1060,24 +1058,12 @@ function ProjectEditorView({
             && pending.body === selectedChapter.chapter.current_revision.body
             && JSON.stringify(pending.blocks)
               === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
-        onDecisionEnd={() => copies.proposalsChanged("decision")}
-        onAccepted={async (settled, applied) => {
-          // A decision with no settled response opens the Project with each check of the first open. The reopen of an
-          // applied Acceptance reads the tree, the statistics, and the open suggestions with its reads (#1937). The
-          // view uses that list only when the reopen keeps the Editor Session, so that its base Snapshot is earlier
-          // than the list read, and when the tab learned of no Proposal change after the start of the read.
-          const earlierSession = sessionId(state);
-          const unchanged = copies.mark();
-          let kept = false;
-          const next = await (settled ? reopen(undefined, undefined, applied ? startProjectReads({ baseUrl,
-            projectId: state.project.project.project_id, fetchImpl }, { suggestions: {
-            scope: state.project.project_scope, chapterId: currentChapterId,
-            usable: () => kept && unchanged() } }) : undefined)
-            : openControlledProject({ baseUrl, projectId: state.project.project.project_id, fetchImpl, cryptoImpl }));
-          kept = earlierSession !== undefined && sessionId(next) === earlierSession;
-          onReopened(next);
+        onDecisionEnd={copies.proposalsChanged}
+        onAccepted={async (settled) => {
+          // A decision with no settled response opens the Project with each check of the first open.
+          onReopened(await (settled ? reopen() : openControlledProject({ baseUrl,
+            projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
         }}
-        openReads={state.reads}
         onUndoCurrentChapter={(chapterId) => {
           // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
           if (chapterId === currentChapterId) return;
@@ -1500,12 +1486,6 @@ function projectName(state: ControlledProjectState) {
   return state.kind === "project-ready" || state.kind === "empty-project-ready"
     ? { projectId: state.project.project.project_id, title: state.project.project.title, revision: state.revision }
     : undefined;
-}
-
-/** The Editor Session of a state with an editor that accepts writes. */
-function sessionId(state: ControlledProjectState) {
-  return state.kind === "project-ready" && state.editor.kind === "editor-ready"
-    ? state.editor.session.editor_session.editor_session_id : undefined;
 }
 
 function Stage1View({

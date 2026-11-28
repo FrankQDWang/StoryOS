@@ -76,13 +76,15 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     if (path.endsWith("/activity")) return emptyActivityStream();
     // The test is not about the statistics, the assistant panel, and the open suggestions, so their reads are
     // unavailable.
-    if ([`/api/v1/projects/${PROJECT}/manuscript/statistics`, `/api/v1/projects/${PROJECT}/assistance`,
-      `/api/v1/projects/${PROJECT}/skills`,
-      `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}/open-proposals`].includes(path)) {
+    const request = `${init?.method ?? "GET"} ${path}`;
+    if ([`GET /api/v1/projects/${PROJECT}/manuscript/statistics`, `GET /api/v1/projects/${PROJECT}/assistance`,
+      `GET /api/v1/projects/${PROJECT}/skills`,
+      `GET /api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}/open-proposals`]
+      .includes(request)) {
       return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
         503);
     }
-    unexpected.push(path);
+    unexpected.push(request);
     throw new Error(`unexpected request: ${path}`);
   };
   const unexpected: string[] = [];

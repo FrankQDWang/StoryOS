@@ -41,13 +41,14 @@ export function ManuscriptStatisticsPanel({
   treeRevision: string | undefined;
   /** Each open of the Project reads the statistics again. */
   open: unknown;
-  /** The reads of the open. The read of the open uses its statistics read (#1937). */
+  /** The reads of the open. The first read of the open uses its statistics read (#1937). */
   reads?: ProjectReads | undefined;
 }) {
   const [outcome, setOutcome] = useState<StatisticsOutcome | undefined>(undefined);
-  // The Chapter and the tree revision of the last read. Only the latest read sets the outcome.
-  const last = useRef<{ open: unknown; chapterId: string; treeRevision: string | undefined; sequence: number }>(
-    undefined);
+  // The open, the Chapter, the tree revision, and the save state of the last read, and `saving` when a save started
+  // after it. Only the latest read sets the outcome.
+  const last = useRef<{ open: unknown; chapterId: string; treeRevision: string | undefined; saveState: string;
+    saving: boolean; sequence: number }>(undefined);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -56,25 +57,25 @@ export function ManuscriptStatisticsPanel({
 
   useEffect(() => {
     const early = reads?.take("statistics");
-    if (saveState === "saving") return;
     const earlier = last.current;
+    if (saveState === "saving") {
+      if (earlier !== undefined) last.current = { ...earlier, saving: true };
+      return;
+    }
     // The read does not wait for the tree read, so the first tree of an open does not start a second read. A later
-    // tree of the same open, for example after a new Chapter, reads again.
+    // tree of the same open, for example after a new Chapter, and each change of the save state read again.
     if (earlier !== undefined && earlier.open === open && earlier.chapterId === currentChapterId
+      && earlier.saveState === saveState && !earlier.saving
       && earlier.treeRevision === undefined && treeRevision !== undefined) {
       last.current = { ...earlier, treeRevision };
       return;
     }
     const sequence = (earlier?.sequence ?? 0) + 1;
-    last.current = { open, chapterId: currentChapterId, treeRevision, sequence };
+    last.current = { open, chapterId: currentChapterId, treeRevision, saveState, saving: false, sequence };
     const current = () => mounted.current && last.current?.sequence === sequence;
     void (async () => {
       try {
-        const read = () => getStatistics({ baseUrl, projectId, fetchImpl });
-        let page = await (early ?? read());
-        // An early read can start before the Project read of a reopen, so it can have another Current Chapter.
-        if (early !== undefined && page.current_chapter !== null
-          && page.current_chapter.chapter_id !== currentChapterId && current()) page = await read();
+        const page = await (early ?? getStatistics({ baseUrl, projectId, fetchImpl }));
         if (current()) setOutcome({ kind: "ready", page });
       } catch (error) {
         if (!current()) return;

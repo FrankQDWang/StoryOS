@@ -175,8 +175,6 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
   opened: Pick<ProjectReadyState, "profile" | "project">;
   chapterId?: string | undefined;
   shown?: readonly ManuscriptParagraph[] | undefined;
-  /** The reads that the reopen gives to the view, started with its reads. */
-  reads?: ProjectReads | undefined;
 }): Promise<ControlledProjectState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
     cryptoImpl = globalThis.crypto } = options;
@@ -198,7 +196,7 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
     }
     if (read.project.project_scope.owner_user_id !== scope.owner_user_id) throw new Error("Project Scope mismatch");
     return await openProjectWorkspace({ ...options, projectId: scope.project_id }, opened.profile, read.project,
-      read.revision, early, options.shown, options.reads);
+      read.revision, early, options.shown);
   } catch (error) {
     void early?.opening.abandon();
     return projectUnavailable(error);

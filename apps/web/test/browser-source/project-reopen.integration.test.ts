@@ -17,9 +17,8 @@ import type { AcceptProposalRequest, GetEditorSessionResponse, RejectProposalOpe
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import { openControlledProject } from "../../src/boot.ts";
-import { POINTER_STAY_MS, createChapterCopies } from "../../src/chapter-copies.ts";
+import { POINTER_STAY_MS } from "../../src/chapter-copies.ts";
 import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
-import { startProjectReads } from "../../src/project-reads.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import {
@@ -136,11 +135,9 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  */
 function fakeServer({ reads, commands = [], proposals = false, acceptance = "refused", switchAfterAcceptance = false,
   assistant, unavailable = [], lost = [], rejection = "resolved", other = false, proposalResult = false,
-  third = false, staleSession = false, sessions = [SESSION], statistics = false }: {
+  third = false, sessions = [SESSION], statistics = false }: {
   reads: string[]; commands?: string[]; proposals?: boolean;
   acceptance?: "refused" | "applied" | "late"; switchAfterAcceptance?: boolean;
-  /** After an applied Acceptance, the Editor Session of the page keeps the base of before the Acceptance. */
-  staleSession?: boolean;
   /** The Editor Session of each creation, in order. A creation after the last one gets the last one. */
   sessions?: string[];
   /** The statistics read gives the counts of the Current Chapter at the time of the read. */
@@ -358,7 +355,6 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
         state.late = { chapter: false, session: false };
       }
       const applied = acceptance === "applied";
-      if (applied && staleSession) state.storedBase = session();
       if (applied) {
         state.accepted = true;
         settle(ACCEPTANCE_SNAPSHOT);
@@ -459,10 +455,8 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
       else state.rejected = true;
     },
     renameElsewhere(title: string) { state.projectTitle = title; state.projectRevision += 1; },
-    switchElsewhere(chapterId = CHAPTER) {
-      // As on the Server, the switch of another tab moves only the base of the Editor Session of that tab.
-      if (chapterId !== CHAPTER) state.storedBase = session();
-      state.current = chapterId;
+    switchElsewhere() {
+      state.current = CHAPTER;
       settle(ELSEWHERE_SWITCH_SNAPSHOT);
     },
     changeTreeElsewhere() { state.treeRevision += 1; },
@@ -1643,8 +1637,9 @@ it.each(ORDERS)("opens a second tab of a Project that another tab writes in with
 it.each([
   { decision: "acceptance", command: ACCEPTANCE, button: "accept",
     reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
-    steps: [[CHALLENGE], [ACCEPTANCE], [...reopenReads(CHAPTER), TREE, STATISTICS, openProposalsRead(CHAPTER)],
-      [ACTIVITY_READ, PROPOSAL_READ, OTHER_READ]] },
+    // The new editor part reads after the reopen. The Proposal that only the list gives waits for the list.
+    steps: [[CHALLENGE], [ACCEPTANCE], reopenReads(CHAPTER),
+      [TREE, STATISTICS, openProposalsRead(CHAPTER), ACTIVITY_READ, PROPOSAL_READ], [OTHER_READ]] },
   { decision: "rejection", command: REJECTION, button: "reject", reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ],
     steps: [[CHALLENGE], [REJECTION], [openProposalsRead(CHAPTER), PROPOSAL_READ, OTHER_READ]] },
 ].flatMap((row) => ORDERS.map((order) => ({ ...row, order }))))("settles the $decision of a Proposal in three steps,"
@@ -1693,82 +1688,6 @@ it.each([
       statistics: "ready", count: CHAPTER_COUNTS[CHAPTER] }, unexpected: [] });
 });
 
-it("reads the open suggestions of the Current Chapter of the Project read after an applied Acceptance, and does not"
-  + " show the list of the earlier Chapter", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ, chapterRead(CHAPTER_B),
-    openProposalsRead(CHAPTER_B)], commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied",
-  other: true, switchAfterAcceptance: true });
-  const workspace = await openWorkspace(server);
-  const control = () => workspace.root.querySelector<HTMLButtonElement>(
-    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
-  await expect.poll(() => control()?.disabled).toBe(false);
-  await expect.poll(server.inFlight).toEqual([]);
-  const from = server.log.started.length;
-
-  control()!.click();
-
-  // The reopen read the open suggestions of Chapter A with its reads. The Project read names Chapter B, so the
-  // display of Chapter B reads its own list and does not use the list of Chapter A.
-  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
-  await expect.poll(() => server.log.started.slice(from).includes(openProposalsRead(CHAPTER_B))).toBe(true);
-  await expect.poll(server.inFlight).toEqual([]);
-  expect({ cards: screenState(workspace.root).cards, lists: server.log.started.slice(from)
-    .filter((name) => name.endsWith("/open-proposals")).sort(), unexpected: server.log.unexpected })
-    .toEqual({ cards: [], lists: [openProposalsRead(CHAPTER), openProposalsRead(CHAPTER_B)].sort(), unexpected: [] });
-});
-
-it("reads the open suggestions again after the creation of a new Editor Session in the reopen of an applied"
-  + " Acceptance", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, OTHER_READ, SESSION_READ],
-    commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied", other: true, staleSession: true });
-  const workspace = await openWorkspace(server);
-  const control = () => workspace.root.querySelector<HTMLButtonElement>(
-    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
-  await expect.poll(() => control()?.disabled).toBe(false);
-  await expect.poll(server.inFlight).toEqual([]);
-  const from = server.log.events.length;
-
-  control()!.click();
-
-  // The Editor Session of the page has the base of before the Acceptance, so the reopen creates a new Editor Session.
-  // Its base Snapshot is later than the list read of the reopen, so the display reads the list again after it.
-  await expect.poll(() => canonicalCards(workspace.root)).toBe(OTHER.proposal_id);
-  await expect.poll(server.inFlight).toEqual([]);
-  const events = server.log.events.slice(from);
-  const lists = events.flatMap((event, index) => event === `start ${openProposalsRead(CHAPTER)}` ? [index] : []);
-  expect({ lists: lists.length, afterCreation: lists.at(-1)! > events.indexOf(`end ${SESSION_CREATE}`),
-    stored: sessionStorage.getItem(`active_session:${OWNER}:${PROJECT}`), unexpected: server.log.unexpected })
-    .toEqual({ lists: 2, afterCreation: true, stored: LATER_SESSION, unexpected: [] });
-});
-
-it("uses the early list of open suggestions only while the tab learned of no Proposal change after its start",
-  async () => {
-    const scope = createBrowserScenario().project.project_scope;
-    const lists: string[] = [];
-    // The fake serves only the reads of the Project and the list of Chapter A.
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const name = `${init?.method ?? "GET"} ${new URL(String(input)).pathname}`;
-      if (![...PROJECT_READS, openProposalsRead(CHAPTER)].includes(name)) throw new Error(`unexpected: ${name}`);
-      if (name === openProposalsRead(CHAPTER)) lists.push(name);
-      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
-        503);
-    };
-    const copies = createChapterCopies({ scope, baseUrl: location.origin, fetchImpl });
-    const start = () => {
-      const unchanged = copies.mark();
-      return startProjectReads({ baseUrl: location.origin, projectId: PROJECT, fetchImpl },
-        { suggestions: { scope, chapterId: CHAPTER, usable: unchanged } });
-    };
-    const changed = start();
-    copies.proposalsChanged();
-    const kept = start();
-    const other = start();
-
-    expect({ changed: changed.takeSuggestions(CHAPTER), kept: kept.takeSuggestions(CHAPTER) !== undefined,
-      again: kept.takeSuggestions(CHAPTER), other: other.takeSuggestions(CHAPTER_B), lists: lists.length }).toEqual({
-      changed: undefined, kept: true, again: undefined, other: undefined, lists: 3 });
-  });
-
 it("reads the statistics one time at a reopen whose first tree has a new tree revision", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, REJECTION],
     proposals: true, statistics: true });
@@ -1813,36 +1732,6 @@ it("reads the statistics at a reopen that keeps the editor part when each tree r
   expect({ tree: after.filter((name) => name === TREE).length,
     statistics: after.filter((name) => name === STATISTICS).length, unexpected: server.log.unexpected })
     .toEqual({ tree: 1, statistics: 1, unexpected: [] });
-});
-
-it("reads the statistics again when the early statistics read of an applied Acceptance has another Current Chapter"
-  + " than the Project read", async () => {
-  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ, chapterRead(CHAPTER_B),
-    openProposalsRead(CHAPTER_B)], commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied",
-  statistics: true });
-  const workspace = await openWorkspace(server);
-  const control = () => workspace.root.querySelector<HTMLButtonElement>(
-    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
-  await expect.poll(() => control()?.disabled).toBe(false);
-  await expect.poll(server.inFlight).toEqual([]);
-  const from = server.log.started.length;
-  const consumed = server.log.consumed.length;
-  server.holdAfter(ACCEPTANCE, reopenReads(CHAPTER));
-
-  control()!.click();
-
-  // The early statistics read answers with Chapter A. Then another tab switches to Chapter B, and the Project read of
-  // the reopen names Chapter B.
-  await expect.poll(() => server.log.consumed.slice(consumed).includes(STATISTICS)).toBe(true);
-  await expect.poll(server.inFlight).toEqual(sorted(reopenReads(CHAPTER)));
-  server.switchElsewhere(CHAPTER_B);
-  server.release();
-
-  await expect.poll(() => workspace.shown().title).toBe("Chapter B");
-  await expect.poll(server.inFlight).toEqual([]);
-  expect({ count: screenState(workspace.root).count,
-    statistics: server.log.started.slice(from).filter((name) => name === STATISTICS).length,
-    unexpected: server.log.unexpected }).toEqual({ count: CHAPTER_COUNTS[CHAPTER_B], statistics: 2, unexpected: [] });
 });
 
 it("reads a Proposal again at a change of its locator when its read in the same refresh failed", async () => {

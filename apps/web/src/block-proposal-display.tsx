@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { getProposal, listChapterOpenProposals } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -20,15 +20,43 @@ import { proposalConditionKind } from "./proposal-recovery-surface.ts";
 import { authorWithdrawControlReady, dispatchDisplayedWithdraw, dispatchDisplayedWithdrawRetry,
   pendingWithdrawIds } from "./withdraw-block-proposal.ts";
 import { ProposalDecisionStatus, type AcceptanceRefusalStatus } from "./proposal-decision-status.tsx";
-import type { ProjectReads } from "./project-reads.ts";
-import { readOpenProposalList, type OpenProposalList, type ProposalLocator } from "./open-proposal-list.ts";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
 
 const ignoreChanges = () => () => {};
 
-export type { OpenProposalList, ProposalLocator } from "./open-proposal-list.ts";
+export type ProposalLocator = {
+  proposalId: string;
+  runId: string;
+  decisionId: string;
+};
+
+// The Server list is the source of the open Proposals of a Chapter. A failed or truncated list leaves Proposal heads unknown.
+type OpenProposalList = { kind: "reading" } | { kind: "failed" }
+  | {
+    kind: "listed"; complete: boolean; locators: ProposalLocator[];
+    /** The Proposal and its Revision of each entry, as `{proposal_id}@{revision_id}`. */
+    heads: string[];
+  };
+
+export async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
+  fetchImpl: typeof fetch): Promise<OpenProposalList> {
+  try {
+    const response = await listChapterOpenProposals({ baseUrl, fetchImpl, projectId: scope.project_id, chapterId });
+    if (response.project_scope.owner_user_id !== scope.owner_user_id
+      || response.project_scope.project_id !== scope.project_id || response.chapter_id !== chapterId) {
+      return { kind: "failed" };
+    }
+    return { kind: "listed", complete: response.completeness === "complete",
+      locators: response.proposals.map(({ proposal_id, source }) => source.kind === "agent_run_decision"
+        ? { proposalId: proposal_id, runId: source.run_id, decisionId: source.decision_id }
+        : { proposalId: proposal_id, runId: "", decisionId: "" }),
+      heads: response.proposals.map(({ proposal_id, revision_id }) => `${proposal_id}@${revision_id}`) };
+  } catch {
+    return { kind: "failed" };
+  }
+}
 
 type ProposalRead = {
   locator: ProposalLocator;
@@ -37,7 +65,7 @@ type ProposalRead = {
 
 export function BlockProposalDisplay({
   scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject,
-  onAccepted, onDecisionEnd, startSuggestionRead, onSuggestionList, arriving, openReads, ...editorProps
+  onAccepted, onDecisionEnd, startSuggestionRead, onSuggestionList, arriving, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
@@ -45,13 +73,8 @@ export function BlockProposalDisplay({
   locators: readonly ProposalLocator[];
   refreshKey: number;
   safeToProject: boolean;
-  /**
-   * Opens the Project again after a decision. `settled` is true when the decision has a settled response. `applied` is
-   * true after an applied Acceptance: its base Snapshot is on the Server before the reopen starts.
-   */
-  onAccepted: (settled: boolean, applied?: boolean) => Promise<void>;
-  /** The reads of the open. The first read of the open suggestions uses its read of this Chapter (#1937). */
-  openReads?: ProjectReads | undefined;
+  /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
+  onAccepted: (settled: boolean) => Promise<void>;
   /** Each end of a decision of this display. A decision can change a Proposal of the Project (ADR 0105). */
   onDecisionEnd?: (() => void) | undefined;
   /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
@@ -182,13 +205,10 @@ export function BlockProposalDisplay({
   const onSuggestionListRef = useRef(onSuggestionList);
   onSuggestionListRef.current = onSuggestionList;
   const [suggestionList, setSuggestionList] = useState<{ heads: readonly string[] | undefined; refreshKey: number }>();
-  const openReadsRef = useRef(openReads);
-  openReadsRef.current = openReads;
   useEffect(() => {
     let active = true;
     const record = startSuggestionReadRef.current?.();
-    const early = openReadsRef.current?.takeSuggestions(chapterId);
-    void (early ?? readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl)).then((next) => {
+    void readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl).then((next) => {
       if (!active) return;
       setOpenList((current) => canonical(current) === canonical(next) ? current : next);
       if (next.kind === "listed") record?.(next.complete ? next.heads : undefined);
@@ -224,11 +244,11 @@ export function BlockProposalDisplay({
       const entry = known.get(locator.proposalId);
       if (entry !== undefined && entry.locator.runId === locator.runId
         && entry.locator.decisionId === locator.decisionId) return entry.read;
-      // A locator with no Run is less strict, so a read of the Proposal with a Run also gives its Proposal.
-      if (entry !== undefined && locator.runId === "" && locator.decisionId === "") {
-        return entry.read.then((read) => read.proposal !== undefined ? read : readProposal(locator));
-      }
-      const read = readProposal(locator);
+      // A locator with no Run is less strict, so a read of the Proposal with a Run also gives its Proposal. When that
+      // read failed, the locator reads again one time.
+      const read = entry !== undefined && locator.runId === "" && locator.decisionId === ""
+        ? entry.read.then((earlier) => earlier.proposal !== undefined ? earlier : readProposal(locator))
+        : readProposal(locator);
       known.set(locator.proposalId, { locator, read });
       return read;
     };
@@ -528,7 +548,7 @@ export function BlockProposalDisplay({
         // Proposals. This display reads them again only when it stays (#1937).
         const reopens = refresh && response.effect.kind === "applied";
         if (!reopens) setSettlementRefresh((value) => value + 1);
-        try { if (refresh) await onAccepted(true, reopens); } catch {
+        try { if (refresh) await onAccepted(true); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }
