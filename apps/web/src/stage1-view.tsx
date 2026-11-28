@@ -1092,6 +1092,9 @@ function ProjectEditorView({
   const markedChapterId = arrival ?? selectedChapterId;
   useEffect(() => { onStatus({ selectedChapterId: markedChapterId, canSubmit }); }, [markedChapterId, canSubmit,
     onStatus]);
+  // The saved Chapter text: each applied save moves the Editor Session base, and not the Chapter read (#1944).
+  const savedRevision = state.editor.kind === "editor-ready"
+    ? state.editor.session.base_snapshot.materialized_revision : selectedChapter.chapter.current_revision;
   return (
     <>
       {switchWaiting !== undefined ? <p role="status">{CHAPTER_SWITCH_WAITING_SENTENCE}</p>
@@ -1118,9 +1121,8 @@ function ProjectEditorView({
           || selectedChapter.chapter.chapter_id !== currentChapterId
           || saveState === "saved"
           || (pending !== null
-            && pending.body === selectedChapter.chapter.current_revision.body
-            && JSON.stringify(pending.blocks)
-              === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
+            && pending.body === savedRevision.body
+            && JSON.stringify(pending.blocks) === JSON.stringify(savedRevision.blocks))}
         onDecisionEnd={copies.proposalsChanged}
         onAccepted={async (settled) => {
           // A decision with no settled response opens the Project with each check of the first open.
