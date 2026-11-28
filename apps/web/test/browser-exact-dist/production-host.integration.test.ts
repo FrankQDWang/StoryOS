@@ -12,6 +12,12 @@ it("sets the Chapter of unsent text current again at a new load after another pa
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 
+it("sets the Chapter current again at a new load and stores the text of a save whose Command Challenge did not answer "
+  + "before the page closed", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_challenge" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
 it("recovers one prose request through the production Web, Server, database, and Worker", async () => {
   await expect(verifyProductionHost({ scenario: "prose_request" }))
     .resolves.toEqual({ kind: "production_host_verified" });

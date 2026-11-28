@@ -270,7 +270,7 @@ function manualTimers() {
     due.clear();
     for (const callback of callbacks) callback();
   };
-  return { timers, fire };
+  return { timers, fire, due: () => due.size };
 }
 
 /** Records each Journal connection that the page opens, so the test can close them as a page close does. */
@@ -882,11 +882,12 @@ async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, hel
   server.requests.length = 0;
 }
 
+// The real-Server journey `chapter_switch_load_challenge` proves the stored text after a new load.
 it("sets its Chapter current again at a load and sends the group that never went to the Server when the page closed "
   + "before the Challenge answered", async () => {
   const server = fakeServer(revision(APPLIED_REVISION, "雨夜。", "渡口。无人"));
   await closeDuringSaveAndSetB(server, "challenge");
-  expect(count(server, AUTHOR_EDIT)).toBe(0);
+  expect(server.edits).toEqual([]);
 
   const { timers, fire } = manualTimers();
   await withView(server, async (root) => {
@@ -899,15 +900,6 @@ it("sets its Chapter current again at a load and sends the group that never went
   expect({ edits: server.edits.length, switches: server.switches, unexpected: server.unexpected }).toEqual({ edits: 1,
     switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, expected_target_revision_id: REVISION,
       editor_session_id: SESSION }], unexpected: [] });
-
-  // A new load shows the stored text.
-  server.requests.length = 0;
-  await withView(server, async (root) => {
-    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
-      save: "saved", failure: "", stored: SESSION });
-  }, heldTimers, true);
-  expect({ edits: server.edits.length, switches: server.switches.length, unexpected: server.unexpected })
-    .toEqual({ edits: 1, switches: 1, unexpected: [] });
 });
 
 it("puts the text of the group that never went to the Server on the later Revision of its Chapter at a load", async () => {
@@ -933,14 +925,17 @@ it("does not send again a group with an unknown result when the page closed duri
   const server = fakeServer();
   await closeDuringSaveAndSetB(server, "edit");
 
-  // The load keeps the recovery of the stored Editor Session, so the editor takes no input.
+  // The load keeps the recovery of the stored Editor Session, so the editor takes no input and has no save to start.
+  const { timers, fire, due } = manualTimers();
   const { databases, openSpy } = trackOpens();
   try {
     const loaded = await load(server);
-    const view = mountStage1View(loaded.root, { ...loaded, writingTimers: heldTimers });
+    const view = mountStage1View(loaded.root, { ...loaded, writingTimers: timers });
     try {
       await expect.poll(() => shown(loaded.root), { timeout: 10_000 }).toMatchObject({ editable: false,
         save: "needs_attention", stored: SESSION });
+      expect(due()).toBe(0);
+      fire();
     } finally {
       view.unmount();
     }

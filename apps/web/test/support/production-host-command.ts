@@ -245,8 +245,13 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
  * #1953: page 1 has unsent text on Chapter A, and page 2 writes on A and then selects Chapter B. A new load of page 1
  * sets A current again, puts its text on the later Revision of A, and sends it. The journey has its own Project, so its
  * Command Challenges stay in the budget of one Project.
+ *
+ * With `held` "challenge" (#1964), the save of page 1 freezes its group and its Command Challenge gets no response
+ * before the page closes, so the group never went to the Server. Page 2 only selects Chapter B. The new load of page 1
+ * sets A current again with its stored Editor Session and sends the group.
  */
-export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext): Promise<void> {
+export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext,
+  held: "clock" | "challenge" = "clock"): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
   const origin = new URL(configured).origin;
@@ -289,7 +294,17 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), "The first block.\nThe second block.");
     // The pause moves the clock of page 1 only a little, so page 1 sees no time of the Server as late.
-    await late.clock.pauseAt(Date.now() + 100);
+    if (held === "clock") await late.clock.pauseAt(Date.now() + 100);
+    // The Command Challenge of the Author Edit of page 1 gets no response. The save freezes its group before it asks.
+    let challengeHeld = Promise.resolve();
+    if (held === "challenge") {
+      let resolveHeld = () => {};
+      challengeHeld = new Promise((resolve) => { resolveHeld = resolve; });
+      await writer.route("**/anti-forgery-challenges", async (route) => {
+        if (route.request().postData()?.includes("/manuscript/author-edits")) resolveHeld();
+        else await route.continue();
+      });
+    }
     await writer.locator(MANUSCRIPT_EDITABLE).focus();
     await writer.locator(MANUSCRIPT_EDITABLE).evaluate((element) => {
       const range = document.createRange();
@@ -298,20 +313,24 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
       window.getSelection()?.removeAllRanges();
       window.getSelection()?.addRange(range);
     });
-    // Page 1 types on the second block, and page 2 types on the first block, so both edits stay (ADR 0107, section 2).
+    // Page 1 types on the second block, and page 2 types on the first block (only with the clock pause), so both edits
+    // stay (ADR 0107, section 2).
     await writer.keyboard.insertText(" Unsent on page one.");
     await writer.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
+    if (held === "challenge") await challengeHeld;
 
-    await typeAndSave(observer, "start", "Later: ");
+    if (held === "clock") await typeAndSave(observer, "start", "Later: ");
     await addChapter("Chapter B");
     const selected = observer.waitForResponse((response) =>
       response.url().endsWith("/current-chapter") && response.request().method() === "PUT");
     await observer.locator("button[data-chapter-id]", { hasText: "Chapter B" }).click();
     assert.equal((await selected).status(), 200);
 
+    // The reload closes the page while its Command Challenge has no response.
+    await writer.unrouteAll({ behavior: "ignoreErrors" });
     await writer.reload();
-    await late.clock.resume();
-    const afterLoad = "Later: The first block.\nThe second block. Unsent on page one.";
+    if (held === "clock") await late.clock.resume();
+    const afterLoad = `${held === "clock" ? "Later: " : ""}The first block.\nThe second block. Unsent on page one.`;
     await writer.waitForFunction((expected) => {
       const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
       const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
@@ -327,7 +346,7 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
       FROM storyos.domain_receipts WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'
       AND result_kind ${result}`));
     const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("<> 'authoritative_applied'")];
-    assert.ok(applied >= 4);
+    assert.ok(applied >= (held === "clock" ? 4 : 3));
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
       createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: applied + conflicted }, authorActions: applied + 5 });
     assert.deepEqual(errors, []);

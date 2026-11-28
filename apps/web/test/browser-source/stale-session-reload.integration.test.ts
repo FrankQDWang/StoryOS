@@ -304,7 +304,8 @@ const submitted = (workspace: EditorReadyState, server: Awaited<ReturnType<typeo
 
 // Each case leaves work in the Journal of the stored Session that the catch-up cannot put on the current Chapter.
 it.each([
-  // The capsule commit comes before the send, so the group went out and its result is unknown (#1964).
+  // The capsule and its transport attempt commit before the send, so the group can have gone out, and its result is
+  // unknown (#1964).
   ["a group that went out with no result", undefined, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, EDIT);
     await commitProtectedTransportSend(workspace, await freezeOneIntentSubmission(workspace),
