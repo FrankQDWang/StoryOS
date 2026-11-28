@@ -36,11 +36,12 @@ async function mountPanel() {
     host.remove();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
   });
-  const show = (props: { open: unknown; saveState: string; treeRevision: string | undefined }) => act(async () => {
+  const show = (props: { open: unknown; saveState: string; treeRevision: string | undefined;
+    openTree?: boolean; currentChapterId?: string }) => act(async () => {
     root.render(createElement(ManuscriptStatisticsPanel, { projectId: PROJECT, baseUrl: location.origin, fetchImpl,
-      currentChapterId: CHAPTER, ...props }));
+      currentChapterId: CHAPTER, openTree: true, ...props }));
   });
-  return { show, requests, unexpected };
+  return { show, requests, unexpected, host };
 }
 
 it("reads the statistics one time for an open and its first tree, and again for a later tree of the open", async () => {
@@ -77,4 +78,39 @@ it("reads the statistics again at a new open with the tree of the earlier open",
   await panel.show({ open: {}, saveState: "saved", treeRevision: "3" });
 
   expect({ all: panel.requests.length, unexpected: panel.unexpected }).toEqual({ all: 2, unexpected: [] });
+});
+
+it("reads the statistics again when the first tree of an open is not the tree read of the open", async () => {
+  const panel = await mountPanel();
+  const open = {};
+
+  await panel.show({ open, saveState: "saved", treeRevision: undefined });
+  // A tree read after a Chapter creation replaced the tree read of the open.
+  await panel.show({ open, saveState: "saved", treeRevision: "4", openTree: false });
+
+  expect({ all: panel.requests.length, unexpected: panel.unexpected }).toEqual({ all: 2, unexpected: [] });
+});
+
+it("shows no Chapter count when the statistics give the count of another Chapter", async () => {
+  const panel = await mountPanel();
+
+  // The fixture gives the count of the Chapter CHAPTER.
+  await panel.show({ open: {}, saveState: "saved", treeRevision: undefined,
+    currentChapterId: "018f0000-0000-7001-8000-000000000a65" });
+
+  const section = () => panel.host.querySelector("[data-manuscript-statistics]");
+  await expect.poll(() => section()?.getAttribute("data-statistics-outcome")).toBe("ready");
+  expect({ characters: section()?.getAttribute("data-statistics-chapter-characters"), text: section()?.textContent,
+    unexpected: panel.unexpected }).toEqual({ characters: "", text: "本章 — 字", unexpected: [] });
+});
+
+it("reads nothing again for a later tree of an open with the revision of the tree read of the open", async () => {
+  const panel = await mountPanel();
+  const open = {};
+
+  await panel.show({ open, saveState: "saved", treeRevision: undefined });
+  await panel.show({ open, saveState: "saved", treeRevision: "3" });
+  await panel.show({ open, saveState: "saved", treeRevision: "3", openTree: false });
+
+  expect({ all: panel.requests.length, unexpected: panel.unexpected }).toEqual({ all: 1, unexpected: [] });
 });

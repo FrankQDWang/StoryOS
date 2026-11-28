@@ -1104,6 +1104,34 @@ it("reads the statistics one time for the new view of a Chapter switch with no c
       .toEqual({ statistics: 1, tree: 2, unexpected: [] });
   });
 
+it("reads the statistics again when a rename gives the first tree of the new view of a Chapter switch", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, chapterRead(CHAPTER_B), openProposalsRead(CHAPTER_B),
+    SESSION_READ], commands: [SESSION_CREATE, SWITCH, RENAME] });
+  const workspace = await openWorkspace(server);
+  await expect.poll(() => server.count(STATISTICS)).toBe(1);
+  await expect.poll(() => workspace.root.querySelector(`button[data-chapter-id="${CHAPTER_B}"]`)).not.toBeNull();
+  // The tree read of the new view waits, so the tree read of the rename gives the first tree of the new view.
+  server.holdAfter(chapterRead(CHAPTER_B), [TREE]);
+  workspace.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)!.click();
+  await expect.poll(() => ({ title: workspace.shown().title, held: server.held() }))
+    .toEqual({ title: "Chapter B", held: 1 });
+  await expect.poll(server.inFlight).toEqual([TREE]);
+  const from = server.log.events.length;
+
+  await beginTreeAction(workspace.root, `li[data-chapter-id="${CHAPTER}"]`, "[data-begin-rename-chapter]");
+  workspace.root.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")!.click();
+  await expect.poll(() => workspace.root.querySelector(`form[data-rename-chapter="${CHAPTER}"] input`)).not.toBeNull();
+  const input = workspace.root.querySelector<HTMLInputElement>(`form[data-rename-chapter="${CHAPTER}"] input`)!;
+  input.value = "Chapter A, renamed";
+  input.form!.requestSubmit();
+
+  await expect.poll(() => server.log.events.slice(server.log.events.indexOf(`end ${RENAME}`, from))
+    .filter((event) => event === `start ${STATISTICS}`).length).toBe(1);
+  server.release();
+  await expect.poll(server.inFlight).toEqual([]);
+  expect({ unexpected: server.log.unexpected }).toEqual({ unexpected: [] });
+});
+
 it("keeps the tree of a rename that the author makes while a Proposal link opens the Chapter", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, SESSION_READ, snapshotRead(SWITCH_SNAPSHOT), PROPOSAL_READ,
     CONVERSATION_READ, RUN_READ, SOURCES_READ], commands: [SESSION_CREATE, SWITCH, RENAME], assistant: "available",

@@ -39,7 +39,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     if (path === `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`) {
       return jsonResponse(scenario.chapter);
     }
-    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree` && (init?.method ?? "GET") === "GET") {
       return jsonResponse({
         project_scope: { owner_user_id: OWNER, project_id: PROJECT },
         tree_revision: "3",
@@ -123,15 +123,15 @@ it("opens the URL-selected Project and fails closed before invalid entry request
       ),
     ).toBe(scenario.chapter.chapter.current_revision.revision_id);
     // The reads of the Project start with the Chapter read (#1937).
-    expect(requests.slice(0, 8).map(({ path }) => path)).toEqual([
-      "/api/v1/protocol",
-      `/api/v1/projects/${PROJECT}`,
-      "/api/v1/projects",
-      `/api/v1/projects/${PROJECT}/manuscript/tree`,
-      `/api/v1/projects/${PROJECT}/manuscript/statistics`,
-      `/api/v1/projects/${PROJECT}/assistance`,
-      `/api/v1/projects/${PROJECT}/skills`,
-      `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`,
+    expect(requests.slice(0, 8).map(({ init, path }) => `${init?.method ?? "GET"} ${path}`)).toEqual([
+      "GET /api/v1/protocol",
+      `GET /api/v1/projects/${PROJECT}`,
+      "GET /api/v1/projects",
+      `GET /api/v1/projects/${PROJECT}/manuscript/tree`,
+      `GET /api/v1/projects/${PROJECT}/manuscript/statistics`,
+      `GET /api/v1/projects/${PROJECT}/assistance`,
+      `GET /api/v1/projects/${PROJECT}/skills`,
+      `GET /api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`,
     ]);
     expect(requests.slice(0, 8).every(({ init }) => init?.credentials === "same-origin"))
       .toBe(true);

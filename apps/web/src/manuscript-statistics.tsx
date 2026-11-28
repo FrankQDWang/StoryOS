@@ -29,6 +29,7 @@ export function ManuscriptStatisticsPanel({
   currentChapterId,
   saveState,
   treeRevision,
+  openTree,
   open,
   reads,
 }: {
@@ -39,6 +40,9 @@ export function ManuscriptStatisticsPanel({
   saveState: string;
   /** The revision of the tree of this open, or `undefined` before the tree read of this open gave it. */
   treeRevision: string | undefined;
+  /** `true` when `treeRevision` is of the tree read of this open, and not of a later tree read, for example after a
+   * Chapter creation (#1937). */
+  openTree: boolean;
   /** Each open of the Project reads the statistics again. */
   open: unknown;
   /** The reads of the open. The first read of the open uses its statistics read (#1937). */
@@ -64,9 +68,10 @@ export function ManuscriptStatisticsPanel({
     }
     // The read does not wait for the tree read, so the first tree of an open does not start a second read. A later
     // tree of the same open, for example after a new Chapter, and each change of the save state read again.
+    // A later tree with the same revision changes only `openTree`, and reads nothing again.
     if (earlier !== undefined && earlier.open === open && earlier.chapterId === currentChapterId
-      && earlier.saveState === saveState && !earlier.saving
-      && earlier.treeRevision === undefined && treeRevision !== undefined) {
+      && earlier.saveState === saveState && !earlier.saving && (earlier.treeRevision === treeRevision
+        || earlier.treeRevision === undefined && treeRevision !== undefined && openTree)) {
       last.current = { ...earlier, treeRevision };
       return;
     }
@@ -86,7 +91,7 @@ export function ManuscriptStatisticsPanel({
         );
       }
     })();
-  }, [baseUrl, currentChapterId, fetchImpl, projectId, saveState, treeRevision, open]);
+  }, [baseUrl, currentChapterId, fetchImpl, projectId, saveState, treeRevision, openTree, open]);
 
   if (outcome === undefined) return null;
   if (outcome.kind === "projection_not_ready") {
@@ -104,7 +109,8 @@ export function ManuscriptStatisticsPanel({
     );
   }
   const page = outcome.page;
-  const chapter = page.current_chapter;
+  // A read can count another Chapter, for example when the open later set its own Chapter current again.
+  const chapter = page.current_chapter?.chapter_id === currentChapterId ? page.current_chapter : undefined;
   return (
     <section
       data-manuscript-statistics=""
