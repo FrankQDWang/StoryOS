@@ -55,7 +55,7 @@ afterEach(async () => {
 });
 
 /** One request to the fake Server. It is answered when the panel read the whole response body. */
-type Request = { request: string; held: boolean; answered: boolean };
+type Request = { request: string; hold?: string; held: boolean; answered: boolean };
 
 type Setup = {
   conversations: readonly string[];
@@ -139,8 +139,12 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
       unexpected.push(request);
       throw new Error(`Unexpected request ${request}`);
     }
-    const holding = holds.get(request);
-    const entry: Request = { request, held: holding !== undefined, answered: false };
+    // A hold of `<route>#<n>` holds only the request number n of the route.
+    const count = `${request}#${requests.filter((entry) => entry.request === request).length + 1}`;
+    const key = holds.has(request) ? request : holds.has(count) ? count : undefined;
+    const holding = key === undefined ? undefined : holds.get(key);
+    const entry: Request = { request, ...key === undefined ? {} : { hold: key }, held: holding !== undefined,
+      answered: false };
     requests.push(entry);
     await holding?.promise;
     const response = answer();
@@ -198,7 +202,7 @@ async function openPanel({ conversations, answers = {}, stored: storedRun = STOR
       for (const request of held) {
         holds.get(request)!.release();
         holds.delete(request);
-        for (const entry of requests) if (entry.request === request) entry.held = false;
+        for (const entry of requests) if (entry.hold === request) entry.held = false;
       }
       await settle();
     },
@@ -351,6 +355,34 @@ it.each([
       status: OPEN_FAILED, shown: B_SHOWN, runId: STORED.runId,
       controls: { send: true, newConversation: true, history: true }, unexpected: [], unused: [] });
   });
+
+it.each([
+  ["fails", SERVICE_UNAVAILABLE],
+  ["answers", () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNNING.runId, conversation_id: B,
+    status: "completed", results: [], decision: { kind: "advisory", decision_id: id("e6f"), selected: true,
+      text: "Late answer to B", continuation: { kind: "absent" } } })],
+] as const)("shows nothing of a Run read that started before a selection and %s after it", async (_, late) => {
+  let reads = 0;
+  const panel = await openPanel({ conversations: [A], stored: RUNNING, answers: {
+    // In the order of the answers: the first read finds the Run running, the read after the run control finds it
+    // cancelled, and the scheduled read, which is held, fails last.
+    [runRoute(RUNNING)]: () => [() => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNNING.runId,
+      conversation_id: B, status: "claimed", results: [], decision: { kind: "absent" } }),
+    () => jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUNNING.runId, conversation_id: B,
+      status: "cancelled", results: [], decision: { kind: "absent" } }), late][reads++]!(),
+    [PROPOSAL_READ_1]: null } });
+  const scheduledRead = `${runRoute(RUNNING)}#2`;
+  panel.hold(scheduledRead);
+  await panel.poll();
+  await panel.click("button[data-cancel-agent-run]");
+  await panel.select(A);
+  const selected = panel.status();
+  await panel.release(scheduledRead);
+
+  expect({ selected, status: panel.status(), shown: panel.exchanges(), runId: panel.shownRunId(),
+    unexpected: panel.unexpected, unused: panel.unused() }).toEqual({ selected: null, status: null, shown: A_SHOWN,
+    runId: RUNS[2]!.runId, unexpected: [], unused: [] });
+});
 
 it.each([
   ["the first Proposal read", PROPOSAL_READ_1, PROPOSAL_READ_2],

@@ -514,8 +514,10 @@ export function WritingAssistantPanel({
   useEffect(() => {
     if (reference?.runId === undefined || terminal || context === undefined) return;
     return scheduleRefresh(() => {
+      const selection = openSequence.current;
       void inspect(reference).catch(() => {
-        setStatus("无法确认请求结果，请稍后检查。");
+        // The failure of a read that started before a selection of a Conversation is not a part of that Conversation.
+        if (selection === openSequence.current) setStatus("无法确认请求结果，请稍后检查。");
         setFailedReads((count) => count + 1);
       });
     });
