@@ -424,8 +424,8 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
  * The open of the Project after an applied Acceptance whose response has the Editor Session state of the editor of
  * `state`, with no read (ADR 0106 section 3). The open writes the new base as the active base of the Journal of the
  * editor and keeps that Journal. It gives `undefined` when the response does not fit the editor: another Editor
- * Session, another Chapter, a base that is not later, or a Journal whose active base is not the base of the editor.
- * The page then opens the Project again, as after a response with no state.
+ * Session, another Chapter, a base that is not on the Revision of the response, or a Journal whose active base is not
+ * the base of the editor. The page then opens the Project again, as after a response with no state.
  */
 export async function acceptedProjectState(state: ProjectReadyState, accepted: AcceptProposalResponse)
   : Promise<ProjectReadyState | undefined> {
@@ -436,19 +436,13 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
   if (editor.kind !== "editor-ready" || served === undefined || effect.kind !== "applied"
     || open.kind !== "current_chapter" || open.current_chapter_id !== state.chapter.chapter.chapter_id
     || accepted.project.project_id !== state.project.project.project_id
-    || JSON.stringify(served.editor_session) !== JSON.stringify(editor.session.editor_session)
-    || served.base_snapshot.snapshot_id === editor.session.base_snapshot.snapshot_id
-    || served.base_snapshot.project_activity_position !== effect.project_activity_position
-    || JSON.stringify(served.base_snapshot.materialized_revision) !== JSON.stringify(effect.authoritative_revision)
-    || !boundedU64(effect.project_activity_position)
-    || !boundedU64(editor.session.base_snapshot.project_activity_position)
-    || BigInt(effect.project_activity_position) <= BigInt(editor.session.base_snapshot.project_activity_position)) {
+    || JSON.stringify(served.editor_session) !== JSON.stringify(editor.session.editor_session)) {
     return undefined;
   }
   const chapter: GetChapterResponse = { ...state.chapter, project_activity_position: effect.project_activity_position,
     chapter: { ...state.chapter.chapter, current_revision: effect.authoritative_revision } };
   try {
-    // The open has the checks of a read of the Editor Session.
+    // The open has the checks of a read of the Editor Session: among them, the base is the Revision of the response.
     const session = await validateSession(sessionWithState(editor.session, served), state.project.project_scope,
       chapter, profile, editor.cryptoImpl);
     const workspace: EditorWorkspace = { database: editor.database, partition: editor.partition, session,
