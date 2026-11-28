@@ -228,9 +228,31 @@ export function BlockProposalDisplay({
     onSuggestionListRef.current?.(journalAccepts ? suggestionList.heads : undefined, suggestionList.refreshKey);
   }, [suggestionList, inputChecked]);
 
+  // The Proposal reads of one refresh. A change of the locators alone reads only a Proposal that the refresh did not
+  // read, or a locator with more detail than the earlier read (#1937).
+  const proposalReads = useRef<{ refresh: readonly unknown[]; reads: Map<string, {
+    locator: ProposalLocator; read: Promise<ProposalRead> }> }>(undefined);
   useEffect(() => {
     let active = true;
-    void Promise.all(effectiveLocators.map(async (locator): Promise<ProposalRead> => {
+    const refresh = [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
+      editorProps.baseUrl, editorProps.fetchImpl];
+    const earlier = proposalReads.current;
+    const known = earlier !== undefined && earlier.refresh.every((value, index) => Object.is(value, refresh[index]))
+      ? earlier.reads : new Map<string, { locator: ProposalLocator; read: Promise<ProposalRead> }>();
+    proposalReads.current = { refresh, reads: known };
+    const readOnce = (locator: ProposalLocator): Promise<ProposalRead> => {
+      const entry = known.get(locator.proposalId);
+      if (entry !== undefined && entry.locator.runId === locator.runId
+        && entry.locator.decisionId === locator.decisionId) return entry.read;
+      // A locator with no Run is less strict, so a read of the Proposal with a Run also gives its Proposal. When that
+      // read failed, the locator reads again one time.
+      const read = entry !== undefined && locator.runId === "" && locator.decisionId === ""
+        ? entry.read.then((earlier) => earlier.proposal !== undefined ? earlier : readProposal(locator))
+        : readProposal(locator);
+      known.set(locator.proposalId, { locator, read });
+      return read;
+    };
+    const readProposal = async (locator: ProposalLocator): Promise<ProposalRead> => {
       try {
         const response = await getProposal({
           baseUrl: editorProps.baseUrl,
@@ -256,7 +278,8 @@ export function BlockProposalDisplay({
       } catch {
         return { locator };
       }
-    })).then((result) => {
+    };
+    void Promise.all(effectiveLocators.map(readOnce)).then((result) => {
       // Navigation can reorder the same locators. If the result does not change, no new Acceptance check is necessary.
       const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
         left.locator.proposalId.localeCompare(right.locator.proposalId)));
@@ -521,11 +544,15 @@ export function BlockProposalDisplay({
           const refusal = { revisionId: target.revisionId, reason: response.effect.reason, earlier: false };
           setAcceptanceRefusals((current) => ({ ...current, [target.proposalId]: refusal }));
         }
-        setSettlementRefresh((value) => value + 1);
+        // The reopen of an applied Acceptance shows a new editor part, which reads the open suggestions and the
+        // Proposals. This display reads them again only when it stays (#1937).
+        const reopens = refresh && response.effect.kind === "applied";
+        if (!reopens) setSettlementRefresh((value) => value + 1);
         try { if (refresh) await onAccepted(true); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }
+        if (reopens) setSettlementRefresh((value) => value + 1);
       } catch (error) {
         setDecisionMessages((current) => ({ ...current,
           [target.proposalId]: historicalAcknowledgementUnavailable(error)

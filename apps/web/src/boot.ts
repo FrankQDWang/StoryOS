@@ -24,6 +24,7 @@ import type {
 import { startEditorWorkspace, type EditorWorkspaceOpening } from "./editor-session.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
+import { startProjectReads, type ProjectReads } from "./project-reads.ts";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,8 +132,13 @@ const settle = <Value,>(promise: Promise<Value>): Promise<ReadResult<Value>> => 
   (error: unknown) => ({ kind: "failed" as const, error }),
 );
 
-export async function openControlledProject(options: ProjectOpenOptions): Promise<ControlledProjectState> {
-  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
+export async function openControlledProject(options: ProjectOpenOptions & {
+  /** The first open of the page also reads for the assistant panel, which reads only at its mount. */
+  panels?: boolean;
+  /** `false` for an open whose state no view shows, for example the first open of a Proposal navigation. */
+  viewReads?: boolean;
+}): Promise<ControlledProjectState> {
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, panels = false, viewReads = true } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   // The protocol profile, the Project, and the list of Projects are independent reads.
   const booted = bootProtectedWebClient(queryOptions);
@@ -142,7 +148,10 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
   const read = await listed;
   if (read.kind === "failed") return projectUnavailable(read.error);
   if (read.value === undefined) return projectUnavailable();
-  return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision);
+  // The reads of the Project start with the Chapter read. The open suggestions wait for the Editor Session (#1937).
+  const reads = viewReads && read.value.project.project.open.kind === "current_chapter"
+    ? startProjectReads({ baseUrl, projectId, fetchImpl }, { panels }) : undefined;
+  return await openProjectWorkspace({ ...options, reads }, boot.profile, read.value.project, read.value.revision);
 }
 
 /**
@@ -217,14 +226,14 @@ export async function reopenControlledProject(options: ReopenOptions):
  * early reads of a reopen only when they are of the Current Chapter of `project`. Only an open that keeps its Chapter
  * can give `ChapterKeptState`.
  */
-async function openProjectWorkspace(options: ProjectOpenOptions, profile: Release1ProtocolProfile,
-  project: GetProjectResponse, revision: string): Promise<ControlledProjectState>;
+async function openProjectWorkspace(options: ProjectOpenOptions & { reads?: ProjectReads | undefined },
+  profile: Release1ProtocolProfile, project: GetProjectResponse, revision: string): Promise<ControlledProjectState>;
 async function openProjectWorkspace(options: ProjectOpenOptions, profile: Release1ProtocolProfile,
   project: GetProjectResponse, revision: string, early: EarlyChapterOpen | undefined,
   shown: readonly ManuscriptParagraph[] | undefined, keepChapter: boolean):
   Promise<ControlledProjectState | ChapterKeptState>;
 async function openProjectWorkspace(
-  options: ProjectOpenOptions,
+  options: ProjectOpenOptions & { reads?: ProjectReads | undefined },
   profile: Release1ProtocolProfile,
   project: GetProjectResponse,
   revision: string,
@@ -232,7 +241,7 @@ async function openProjectWorkspace(
   shown?: readonly ManuscriptParagraph[],
   keepChapter = false,
 ): Promise<ControlledProjectState | ChapterKeptState> {
-  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, reads,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   try {
@@ -291,7 +300,8 @@ async function openProjectWorkspace(
       throw chapter.error;
     }
     const opened = await opening.finish(chapter.value, project, shown);
-    return { kind: "project-ready", profile, project, revision, chapter: opened.chapter, editor: opened.editor };
+    return { kind: "project-ready", profile, project, revision, chapter: opened.chapter, editor: opened.editor,
+      ...(reads === undefined ? {} : { reads }) };
   } catch (error) {
     return projectUnavailable(error);
   }

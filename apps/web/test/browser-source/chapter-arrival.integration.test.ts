@@ -1507,11 +1507,12 @@ it("shows the Arrival Input in a notice and ends a waiting selection when a Prop
   // goes out.
   const proposal = `GET ${P}/proposals/${PROPOSAL}`;
   const open = ["GET /api/v1/protocol", `GET ${P}`, "GET /api/v1/projects"];
+  // The last open of the navigation starts the tree read and the statistics read with its Chapter read (#1937).
   await expectRequests(workspace.server, before, [...SWITCH_STEPS, ...REOPEN_STEPS],
     [...PANEL_READS, ACTIVITY, proposal],
-    [READ_C, ...open, READ_B, SESSION_READ, CHALLENGE, SWITCH, ...open, READ_C, SESSION_READ],
-    { anyOrder: [openProposals(CHAPTER_C), proposal, `GET ${P}/manuscript/tree`, `GET ${P}/manuscript/statistics`,
-      ACTIVITY] });
+    [READ_C, ...open, READ_B, SESSION_READ, CHALLENGE, SWITCH, ...open, `GET ${P}/manuscript/tree`,
+      `GET ${P}/manuscript/statistics`, READ_C, SESSION_READ],
+    { anyOrder: [openProposals(CHAPTER_C), proposal, ACTIVITY] });
 });
 
 it.each([

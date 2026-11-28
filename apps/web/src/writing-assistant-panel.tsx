@@ -42,6 +42,7 @@ import {
 } from "./selection-reference-draft.ts";
 import { SKILL_UNAVAILABLE_SENTENCE, skillSelectionUnavailable } from "./skill-selection.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
+import type { ProjectReads } from "./project-reads.ts";
 
 const CONVERSATION_NOT_FOUND_SENTENCE = "找不到这段对话。";
 const CONVERSATION_OPEN_FAILED_SENTENCE = "无法打开这段对话，请稍后再试。";
@@ -129,6 +130,8 @@ export type AssistantContext = {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  /** The reads of the open. The first assistance read and the first Skills read of the panel use them (#1937). */
+  reads?: ProjectReads | undefined;
 };
 
 function storageKey(scope: ProjectScope): string {
@@ -351,10 +354,10 @@ export function WritingAssistantPanel({
       return;
     }
     let active = true;
-    void getProjectAssistance({
+    void (context.reads?.take("assistance") ?? getProjectAssistance({
       baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
       projectId: context.scope.project_id,
-    }).then((response) => {
+    })).then((response) => {
       if (!active) return;
       const owned = response.project_scope.owner_user_id === context.scope.owner_user_id
         && response.project_scope.project_id === context.scope.project_id;
@@ -369,7 +372,8 @@ export function WritingAssistantPanel({
     setSkills(undefined);
     if (context === undefined) return;
     let active = true;
-    void listSkills({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, projectId: context.scope.project_id })
+    void (context.reads?.take("skills")
+      ?? listSkills({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, projectId: context.scope.project_id }))
       .then((response) => {
         if (active && response.project_scope.owner_user_id === context.scope.owner_user_id
           && response.project_scope.project_id === context.scope.project_id) setSkills(response.skills);

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   getStatistics,
   StoryOSProtocolError,
   type GetStatisticsResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { ProjectReads } from "./project-reads.ts";
 
 type StatisticsOutcome =
   | { kind: "ready"; page: GetStatisticsResponse }
@@ -28,28 +29,61 @@ export function ManuscriptStatisticsPanel({
   currentChapterId,
   saveState,
   treeRevision,
-  treeRead,
+  openTree,
+  open,
+  reads,
 }: {
   projectId: string;
   baseUrl: string;
   fetchImpl: typeof fetch;
   currentChapterId: string;
   saveState: string;
+  /** The revision of the tree of this open, or `undefined` before the tree read of this open gave it. */
   treeRevision: string | undefined;
-  treeRead: "reading" | "settled";
+  /** `true` when `treeRevision` is of the tree read of this open, and not of a later tree read, for example after a
+   * Chapter creation (#1937). */
+  openTree: boolean;
+  /** Each open of the Project reads the statistics again. */
+  open: unknown;
+  /** The reads of the open. The first read of the open uses its statistics read (#1937). */
+  reads?: ProjectReads | undefined;
 }) {
   const [outcome, setOutcome] = useState<StatisticsOutcome | undefined>(undefined);
+  // The open, the Chapter, the tree revision, and the save state of the last read, and `saving` when a save started
+  // after it. Only the latest read sets the outcome.
+  const last = useRef<{ open: unknown; chapterId: string; treeRevision: string | undefined; saveState: string;
+    saving: boolean; sequence: number }>(undefined);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
-    // One read for one tree revision: the read waits for the first tree read.
-    if (saveState === "saving" || treeRead === "reading") return;
-    let cancelled = false;
+    const early = reads?.take("statistics");
+    const earlier = last.current;
+    if (saveState === "saving") {
+      if (earlier !== undefined) last.current = { ...earlier, saving: true };
+      return;
+    }
+    // The read does not wait for the tree read, so the first tree of an open does not start a second read. A later
+    // tree of the same open, for example after a new Chapter, and each change of the save state read again.
+    // A later tree with the same revision changes only `openTree`, and reads nothing again.
+    if (earlier !== undefined && earlier.open === open && earlier.chapterId === currentChapterId
+      && earlier.saveState === saveState && !earlier.saving && (earlier.treeRevision === treeRevision
+        || earlier.treeRevision === undefined && treeRevision !== undefined && openTree)) {
+      last.current = { ...earlier, treeRevision };
+      return;
+    }
+    const sequence = (earlier?.sequence ?? 0) + 1;
+    last.current = { open, chapterId: currentChapterId, treeRevision, saveState, saving: false, sequence };
+    const current = () => mounted.current && last.current?.sequence === sequence;
     void (async () => {
       try {
-        const page = await getStatistics({ baseUrl, projectId, fetchImpl });
-        if (!cancelled) setOutcome({ kind: "ready", page });
+        const page = await (early ?? getStatistics({ baseUrl, projectId, fetchImpl }));
+        if (current()) setOutcome({ kind: "ready", page });
       } catch (error) {
-        if (cancelled) return;
+        if (!current()) return;
         setOutcome(
           problemCode(error) === "projection_not_ready"
             ? { kind: "projection_not_ready" }
@@ -57,10 +91,7 @@ export function ManuscriptStatisticsPanel({
         );
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [baseUrl, currentChapterId, fetchImpl, projectId, saveState, treeRevision, treeRead]);
+  }, [baseUrl, currentChapterId, fetchImpl, projectId, saveState, treeRevision, openTree, open]);
 
   if (outcome === undefined) return null;
   if (outcome.kind === "projection_not_ready") {
@@ -78,7 +109,8 @@ export function ManuscriptStatisticsPanel({
     );
   }
   const page = outcome.page;
-  const chapter = page.current_chapter;
+  // A read can count another Chapter, for example when the open later set its own Chapter current again.
+  const chapter = page.current_chapter?.chapter_id === currentChapterId ? page.current_chapter : undefined;
   return (
     <section
       data-manuscript-statistics=""

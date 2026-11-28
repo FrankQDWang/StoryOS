@@ -109,7 +109,8 @@ interface ProjectEditorStatus {
 
 interface ProjectEditorViewProps extends ProjectReadyViewProps {
   tree: GetManuscriptTreeResponse | undefined;
-  treeRead: "reading" | "settled";
+  /** The state of the open whose read gave `tree`, and `first` when that read is the first tree read of the open. */
+  treeOpen: { open: unknown; first: boolean } | undefined;
   /** The number of the last tree read of the workspace. */
   treeReads: { readonly current: number };
   handle: { current: ProjectEditorHandle | undefined };
@@ -174,8 +175,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState(state.revision);
   const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(undefined);
-  // The statistics wait for the tree read of each open, also when it fails.
-  const [treeRead, setTreeRead] = useState<"reading" | "settled">("reading");
+  const [treeOpen, setTreeOpen] = useState<{ open: unknown; first: boolean } | undefined>(undefined);
   const [status, setStatus] = useState<ProjectEditorStatus>({ selectedChapterId: state.chapter.chapter.chapter_id,
     canSubmit: false });
   // The copies of Chapter text of this Project (ADR 0105). They end when the tab leaves the Project.
@@ -196,8 +196,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     setShown(state);
     setTitle(state.project.project.title);
     setRevision(state.revision);
-    // The new editor part waits for the tree read of the new state.
-    setTreeRead("reading");
     setStatus((current) => ({ ...current, selectedChapterId: state.chapter.chapter.chapter_id }));
   }
   const currentChapterId = state.project.project.open.kind === "current_chapter"
@@ -206,16 +204,20 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 
   // Only the latest tree read sets the tree, so an earlier response cannot replace a later tree.
   const treeReads = useRef(0);
-  const readTree = () => {
+  const showTree = (read: Promise<GetManuscriptTreeResponse>, first = false) => {
     treeReads.current += 1;
     const sequence = treeReads.current;
-    void readManuscriptTree({ baseUrl, projectId, fetchImpl })
-      .then((next) => { if (sequence === treeReads.current) setTree(next); }).catch(() => {})
-      .finally(() => { if (sequence === treeReads.current) setTreeRead("settled"); });
+    const open = state;
+    void read.then((next) => {
+      if (sequence !== treeReads.current) return;
+      setTree(next);
+      setTreeOpen({ open, first });
+    }).catch(() => {});
   };
-  // Until the new tree arrives, the list shows the last tree.
+  const readTree = () => { showTree(readManuscriptTree({ baseUrl, projectId, fetchImpl })); };
+  // Until the new tree arrives, the list shows the last tree. The first tree read of a state can be a read of its open.
   useEffect(() => {
-    readTree();
+    showTree(state.reads?.take("tree") ?? readManuscriptTree({ baseUrl, projectId, fetchImpl }), true);
   }, [baseUrl, fetchImpl, projectId, state]);
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
   useEffect(() => {
@@ -236,7 +238,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         scope: state.project.project_scope,
         chapterId: currentChapterId, tree,
         canSubmit: status.canSubmit,
-        baseUrl, fetchImpl, cryptoImpl,
+        baseUrl, fetchImpl, cryptoImpl, reads: state.reads,
       }}
       tree={(
         <>
@@ -288,7 +290,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
           </div>
         </>
       )}
-      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
+      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeOpen={treeOpen} treeReads={treeReads}
         handle={editor}
         copies={copies}
         handOverStore={handOverStore}
@@ -302,7 +304,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 /** The editor part of the workspace. It starts again with each new Chapter or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
+  proposalLocatorStore, writingTimers, tree, treeOpen, treeReads, handle, onStatus, copies, unsavedNotice,
   handOverStore, caretStore, waitingStore,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
@@ -1166,8 +1168,10 @@ function ProjectEditorView({
         fetchImpl={fetchImpl}
         currentChapterId={currentChapterId}
         saveState={saveState}
-        treeRevision={tree?.tree_revision}
-        treeRead={treeRead}
+        treeRevision={treeOpen?.open === state ? tree?.tree_revision : undefined}
+        openTree={treeOpen?.open === state && treeOpen.first}
+        open={state}
+        reads={state.reads}
       />
       <small
         data-save-state={shownSaveState}

@@ -42,7 +42,7 @@ export async function loadStoryOSWebState({
   const state: ControlledProjectState = projectId !== undefined && subPage === "/settings"
     ? await openProjectSettings({ baseUrl, projectId, fetchImpl })
     : projectId !== undefined && subPage === undefined
-    ? await openControlledProject({ baseUrl, projectId, fetchImpl, indexedDBImpl, cryptoImpl })
+    ? await openControlledProject({ baseUrl, projectId, fetchImpl, indexedDBImpl, cryptoImpl, panels: true })
     : locationImpl.pathname === "/"
       ? await bootProtectedWebClient({ baseUrl, fetchImpl })
       : invalidUrlState;

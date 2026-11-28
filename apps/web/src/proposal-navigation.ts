@@ -73,7 +73,9 @@ export function navigateProposal(options: {
         && !opened.chapter.chapter.current_revision.blocks.some((block) => block.manuscript_block_id === focus.blockId)) {
         throw new Error("无法打开候选位置。");
       }
-      const current = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id });
+      // No view shows this open, so it starts no read of the view.
+      const current = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id,
+        viewReads: false });
       if (!latest()) return;
       if (current.kind !== "project-ready" || current.editor.kind !== "editor-ready"
         || current.project.project.open.kind !== "current_chapter") throw new Error("无法打开写作会话。");

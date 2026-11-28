@@ -1,4 +1,5 @@
 import type { JournalWorkingBoundary } from "./journal-working-set.ts";
+import type { ProjectReads } from "./project-reads.ts";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
@@ -393,6 +394,8 @@ export interface ProjectReadyState {
   revision: string;
   chapter: GetChapterResponse;
   editor: EditorState;
+  /** The reads of the Project that the open started early. The view takes each one one time (#1937). */
+  reads?: ProjectReads;
 }
 
 /** The settings page of a Project (ADR 0094 section 9). It opens no Editor Session. */
