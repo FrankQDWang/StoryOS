@@ -277,7 +277,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v33\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v34\";"
     ));
     assert!(
         generated["generated/json-schema/storyos-public-release-1/chapter-response.schema.json"]
