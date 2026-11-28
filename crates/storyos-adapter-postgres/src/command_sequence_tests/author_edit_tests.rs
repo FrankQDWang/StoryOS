@@ -195,6 +195,15 @@ fn exact_retry(command: &ApplyAuthorEditCommand) -> ApplyAuthorEditCommand {
     retry
 }
 
+/// The settlement of `first` as a replay gives it: a replay gives no Editor Session state
+/// (ADR 0106 section 3).
+fn replayed_form(first: &AuthorEditSettlement) -> AuthorEditSettlement {
+    AuthorEditSettlement {
+        editor_session: None,
+        ..first.clone()
+    }
+}
+
 async fn result_kind(admin: &Client, receipt_id: &str) -> String {
     admin
         .query_one(
@@ -240,7 +249,7 @@ async fn every_author_edit_outcome_replays_its_first_settlement_and_writes_only_
             .apply_author_edit(&exact_retry(&command))
             .await
             .unwrap();
-        assert_eq!(replayed, first, "{edit:?}");
+        assert_eq!(replayed, replayed_form(&first), "{edit:?}");
         observed.push((
             result_kind(&admin, &first.ids.receipt_id).await,
             settlement_rows(&admin, &first.ids.receipt_id).await,
@@ -383,7 +392,7 @@ async fn an_author_edit_replay_needs_no_response_record_and_damaged_evidence_is_
             .unwrap();
         let replayed: Result<AuthorEditSettlement, _> =
             store.apply_author_edit(&exact_retry(&command)).await;
-        assert_eq!(replayed.unwrap(), first, "{edit:?}");
+        assert_eq!(replayed.unwrap(), replayed_form(&first), "{edit:?}");
         run_without_foreign_keys(&admin, &damage(&first.ids.receipt_id)).await;
         observed.push(matches!(
             store.apply_author_edit(&exact_retry(&command)).await,
@@ -688,7 +697,12 @@ async fn the_outcome_query_settles_a_cut_admission_with_the_receipt_of_an_uninte
         // A second outcome query replays the same settlement.
         assert_eq!(
             outcome(&store, &command).await,
-            storyos_application::ApplyAuthorEditOutcome::Committed(committed.clone()),
+            storyos_application::ApplyAuthorEditOutcome::Committed(Box::new(
+                storyos_application::CommittedApplyAuthorEdit {
+                    settlement: replayed_form(&committed.settlement),
+                    ..(*committed).clone()
+                }
+            )),
             "{edit:?}"
         );
         recovered.push(receipt_facts(&admin, &committed.settlement).await);

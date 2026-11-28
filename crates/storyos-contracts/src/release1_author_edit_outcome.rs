@@ -8,7 +8,7 @@ use crate::release1_author_edit::ApplyAuthorEditResponse;
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID: &str =
     "storyos.query.apply-author-edit-outcome.request.v1";
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID: &str =
-    "storyos.query.apply-author-edit-outcome.response.v1";
+    "storyos.query.apply-author-edit-outcome.response.v2";
 
 pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME: QueryOperation = QueryOperation {
     operation_id: "getApplyAuthorEditOutcome",

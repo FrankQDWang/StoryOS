@@ -67,6 +67,8 @@ pub struct AuthorEditSettlement {
     pub receipt_created_at: String,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: u64,
+    /// The Editor Session after the first run of an applied edit, as its read gives it.
+    pub editor_session: Option<crate::EditorSession>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

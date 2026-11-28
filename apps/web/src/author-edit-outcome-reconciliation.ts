@@ -20,6 +20,12 @@ import {
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 
+/** The Apply Author Edit response forms that the Web reads. Only v3 can have the Editor Session state (ADR 0106). */
+export const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS: readonly string[] = [
+  "storyos.command.apply-author-edit.response.v2",
+  "storyos.command.apply-author-edit.response.v3",
+];
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 interface GroupEvidenceView {
@@ -303,15 +309,17 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
       };
     };
   };
-  if (candidate?.schema_id !== "storyos.query.apply-author-edit-outcome.response.v1"
+  // The v1 form is the form before ADR 0106 section 3. No outcome form has the Editor Session state.
+  if ((candidate?.schema_id !== "storyos.query.apply-author-edit-outcome.response.v1"
+      && candidate?.schema_id !== "storyos.query.apply-author-edit-outcome.response.v2")
     || !UUID.test((candidate?.correlation_id ?? "") as string)
     || !candidate?.outcome
     || typeof candidate.outcome !== "object") {
     return null;
   }
   const { outcome } = candidate;
-  if (outcome.outcome_kind === "committed" && outcome.response?.schema_id
-    === "storyos.command.apply-author-edit.response.v2") {
+  if (outcome.outcome_kind === "committed" && APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS
+    .includes(outcome.response?.schema_id as string)) {
     return { kind: "committed", response: outcome.response };
   }
   if (outcome.outcome_kind === "rejected"

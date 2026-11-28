@@ -7,7 +7,8 @@ use super::{
 };
 use crate::release1::{
     CREATE_EDITOR_SESSION, CreateEditorSessionRequest, CreateEditorSessionResponse,
-    EditorBaseSnapshot, EditorSessionBinding, GET_EDITOR_SESSION, GetEditorSessionResponse,
+    EditorBaseSnapshot, EditorSessionBinding, EditorSessionState, GET_EDITOR_SESSION,
+    GetEditorSessionResponse,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
 use crate::release1_route_catalog::{
@@ -64,6 +65,7 @@ pub(super) const CREATE_EDITOR_SESSION_ROW: OperationRow = OperationRow {
         CreateEditorSessionRequest::decl,
         EditorSessionBinding::decl,
         EditorBaseSnapshot::decl,
+        EditorSessionState::decl,
         CreateEditorSessionResponse::decl,
     ],
     fixture: Fixture::Json(

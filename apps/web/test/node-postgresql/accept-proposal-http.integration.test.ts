@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { getChapter, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { getChapter, getEditorSession, getProposal,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { GetProposalResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { PROSE, REVISED, reviseCandidate } from "../support/acceptance.ts";
 import { UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, freshNamespace, openProposal, problemOf,
@@ -60,7 +61,14 @@ test("acceptProposal applies, replays, and refuses", async () => {
   assert.match(effect.authoritative_commit_id, UUID_V7);
   assert.match(effect.authoritative_revision.revision_id, UUID_V7);
   assert.equal(effect.authoritative_revision.body, REVISED);
-  assert.deepEqual(await accepted.command.send(), { response: accepted.response, body: accepted.body });
+  // The first run gives the Editor Session state that a read right after it gives, and a replay gives none
+  // (ADR 0106 section 3).
+  const { editor_session_state: state, ...firstRun } = accepted.response;
+  const { schema_id: _schema, correlation_id: _correlation, project_scope: _scope, ...read } = await getEditorSession({
+    baseUrl: story.baseUrl, projectId: story.projectId, editorSessionId, fetchImpl: story.fetchImpl });
+  assert.equal(state?.base_snapshot.authoritative_head_revision_id, effect.authoritative_revision.revision_id);
+  assert.deepEqual(state, read);
+  assert.deepEqual((await accepted.command.send()).response, firstRun);
   const inspected = await inspect();
   assert.deepEqual([inspected.operation_resolution, inspected.reservation_state, inspected.revision_id],
     ["applied", "resolved", revised.revision_id]);

@@ -1864,7 +1864,7 @@
       "schemas": {
         "request": "storyos.command.apply-author-edit.request.v2",
         "request_source": "protocol",
-        "response": "storyos.command.apply-author-edit.response.v2",
+        "response": "storyos.command.apply-author-edit.response.v3",
         "response_source": "protocol",
         "semantic_source": "core"
       },
@@ -1932,7 +1932,7 @@
       "schemas": {
         "request": "storyos.command.accept-proposal.request.v1",
         "request_source": "protocol",
-        "response": "storyos.command.accept-proposal.response.v1",
+        "response": "storyos.command.accept-proposal.response.v2",
         "response_source": "protocol",
         "semantic_source": "core"
       },
@@ -3428,7 +3428,7 @@
       "schemas": {
         "request": "storyos.query.apply-author-edit-outcome.request.v1",
         "request_source": "protocol",
-        "response": "storyos.query.apply-author-edit-outcome.response.v1",
+        "response": "storyos.query.apply-author-edit-outcome.response.v2",
         "response_source": "protocol",
         "semantic_source": "admission"
       },

@@ -860,7 +860,7 @@ BrowserProtocolObservation =
     }
   | ApplyAuthorEditAppliedObservation {
       protocol_observation_id
-      schema_id: "storyos.command.apply-author-edit.response.v2"
+      schema_id: "storyos.command.apply-author-edit.response.v2" | "storyos.command.apply-author-edit.response.v3"
       command_id
       author_command_admission_id
       project_scope
@@ -872,13 +872,16 @@ BrowserProtocolObservation =
         author_action_sequence
         project_activity_position
       }
+      // v3 only, and only on the first run of the edit: the Editor Session after the edit, as a read gives it. The
+      // Web then sends no read of the Editor Session (ADR 0106 section 3).
+      editor_session_state?: { editor_session, base_snapshot, author_undo_frontier_sequence? }
       completed_intent_record_id
       local_intent_sequence
       observed_at
     }
   | ApplyAuthorEditZeroAuthorityObservation {
       protocol_observation_id
-      schema_id: "storyos.command.apply-author-edit.response.v2"
+      schema_id: "storyos.command.apply-author-edit.response.v2" | "storyos.command.apply-author-edit.response.v3"
       command_id
       author_command_admission_id
       project_scope

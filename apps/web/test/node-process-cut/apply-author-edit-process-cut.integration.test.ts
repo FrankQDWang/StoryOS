@@ -170,7 +170,7 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
         project_scope: unknownAfterRestart.project_scope,
         outcome: unknownAfterRestart.outcome,
       }, {
-        schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+        schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
         project_scope: { owner_user_id: USER, project_id: PROJECT },
         outcome: {
           outcome_kind: "still_unknown",

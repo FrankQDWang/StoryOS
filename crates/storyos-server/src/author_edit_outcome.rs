@@ -113,7 +113,12 @@ fn contract_outcome(
                     expected_authoritative_revision_id: committed
                         .expected_authoritative_revision_id,
                 },
-                committed.settlement,
+                // The outcome Query comes after the first run, when other commands can have moved
+                // the base, so it gives no state of the Editor Session.
+                storyos_application::AuthorEditSettlement {
+                    editor_session: None,
+                    ..committed.settlement
+                },
             )?),
         },
         ApplicationOutcome::Rejected { reason } => contracts::ApplyAuthorEditOutcome::Rejected {

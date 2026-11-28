@@ -114,7 +114,7 @@ test("A repeated Author Edit Challenge request across a rate policy revision ret
       idempotencyKey: expiredKey, antiForgery: expired.nonce, fetchImpl });
     assert.match(correlationId, UUID_V7);
     assert.deepEqual(outcome, {
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       project_scope: { owner_user_id: USER_A, project_id: projectId },
       outcome: { outcome_kind: "rejected", reason: "challenge_expired_unconsumed" },
     });

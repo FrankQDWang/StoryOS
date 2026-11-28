@@ -131,12 +131,15 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * another tab, so the Session base follows the switch. `failNext(names)` answers the next request of each given name
  * with a 503 problem. `releaseOnly(names)` releases only the held requests of the given names. With `proposalResult`,
  * the Run of the Conversation has a Proposal result with a change in Chapter A. With `third`, the Project also has
- * Chapter C. After `earlierChapterB(true)`, a Chapter B read gives the text of an earlier Revision.
+ * Chapter C. After `earlierChapterB(true)`, a Chapter B read gives the text of an earlier Revision. With
+ * `responseState`, an applied Acceptance gives the Editor Session state of this page in its response.
  */
 function fakeServer({ reads, commands = [], proposals = false, acceptance = "refused", switchAfterAcceptance = false,
   assistant, unavailable = [], lost = [], rejection = "resolved", other = false, proposalResult = false,
-  third = false, sessions = [SESSION], statistics = false }: {
+  third = false, sessions = [SESSION], statistics = false, responseState = false }: {
   reads: string[]; commands?: string[]; proposals?: boolean;
+  /** An applied Acceptance has the Editor Session state of this page in its response (ADR 0106 section 3). */
+  responseState?: boolean;
   acceptance?: "refused" | "applied" | "late"; switchAfterAcceptance?: boolean;
   /** The Editor Session of each creation, in order. A creation after the last one gets the last one. */
   sessions?: string[];
@@ -367,7 +370,10 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
         state.current = CHAPTER_B;
         settle(ELSEWHERE_SWITCH_SNAPSHOT);
       }
-      return jsonResponse({ schema_id: "storyos.command.accept-proposal.response.v1",
+      const withState = applied && responseState && !switchAfterAcceptance;
+      return jsonResponse({ schema_id: `storyos.command.accept-proposal.response.v${withState ? 2 : 1}`,
+        ...(withState ? { editor_session_state: { editor_session: session().editor_session,
+          base_snapshot: session().base_snapshot } } : {}),
         correlation_id: input.correlation_id, project_scope: scope, command_id: "018f0000-0000-7001-8000-000000000e05",
         author_command_admission_id: "018f0000-0000-7001-8000-000000000e06",
         receipt: { receipt_id: "018f0000-0000-7001-8000-000000000e07", project_scope: scope,
@@ -1382,6 +1388,32 @@ it("opens the Project again one time after an applied acceptance", async () => {
   expect({ open: openReads(later).sort(), revision: revision(), unexpected: server.log.unexpected })
     .toEqual({ open: [LIST, PROJECT_READ].sort(), revision: ACCEPTED_REVISION, unexpected: [] });
 });
+
+it("shows an applied acceptance whose response has the Editor Session state with the Challenge and the command only",
+  async () => {
+    const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ], commands: [SESSION_CREATE, ACCEPTANCE],
+      proposals: true, acceptance: "applied", responseState: true });
+    const workspace = await openWorkspace(server);
+    const accept = () => workspace.root.querySelector<HTMLButtonElement>(
+      `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+    await expect.poll(() => accept()?.disabled).toBe(false);
+    const before = server.log.started.length;
+
+    accept()!.click();
+
+    const revision = () => workspace.root.querySelector("[data-authoritative-revision-id]")
+      ?.getAttribute("data-authoritative-revision-id");
+    await expect.poll(revision).toBe(ACCEPTED_REVISION);
+    await expect.poll(() => workspace.root.querySelector("[data-manuscript-editor]")?.getAttribute("contenteditable"))
+      .toBe("true");
+    await expect.poll(server.inFlight).toEqual([]);
+    // Each request from the click: the editor shows the new base after two steps, in this order. The reads of the
+    // view start after them at the same time, and no read of the Project, the Chapter, or the Editor Session follows.
+    const requests = server.log.started.slice(before);
+    expect({ steps: requests.slice(0, 2), view: requests.slice(2).sort(), unexpected: server.log.unexpected })
+      .toEqual({ steps: [CHALLENGE, ACCEPTANCE], view: [openProposalsRead(CHAPTER), STATISTICS, TREE, ACTIVITY_READ,
+        PROPOSAL_READ].sort(), unexpected: [] });
+  });
 
 it("opens the Project one time after an applied acceptance whose response was lost", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, ACCEPTANCE],

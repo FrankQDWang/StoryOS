@@ -67,11 +67,11 @@ pub use release1::{
     CREATE_PROJECT_COMMAND_CHALLENGE_PATH, ControlledProject, CreateEditorSessionRequest,
     CreateEditorSessionResponse, CreateProjectCommandChallengeRequest,
     CreateProjectCommandChallengeResponse, CurrentChapter, DigestAlgorithm, DigestValue,
-    EDITOR_CONTRACT_REVISION, EditorBaseSnapshot, EditorSessionBinding, GET_CHAPTER_METHOD,
-    GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD, GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD,
-    GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD, GET_PROTOCOL_PROFILE_PATH, GetChapterResponse,
-    GetEditorSessionResponse, GetProjectResponse, LIMIT_PROFILE_REVISION, ManuscriptBlock,
-    ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
+    EDITOR_CONTRACT_REVISION, EditorBaseSnapshot, EditorSessionBinding, EditorSessionState,
+    GET_CHAPTER_METHOD, GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD, GET_EDITOR_SESSION_PATH,
+    GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD, GET_PROTOCOL_PROFILE_PATH,
+    GetChapterResponse, GetEditorSessionResponse, GetProjectResponse, LIMIT_PROFILE_REVISION,
+    ManuscriptBlock, ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
     Release1ProtocolProfile, StoryOSProblem, project_command_kind,
 };
 pub use release1_accept_proposal::{

@@ -64,5 +64,5 @@
     ],
     "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08"
   },
-  "schema_id": "storyos.command.accept-proposal.response.v1"
+  "schema_id": "storyos.command.accept-proposal.response.v2"
 }

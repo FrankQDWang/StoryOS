@@ -4,7 +4,8 @@ use ts_rs::TS;
 
 use crate::release1::{
     APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
-    AuthoritativeChapterRevision, DigestValue, HttpMethod, ProjectScope, QueryOperation,
+    AuthoritativeChapterRevision, DigestValue, EditorSessionState, HttpMethod, ProjectScope,
+    QueryOperation,
 };
 
 pub(super) const APPLY_AUTHOR_EDIT: QueryOperation = QueryOperation {
@@ -292,4 +293,7 @@ pub struct ApplyAuthorEditResponse {
     pub effect: ApplyAuthorEditEffect,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: String,
+    /// Only the first run of an applied edit has it. A replay and the outcome Query have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor_session_state: Option<EditorSessionState>,
 }

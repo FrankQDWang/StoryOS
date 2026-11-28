@@ -6,6 +6,7 @@ import {
   getEditorSession,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
+  AcceptProposalResponse,
   CreateEditorSessionRequest,
   CreateProjectCommandChallengeResponse,
   GetChapterResponse,
@@ -18,7 +19,9 @@ import type {
   EditorState,
   EditorWorkspace,
   JournalPartition,
+  ProjectReadyState,
 } from "./editor-types.ts";
+import { sessionWithState } from "./author-edit-submission.ts";
 import {
   JOURNAL_DATABASE_VERSION,
   JOURNAL_OBJECT_STORES,
@@ -415,6 +418,53 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
   chapter: GetChapterResponse;
 }): Promise<EditorState> {
   return (await startEditorWorkspace(options).finish(options.chapter)).editor;
+}
+
+/**
+ * The open of the Project after an applied Acceptance whose response has the Editor Session state of the editor of
+ * `state`, with no read (ADR 0106 section 3). The open writes the new base as the active base of the Journal of the
+ * editor and keeps that Journal. It gives `undefined` when the response does not fit the editor: another Editor
+ * Session, another Chapter, a base that is not later, or input that is not saved. The page then opens the Project
+ * again, as after a response with no state.
+ */
+export async function acceptedProjectState(state: ProjectReadyState, accepted: AcceptProposalResponse)
+  : Promise<ProjectReadyState | undefined> {
+  const { editor, profile } = state;
+  const served = accepted.editor_session_state ?? undefined;
+  const { effect } = accepted;
+  const open = accepted.project.open;
+  if (editor.kind !== "editor-ready" || served === undefined || effect.kind !== "applied"
+    || open.kind !== "current_chapter" || open.current_chapter_id !== state.chapter.chapter.chapter_id
+    || accepted.project.project_id !== state.project.project.project_id
+    || JSON.stringify(served.editor_session) !== JSON.stringify(editor.session.editor_session)
+    || served.base_snapshot.snapshot_id === editor.session.base_snapshot.snapshot_id
+    || served.base_snapshot.project_activity_position !== effect.project_activity_position
+    || JSON.stringify(served.base_snapshot.materialized_revision) !== JSON.stringify(effect.authoritative_revision)
+    || !boundedU64(effect.project_activity_position)
+    || !boundedU64(editor.session.base_snapshot.project_activity_position)
+    || BigInt(effect.project_activity_position) <= BigInt(editor.session.base_snapshot.project_activity_position)) {
+    return undefined;
+  }
+  const chapter: GetChapterResponse = { ...state.chapter, project_activity_position: effect.project_activity_position,
+    chapter: { ...state.chapter.chapter, current_revision: effect.authoritative_revision } };
+  try {
+    // The open has the checks of a read of the Editor Session.
+    const session = await validateSession(sessionWithState(editor.session, served), state.project.project_scope,
+      chapter, profile, editor.cryptoImpl);
+    const earlier = await rebuildPendingProjection(editor);
+    if (earlier.save_state !== "saved" || earlier.unsettled_intent_count !== 0) return undefined;
+    const workspace: EditorWorkspace = { database: editor.database, partition: editor.partition, session,
+      cryptoImpl: editor.cryptoImpl, maxJsonStringUtf8Bytes: editor.maxJsonStringUtf8Bytes };
+    const transaction = workspace.database.transaction("metadata", "readwrite");
+    transaction.objectStore("metadata").put({ key: `active_base:${workspace.partition.journal_partition_id}`,
+      value: session.base_snapshot });
+    await transactionResult(transaction);
+    const { reads: _earlierReads, ...rest } = state;
+    return { ...rest, project: { ...state.project, project: accepted.project }, chapter,
+      editor: { kind: "editor-ready", ...workspace, openedProjection: await rebuildPendingProjection(workspace) } };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Tells if the stored Editor Session has a base that is not the text of the Chapter read. */

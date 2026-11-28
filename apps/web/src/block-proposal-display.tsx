@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { getProposal, listChapterOpenProposals } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  BlockProposalInspect, ProjectScope,
+  AcceptProposalResponse, BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ArrivalSink } from "./arrival-input.ts";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
@@ -74,7 +74,8 @@ export function BlockProposalDisplay({
   refreshKey: number;
   safeToProject: boolean;
   /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
-  onAccepted: (settled: boolean) => Promise<void>;
+  /** `accepted` is the response of a settled Acceptance of this display. */
+  onAccepted: (settled: boolean, accepted?: AcceptProposalResponse) => Promise<void>;
   /** Each end of a decision of this display. A decision can change a Proposal of the Project (ADR 0105). */
   onDecisionEnd?: (() => void) | undefined;
   /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
@@ -548,7 +549,7 @@ export function BlockProposalDisplay({
         // Proposals. This display reads them again only when it stays (#1937).
         const reopens = refresh && response.effect.kind === "applied";
         if (!reopens) setSettlementRefresh((value) => value + 1);
-        try { if (refresh) await onAccepted(true); } catch {
+        try { if (refresh) await onAccepted(true, response); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }
@@ -611,7 +612,7 @@ export function BlockProposalDisplay({
             reason: response.effect.reason, earlier: false };
           setAcceptanceRefusals((current) => ({ ...current, [proposalId]: refusal }));
         }
-        if (refresh) await onAccepted(true);
+        if (refresh) await onAccepted(true, response);
         setSettlementRefresh((value) => value + 1);
       } catch {
         setDecisionMessages((current) => ({ ...current,

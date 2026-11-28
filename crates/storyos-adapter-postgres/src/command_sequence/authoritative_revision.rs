@@ -160,6 +160,8 @@ impl SettlementProfile for AuthoritativeRevision {
                 .map_err(|_| damaged())?,
             body: display_body_from_stored(&revision.payload, &blocks),
             blocks,
+            // A replay comes after the first run, when other commands can have moved the base.
+            session: None,
         })
     }
 }
@@ -378,6 +380,18 @@ pub(crate) async fn write_revision<E>(
             }
         }
     }
+    let session = if base_updates == 1 {
+        crate::editor_session::session_after_command(client, scope, &write.editor_session_id)
+            .await
+            .map_err(|error| match error {
+                storyos_application::EditorSessionError::Unavailable(source) => {
+                    ProjectCommandError::Unavailable(source)
+                }
+                _ => ProjectCommandError::BindingConflict,
+            })?
+    } else {
+        None
+    };
     crate::snapshot::persist_canonical_snapshot(
         client,
         scope,
@@ -400,6 +414,7 @@ pub(crate) async fn write_revision<E>(
         effect: write.effect,
         body: display_body_from_stored(&write.payload, &blocks),
         blocks,
+        session,
         ids: sequences.ids,
         author_action_sequence: sequences.author_action_sequence,
         project_activity_position: sequences.project_activity_position,
