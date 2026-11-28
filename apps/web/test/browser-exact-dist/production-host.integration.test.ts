@@ -2,8 +2,31 @@ import { expect, it } from "vitest";
 
 import { verifyProductionHost } from "../support/browser-command-client";
 
-it("opens, edits, reloads, and takes over through the real production host in Chrome", async () => {
-  await expect(verifyProductionHost({ scenario: "open_edit_reload_takeover" }))
+it("opens, edits, and reloads through the real production host, and a second page writes with no click", async () => {
+  await expect(verifyProductionHost({ scenario: "open_edit_reload_two_pages" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
+it("sets the Chapter of unsent text current again at a new load after another page selected another Chapter", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
+it("sets the Chapter current again at a new load and stores the text of a save whose Command Challenge did not answer "
+  + "before the page closed", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_challenge" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
+it("settles a save whose response did not come back before the page closed at a new load, opens the Chapter that "
+  + "another page set current, and saves the next input on the applied Revision", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_outcome" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
+it("shows the text of a save whose response did not come back on its Chapter, not saved and with no command, at a new "
+  + "load whose outcome Query fails after another page set another Chapter current", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_outcome_unavailable" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 

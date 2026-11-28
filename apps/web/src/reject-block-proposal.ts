@@ -131,7 +131,6 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
       journal_partition_id: workspace.partition.journal_partition_id,
       project_scope: workspace.partition.project_scope,
       editor_session_id: workspace.partition.editor_session_id,
-      writer_generation: workspace.partition.writer_generation,
       command_kind: "rejectProposalOperations",
       author_visible_decision_ref: decisionReference(options.proposalId, options.proposalRevisionId, operationIds),
       frozen_request_digest: await digestRejectProposalOperations(request, options.cryptoImpl),
@@ -154,7 +153,6 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
     || flight.journal_partition_id !== workspace.partition.journal_partition_id
     || JSON.stringify(flight.project_scope) !== JSON.stringify(workspace.partition.project_scope)
     || flight.editor_session_id !== workspace.partition.editor_session_id
-    || flight.writer_generation !== workspace.partition.writer_generation
     || flight.request.command_schema !== "storyos.command.reject-proposal-operations.request.v1"
     || input.proposal_revision_id !== options.proposalRevisionId
     || JSON.stringify(input.selected_operation_ids) !== JSON.stringify(operationIds)

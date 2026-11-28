@@ -4,7 +4,7 @@ use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     EditorClientBinding, EditorSession, EditorSessionError, EditorSessionId, EditorSessionLookup,
-    EditorWriterState, OpenEditorSession, ProjectCommandChallengeBinding,
+    OpenEditorSession, ProjectCommandChallengeBinding,
 };
 
 use super::project_command_challenge::{
@@ -174,11 +174,10 @@ pub(super) async fn get_editor_session(
     .ok_or_else(resource_unavailable)?;
     let response = create_response(&scope, Uuid::now_v7().to_string(), session);
     Ok(Json(contracts::GetEditorSessionResponse {
-        schema_id: "storyos.query.editor-session.response.v1".to_owned(),
+        schema_id: "storyos.query.editor-session.response.v2".to_owned(),
         correlation_id: response.correlation_id,
         project_scope: response.project_scope,
         editor_session: response.editor_session,
-        writer: response.writer,
         base_snapshot: response.base_snapshot,
         author_undo_frontier_sequence: response.author_undo_frontier_sequence,
     }))
@@ -201,35 +200,25 @@ fn create_response(
     correlation_id: String,
     session: EditorSession,
 ) -> contracts::CreateEditorSessionResponse {
-    let writer = match session.writer {
-        EditorWriterState::CurrentWriter { writer_generation } => {
-            contracts::EditorWriterProjection::CurrentWriter {
-                writer_generation: writer_generation.to_string(),
-            }
-        }
-        EditorWriterState::ReadOnly {
-            observed_writer_generation,
-            reason,
-        } => contracts::EditorWriterProjection::ReadOnly {
-            observed_writer_generation: observed_writer_generation.to_string(),
-            reason: match reason {
-                storyos_application::EditorReadOnlyReason::SecondarySession => {
-                    contracts::EditorReadOnlyReason::SecondarySession
-                }
-                storyos_application::EditorReadOnlyReason::SupersededByTakeover => {
-                    contracts::EditorReadOnlyReason::SupersededByTakeover
-                }
-                storyos_application::EditorReadOnlyReason::BindingInvalid => {
-                    contracts::EditorReadOnlyReason::BindingInvalid
-                }
-            },
-        },
-    };
-    let chapter_id = session.base_snapshot.chapter_id.clone();
+    let state = session_state(session);
     contracts::CreateEditorSessionResponse {
-        schema_id: "storyos.command.create-editor-session.response.v1".to_owned(),
+        schema_id: "storyos.command.create-editor-session.response.v2".to_owned(),
         correlation_id,
         project_scope: contract_scope(scope),
+        editor_session: state.editor_session,
+        base_snapshot: state.base_snapshot,
+        author_undo_frontier_sequence: state.author_undo_frontier_sequence,
+    }
+}
+
+/// The binding, the base Snapshot, and the Author Undo Frontier of `session`, as the read of the
+/// Editor Session gives them.
+pub(super) fn session_state(session: EditorSession) -> contracts::EditorSessionState {
+    let author_undo_frontier_sequence = session
+        .author_undo_frontier_sequence
+        .map(|sequence| sequence.to_string());
+    let chapter_id = session.base_snapshot.chapter_id.clone();
+    contracts::EditorSessionState {
         editor_session: contracts::EditorSessionBinding {
             editor_session_id: session.editor_session_id.as_ref().to_owned(),
             client_session_binding_ref: session.client_binding.binding_ref,
@@ -239,7 +228,6 @@ fn create_response(
             opened_at: session.opened_at,
             disposition: "open".to_owned(),
         },
-        writer,
         base_snapshot: contracts::EditorBaseSnapshot {
             snapshot_id: session.base_snapshot.snapshot_id,
             chapter_id: chapter_id.clone(),
@@ -260,9 +248,7 @@ fn create_response(
             },
             created_at: session.base_snapshot.created_at,
         },
-        author_undo_frontier_sequence: session
-            .author_undo_frontier_sequence
-            .map(|sequence| sequence.to_string()),
+        author_undo_frontier_sequence,
     }
 }
 

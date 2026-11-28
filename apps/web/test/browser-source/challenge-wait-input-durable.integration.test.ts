@@ -30,7 +30,7 @@ import {
 } from "./scenario.ts";
 
 const ACTIVE_SESSION_KEY = `active_session:${OWNER}:${PROJECT}`;
-const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v1";
+const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v2";
 const T0 = Date.parse(FIRST_APPEND_EDIT.createdAt!);
 
 type Timer = { callback: () => void; timeout: number; cleared: boolean };
@@ -69,7 +69,7 @@ async function openWaitEditor(options: {
   const scenario = createBrowserScenario();
   let head = REVISION;
   let body = scenario.session.base_snapshot.materialized_revision.body;
-  let canonicalSession: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let canonicalSession: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   const challengeKeys: string[] = [];
   const authorEdits: Array<{ key: string; expected: unknown; units: number; target?: unknown; heads?: unknown }> = [];
   let digest: DigestValue | undefined;

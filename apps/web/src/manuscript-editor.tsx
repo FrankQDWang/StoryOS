@@ -31,7 +31,7 @@ import {
 import type { ProposalFocus } from "./proposal-navigation.ts";
 import { AddReferenceControl, type EditorReferenceSource } from "./selection-reference-control.tsx";
 import {
-  rebaseDraftReferences, trackableDraftReferences, trackDraftReferences,
+  rebaseDraftReferences, showAcceptedSplits, trackableDraftReferences, trackDraftReferences,
 } from "./selection-reference-draft.ts";
 
 export interface ManuscriptEditorProps {
@@ -164,6 +164,8 @@ export function ManuscriptEditor({
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: storyosEditorProps(firstBlockId),
+    onFocus() { arrivalRef.current?.focus(true); },
+    onBlur() { arrivalRef.current?.focus(false); },
     onCreate({ editor: created }) {
       const rendered = readManuscriptParagraphs(created.state.doc);
       if (rendered === undefined || !paragraphsEqual(rendered, blocks)) {
@@ -184,6 +186,7 @@ export function ManuscriptEditor({
         // The editor also tracks the references at that Revision, for example of an accepted candidate.
         if (source.saved && isStoryosHydrateTransaction(transaction)) {
           rebaseDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, source.revisionId);
+          showAcceptedSplits(source.scope, source.chapterId, source.revisionId, nextBlocks, source.tree);
           for (const key of trackableDraftReferences(source.scope, source.chapterId, source.revisionId)) {
             trackedReferencesRef.current.add(key);
           }
@@ -262,7 +265,11 @@ export function ManuscriptEditor({
 
   useEffect(() => {
     editor?.setEditable(editable);
-  }, [editable, editor]);
+    // A read-only Arriving Chapter keeps the focus of a click, for the caret at the start of input (#1934).
+    if (editor === null || arrival === undefined) return;
+    if (editable) editor.view.dom.removeAttribute("tabindex");
+    else editor.view.dom.tabIndex = -1;
+  }, [editable, editor, arrival]);
 
   // The editor of a hand-over starts with the caret of the Arriving Chapter.
   useEffect(() => {
@@ -272,13 +279,20 @@ export function ManuscriptEditor({
     const { doc } = editor.state;
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(doc.resolve(clamp(initialSelection.anchor)),
       doc.resolve(clamp(initialSelection.head)))));
-    editor.view.focus();
+    // ProseMirror focuses only an editable view, and a read-only Arriving Chapter keeps the focus too (#1934).
+    if (editor.isEditable) editor.view.focus();
+    else editor.view.dom.focus({ preventScroll: true });
   }, [editor]);
 
   useEffect(() => {
     if (referenceSource === undefined) return;
     const tracked = trackedReferencesRef.current;
     tracked.clear();
+    const shown = editor === null ? undefined : readManuscriptParagraphs(editor.state.doc);
+    if (shown !== undefined) {
+      showAcceptedSplits(referenceSource.scope, referenceSource.chapterId, referenceSource.revisionId, shown,
+        referenceSource.tree);
+    }
     for (const key of trackableDraftReferences(referenceSource.scope, referenceSource.chapterId,
       referenceSource.revisionId)) tracked.add(key);
   }, [editor, referenceSource?.chapterId]);

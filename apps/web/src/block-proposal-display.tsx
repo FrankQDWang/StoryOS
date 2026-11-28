@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { getProposal, listChapterOpenProposals } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  BlockProposalInspect, ProjectScope,
+  AcceptProposalResponse, BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ArrivalSink } from "./arrival-input.ts";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
@@ -10,7 +10,7 @@ import type { EditorReadyState } from "./editor-types.ts";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { canonicalValue as canonical } from "./canonical-value.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
-import { acceptDraftCandidates } from "./selection-reference-draft.ts";
+import { acceptDraftCandidates, acceptedCandidateTexts, proposalOfRead } from "./selection-reference-draft.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
 import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplayedAcceptance,
@@ -74,7 +74,8 @@ export function BlockProposalDisplay({
   refreshKey: number;
   safeToProject: boolean;
   /** Opens the Project again after a decision. `settled` is true when the decision has a settled response. */
-  onAccepted: (settled: boolean) => Promise<void>;
+  /** `accepted` is the response of a settled Acceptance of this display. */
+  onAccepted: (settled: boolean, accepted?: AcceptProposalResponse) => Promise<void>;
   /** Each end of a decision of this display. A decision can change a Proposal of the Project (ADR 0105). */
   onDecisionEnd?: (() => void) | undefined;
   /** Starts a read of the open suggestions. The returned function receives the Proposals of a complete list. */
@@ -84,7 +85,8 @@ export function BlockProposalDisplay({
    * while `editable` is true. The editor and the Proposal states of this Chapter end. The reads and the state of this
    * display stay for a switch that fails.
    */
-  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink }
+  arriving?: { key: string; blocks: ManuscriptEditorProps["blocks"]; editable?: boolean; input?: ArrivalSink;
+    initialSelection?: ManuscriptEditorProps["initialSelection"] }
     | undefined;
   /**
    * Each answer of the read of the open suggestions of this Chapter: the Proposal heads of a complete list, or
@@ -227,9 +229,31 @@ export function BlockProposalDisplay({
     onSuggestionListRef.current?.(journalAccepts ? suggestionList.heads : undefined, suggestionList.refreshKey);
   }, [suggestionList, inputChecked]);
 
+  // The Proposal reads of one refresh. A change of the locators alone reads only a Proposal that the refresh did not
+  // read, or a locator with more detail than the earlier read (#1937).
+  const proposalReads = useRef<{ refresh: readonly unknown[]; reads: Map<string, {
+    locator: ProposalLocator; read: Promise<ProposalRead> }> }>(undefined);
   useEffect(() => {
     let active = true;
-    void Promise.all(effectiveLocators.map(async (locator): Promise<ProposalRead> => {
+    const refresh = [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
+      editorProps.baseUrl, editorProps.fetchImpl];
+    const earlier = proposalReads.current;
+    const known = earlier !== undefined && earlier.refresh.every((value, index) => Object.is(value, refresh[index]))
+      ? earlier.reads : new Map<string, { locator: ProposalLocator; read: Promise<ProposalRead> }>();
+    proposalReads.current = { refresh, reads: known };
+    const readOnce = (locator: ProposalLocator): Promise<ProposalRead> => {
+      const entry = known.get(locator.proposalId);
+      if (entry !== undefined && entry.locator.runId === locator.runId
+        && entry.locator.decisionId === locator.decisionId) return entry.read;
+      // A locator with no Run is less strict, so a read of the Proposal with a Run also gives its Proposal. When that
+      // read failed, the locator reads again one time.
+      const read = entry !== undefined && locator.runId === "" && locator.decisionId === ""
+        ? entry.read.then((earlier) => earlier.proposal !== undefined ? earlier : readProposal(locator))
+        : readProposal(locator);
+      known.set(locator.proposalId, { locator, read });
+      return read;
+    };
+    const readProposal = async (locator: ProposalLocator): Promise<ProposalRead> => {
       try {
         const response = await getProposal({
           baseUrl: editorProps.baseUrl,
@@ -255,7 +279,8 @@ export function BlockProposalDisplay({
       } catch {
         return { locator };
       }
-    })).then((result) => {
+    };
+    void Promise.all(effectiveLocators.map(readOnce)).then((result) => {
       // Navigation can reorder the same locators. If the result does not change, no new Acceptance check is necessary.
       const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
         left.locator.proposalId.localeCompare(right.locator.proposalId)));
@@ -377,11 +402,10 @@ export function BlockProposalDisplay({
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
     // Acceptance of a Proposal on an earlier base replaces the current text of its target (ADR 0064).
     const acceptableValidation = (result: string) => result === "valid" || result === "conflicted";
-    const writerOpen = editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-      && editorProps.persistWorkspace.session.writer.kind === "current_writer";
+    const sessionOpen = editorProps.persistWorkspace !== undefined;
     const sessionBlocked = proposal !== undefined && sessionBlockedIds.includes(proposal.proposal_id);
     const controlsReady = proposal !== undefined && allHeadsKnown && acceptanceChecked && !recoveryUnavailable
-      && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
+      && journalPendingIds.length === 0 && sessionOpen && !sessionBlocked
       && editorProps.editable && accepting !== proposal.proposal_id;
     if (!anchored || proposal === undefined || operation === undefined) {
       unavailable.push({ locator, proposal });
@@ -437,10 +461,10 @@ export function BlockProposalDisplay({
       earlierBase: eligible && !baseMatches,
       withdrawEligible,
       copyEligible: operation.candidate_text.length > 0
-        && (condition !== "absent" || proposal.validation === "invalid" || !writerOpen || sessionBlocked),
+        && (condition !== "absent" || proposal.validation === "invalid" || !sessionOpen || sessionBlocked),
       conditionKind: condition,
       validity: proposal.validation,
-      sessionEligible: writerOpen && !sessionBlocked,
+      sessionEligible: sessionOpen && !sessionBlocked,
       expectedHeads,
       localPending: localText !== undefined,
     });
@@ -479,9 +503,8 @@ export function BlockProposalDisplay({
         if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
         await editorProps.writing?.flush();
         const projection = editorProps.writing?.snapshot().projection;
-        if (workspace.partition.disposition !== "current_writer_open"
-          || (!pendingAcceptances.includes(target.proposalId)
-            && (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0))) {
+        if (!pendingAcceptances.includes(target.proposalId)
+          && (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0)) {
           throw new Error("请先保存候选文字。");
         }
         const response = await acceptDisplayedBlockProposal({
@@ -514,19 +537,23 @@ export function BlockProposalDisplay({
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(target.proposalId);
           // A reference to the accepted candidate text now refers to the same text in the Chapter (ADR 0062).
-          acceptDraftCandidates(scope, target.proposalId, response.receipt.selected_operation_ids,
-            response.effect.authoritative_revision.revision_id);
+          acceptDraftCandidates(scope, response.receipt, await acceptedCandidates(target.proposalId,
+            response.receipt), response.effect.authoritative_revision.revision_id);
         }
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         if (response.effect.kind === "refused") {
           const refusal = { revisionId: target.revisionId, reason: response.effect.reason, earlier: false };
           setAcceptanceRefusals((current) => ({ ...current, [target.proposalId]: refusal }));
         }
-        setSettlementRefresh((value) => value + 1);
-        try { if (refresh) await onAccepted(true); } catch {
+        // The reopen of an applied Acceptance shows a new editor part, which reads the open suggestions and the
+        // Proposals. This display reads them again only when it stays (#1937).
+        const reopens = refresh && response.effect.kind === "applied";
+        if (!reopens) setSettlementRefresh((value) => value + 1);
+        try { if (refresh) await onAccepted(true, response); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }
+        if (reopens) setSettlementRefresh((value) => value + 1);
       } catch (error) {
         setDecisionMessages((current) => ({ ...current,
           [target.proposalId]: historicalAcknowledgementUnavailable(error)
@@ -541,6 +568,19 @@ export function BlockProposalDisplay({
         finishDecision();
       }
     })();
+  };
+
+  /**
+   * The candidate text of each accepted Operation. The displayed read can be of another Proposal Revision, for
+   * example after a retry of an acceptance whose read failed, so the display then reads the Proposal again.
+   */
+  const acceptedCandidates = async (proposalId: string,
+    receipt: { proposal_revision_id: string; selected_operation_ids: readonly string[] }) => {
+    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal;
+    if (displayed?.revision_id === receipt.proposal_revision_id) return acceptedCandidateTexts(displayed, receipt);
+    const current = await getProposal({ baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
+      projectId: scope.project_id, proposalId }).catch(() => undefined);
+    return acceptedCandidateTexts(proposalOfRead(current, scope, proposalId), receipt);
   };
 
   const retryPending = (proposalId: string) => {
@@ -564,7 +604,7 @@ export function BlockProposalDisplay({
         const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
         if (response.effect.kind === "applied") {
           refreshedAcceptance.current.add(proposalId);
-          acceptDraftCandidates(scope, proposalId, response.receipt.selected_operation_ids,
+          acceptDraftCandidates(scope, response.receipt, await acceptedCandidates(proposalId, response.receipt),
             response.effect.authoritative_revision.revision_id);
         }
         if (response.effect.kind === "refused") {
@@ -572,7 +612,7 @@ export function BlockProposalDisplay({
             reason: response.effect.reason, earlier: false };
           setAcceptanceRefusals((current) => ({ ...current, [proposalId]: refusal }));
         }
-        if (refresh) await onAccepted(true);
+        if (refresh) await onAccepted(true, response);
         setSettlementRefresh((value) => value + 1);
       } catch {
         setDecisionMessages((current) => ({ ...current,
@@ -629,8 +669,7 @@ export function BlockProposalDisplay({
         if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
         await editorProps.writing?.flush();
         const projection = editorProps.writing?.snapshot().projection;
-        if (workspace.partition.disposition !== "current_writer_open"
-          || projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0) {
+        if (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0) {
           throw new Error("请先保存候选文字。");
         }
         const response = await rejectDisplayedBlockProposal({ baseUrl: editorProps.baseUrl,
@@ -695,8 +734,7 @@ export function BlockProposalDisplay({
     })();
   };
 
-  const writerReady = () => editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-    && editorProps.persistWorkspace.session.writer.kind === "current_writer";
+  const sessionReady = () => editorProps.persistWorkspace !== undefined;
 
   const withdrawControl = {
     baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
@@ -719,7 +757,7 @@ export function BlockProposalDisplay({
     dispatchDisplayedWithdraw({
       ...withdrawControl, target, pending: pendingWithdrawals.includes(target.proposalId),
       busy: acceptingRef.current, displayedRevisionId: displayed?.revision_id,
-      eligible: projection?.withdrawEligible === true, writerReady: writerReady(),
+      eligible: projection?.withdrawEligible === true, sessionReady: sessionReady(),
     });
   };
   const retryWithdraw = (proposalId: string) => {
@@ -746,7 +784,7 @@ export function BlockProposalDisplay({
 
   if (arriving !== undefined) {
     return <ManuscriptEditor key={arriving.key} blocks={arriving.blocks} editable={arriving.editable === true}
-      arrival={arriving.input} />;
+      arrival={arriving.input} initialSelection={arriving.initialSelection} />;
   }
   return (
     <>
@@ -771,8 +809,7 @@ export function BlockProposalDisplay({
         <ProposalDecisionStatus key={locator.proposalId} proposalId={locator.proposalId}
           proposal={proposal} problem={knownProblems[locator.proposalId]}
           rejectionResult={settledRejections[locator.proposalId]}
-          writerOpen={editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-            && editorProps.persistWorkspace.session.writer.kind === "current_writer"}
+          sessionOpen={editorProps.persistWorkspace !== undefined}
           sessionBlocked={sessionBlockedIds.includes(locator.proposalId)}
           pendingRejection={pendingRejections.includes(locator.proposalId)}
           pendingWithdraw={pendingWithdrawals.includes(locator.proposalId)}

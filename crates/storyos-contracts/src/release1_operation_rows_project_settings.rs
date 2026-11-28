@@ -268,7 +268,7 @@ pub(super) const SET_CURRENT_CHAPTER_ROW: OperationRow = OperationRow {
         &[
             "server_derived_project_scope",
             "project_active",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "expected_current_chapter",
             "expected_authoritative_head",
         ],

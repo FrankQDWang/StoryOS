@@ -98,19 +98,12 @@ async function acceptDisplayedBlockProposalLocked(
         response?: AcceptProposalResponse; problem?: { code?: string } } | undefined;
       const priorInput = (priorGroup?.frozen_request_body as AcceptProposalRequest | undefined)
         ?.accept_proposal_input;
-      const sessionRefusal = priorSettlement?.kind === "refused"
-        || (priorSettlement?.kind === "pre_admission_problem"
-          && priorSettlement.problem?.code === "acceptance_session_ineligible");
-      const restoredWriter = sessionRefusal
-        && prior.writer_generation !== workspace.partition.writer_generation;
-      if (!restoredWriter && priorSettlement?.kind === "settled" && priorSettlement.response !== undefined
+      if (priorSettlement?.kind === "settled" && priorSettlement.response !== undefined
         && priorInput?.validation_receipt_id === options.validationReceiptId
         && priorInput.expected_authoritative_revision_id === options.authoritativeRevisionId) {
         return priorSettlement.response;
       }
-      if (!restoredWriter) {
-        throw new Error("A prior Acceptance decision is unresolved. Reload and inspect its result.");
-      }
+      throw new Error("A prior Acceptance decision is unresolved. Reload and inspect its result.");
     }
     const request: AcceptProposalRequest = {
       command_schema: "storyos.command.accept-proposal.request.v1",
@@ -134,7 +127,6 @@ async function acceptDisplayedBlockProposalLocked(
       journal_partition_id: workspace.partition.journal_partition_id,
       project_scope: workspace.partition.project_scope,
       editor_session_id: workspace.partition.editor_session_id,
-      writer_generation: workspace.partition.writer_generation,
       command_kind: "acceptProposal",
       author_visible_decision_ref: decisionReference(options.proposalId, options.proposalRevisionId, operationIds),
       frozen_request_digest: await digestAcceptProposal(request, options.cryptoImpl),
@@ -163,7 +155,6 @@ async function acceptDisplayedBlockProposalLocked(
     || flight.project_scope?.owner_user_id !== workspace.partition.project_scope.owner_user_id
     || flight.project_scope.project_id !== projectId
     || flight.editor_session_id !== workspace.partition.editor_session_id
-    || flight.writer_generation !== workspace.partition.writer_generation
     || flight.command_kind !== "acceptProposal"
     || flight.proposalId !== options.proposalId
     || flight.request.command_schema !== "storyos.command.accept-proposal.request.v1"
@@ -241,7 +232,8 @@ async function acceptDisplayedBlockProposalLocked(
       });
       throw new AcceptanceDeliveryUnknown(error);
     }
-    if (accepted.schema_id !== "storyos.command.accept-proposal.response.v1"
+    if ((accepted.schema_id !== "storyos.command.accept-proposal.response.v1"
+        && accepted.schema_id !== "storyos.command.accept-proposal.response.v2")
       || typeof accepted.command_id !== "string" || accepted.command_id.length === 0
       || typeof accepted.author_command_admission_id !== "string"
       || accepted.author_command_admission_id.length === 0

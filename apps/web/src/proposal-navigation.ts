@@ -73,7 +73,9 @@ export function navigateProposal(options: {
         && !opened.chapter.chapter.current_revision.blocks.some((block) => block.manuscript_block_id === focus.blockId)) {
         throw new Error("无法打开候选位置。");
       }
-      const current = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id });
+      // No view shows this open, so it starts no read of the view.
+      const current = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id,
+        viewReads: false });
       if (!latest()) return;
       if (current.kind !== "project-ready" || current.editor.kind !== "editor-ready"
         || current.project.project.open.kind !== "current_chapter") throw new Error("无法打开写作会话。");
@@ -109,8 +111,6 @@ export function navigateProposal(options: {
       const next = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id });
       if (!latest()) return;
       if (next.kind !== "project-ready" || next.editor.kind !== "editor-ready"
-        || next.editor.session.writer.kind !== "current_writer"
-        || next.editor.partition.disposition !== "current_writer_open"
         || next.chapter.chapter.chapter_id !== destination.chapterId
         || next.project.project_scope.owner_user_id !== scope.owner_user_id
         || next.project.project_scope.project_id !== scope.project_id) throw new Error("无法打开写作会话。");

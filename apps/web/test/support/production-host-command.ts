@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { isDeepStrictEqual } from "node:util";
 import type { BrowserContext, Cookie, Page } from "playwright";
 
-import { getEditorSession }
-  from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { manuscriptBody as visibleChapterBody } from "./manuscript-surface.ts";
 import { queryStoryOSPostgres as queryPostgres } from "./node-integration";
 import { assertProjectReceipts } from "./project-receipts.ts";
@@ -12,74 +9,12 @@ const USER = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MANUSCRIPT_EDITOR = "[data-manuscript-editor]";
 const MANUSCRIPT_EDITABLE = "[data-manuscript-editor][contenteditable='true']";
-const MANUSCRIPT_READONLY = "[data-manuscript-editor][contenteditable='false']";
-type JournalEvidence = Record<"partitions" | "intents" | "payload_chains", unknown[]>;
 
 async function sessionId(page: Page, projectId: string): Promise<string> {
   const value = await page.evaluate((key) => sessionStorage.getItem(key),
     `active_session:${USER}:${projectId}`);
   assert.ok(value !== null && UUID.test(value), "the production Editor Session must exist");
   return value;
-}
-
-async function readJournal(page: Page, projectId: string): Promise<JournalEvidence> {
-  return page.evaluate((name) => new Promise<JournalEvidence>((resolve, reject) => {
-    const opened = indexedDB.open(name);
-    opened.onupgradeneeded = () => opened.transaction?.abort();
-    opened.onerror = () => reject(new Error("the existing production Journal is unavailable"));
-    opened.onsuccess = () => {
-      const database = opened.result;
-      const stores = ["partitions", "intents", "payload_chains"] as const;
-      const snapshot: JournalEvidence = { partitions: [], intents: [], payload_chains: [] };
-      const transaction = database.transaction(stores, "readonly");
-      let remaining = stores.length;
-      for (const store of stores) {
-        const request = transaction.objectStore(store).getAll();
-        request.onerror = () => { database.close(); reject(request.error); };
-        request.onsuccess = () => {
-          const value: unknown = request.result;
-          if (!Array.isArray(value)) {
-            database.close(); reject(new Error("the Journal observation is invalid")); return;
-          }
-          snapshot[store] = value;
-          remaining -= 1;
-          if (remaining === 0) { database.close(); resolve(snapshot); }
-        };
-      }
-    };
-  }), `storyos-local-edit-journal:${USER}:${projectId}`);
-}
-
-function assertPreservedJournal(before: JournalEvidence, after: JournalEvidence): void {
-  for (const store of ["partitions", "intents", "payload_chains"] as const) {
-    for (const record of before[store]) {
-      assert.ok(after[store].some((candidate) => isDeepStrictEqual(candidate, record)),
-        `takeover must preserve the complete old ${store} record`);
-    }
-  }
-}
-
-// Only generated Editor Session queries cross this bridge. Explicit Takeover
-// stays on the production page.
-function takeoverFetch(page: Page, origin: string, projectId: string,
-  writerId: string, observerId: string): typeof fetch {
-  const scope = `/api/v1/projects/${projectId}`;
-  const queryPaths = [writerId, observerId].map((id) => `${scope}/editor-sessions/${id}`);
-  return async (input, init) => {
-    assert.ok(input instanceof URL && input.origin === origin && !input.search && !input.hash);
-    assert.equal(new URL(page.url()).origin, origin);
-    assert.equal(init?.method, "GET");
-    assert.ok(queryPaths.includes(input.pathname));
-    assert.equal(init?.body, undefined);
-    const result = await page.evaluate(async (request) => {
-      const response = await fetch(request.url, {
-        method: request.method, headers: request.headers, credentials: "same-origin",
-      });
-      return { body: await response.text(), status: response.status,
-        headers: Object.fromEntries(response.headers) };
-    }, { url: input.href, method: init?.method, headers: Object.fromEntries(new Headers(init?.headers)) });
-    return new Response(result.body, { status: result.status, headers: result.headers });
-  };
 }
 
 async function manuscriptBody(page: Page): Promise<string> {
@@ -126,6 +61,59 @@ async function replaceAndSave(page: Page, text: string): Promise<void> {
   assert.equal(await manuscriptBody(page), text);
 }
 
+/** Focuses the editor with no click, moves the caret with `key`, types `text`, and waits for its automatic save. */
+async function typeAndSave(page: Page, place: "start" | "end", text: string): Promise<void> {
+  const settled = page.waitForResponse((response) =>
+    response.url().endsWith("/manuscript/author-edits") && response.request().method() === "POST");
+  const editor = page.locator(MANUSCRIPT_EDITABLE);
+  await editor.focus();
+  // A DOM selection puts the caret at the start or the end of the text, with no key that differs by platform.
+  await editor.evaluate((element, atStart) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(atStart);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }, place === "start");
+  const [first, ...rest] = text.split("\n");
+  if (first) await page.keyboard.insertText(first);
+  for (const line of rest) {
+    await page.keyboard.press("Enter");
+    if (line) await page.keyboard.insertText(line);
+  }
+  const response = await settled;
+  assert.equal(response.status(), 200);
+  const body: unknown = await response.json();
+  assert.ok(typeof body === "object" && body !== null);
+  assert.equal(Reflect.get(Reflect.get(body, "effect") ?? {}, "kind"), "authoritative_applied",
+    "the automatic save must apply on the Server");
+  await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+}
+
+/**
+ * Types `text` at the start or the end of the text of a page that can have an earlier base, and waits until the page
+ * shows `body` and saved it. A save on an earlier base gets `stale_authoritative_head`, and the page catches up with
+ * no sentence (ADR 0107, section 2).
+ */
+async function typeOnEarlierBase(page: Page, place: "start" | "end", text: string, body: string): Promise<void> {
+  const editor = page.locator(MANUSCRIPT_EDITABLE);
+  await editor.focus();
+  await editor.evaluate((element, atStart) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(atStart);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }, place === "start");
+  await page.keyboard.insertText(text);
+  await page.waitForFunction((expected) => {
+    const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+    const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+      .map((block) => block.textContent ?? "").join("\n");
+    return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
+  }, body);
+}
+
 export async function verifyProductionHostJourney(sharedContext: BrowserContext): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
@@ -138,7 +126,6 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
   assert.ok(browser, "the production cold-start journey needs an owned browser context");
   const context = await browser.newContext();
   const pages: Page[] = [];
-  let releaseWriterEdits = (): void => {};
   try {
     for (let index = 0; index < 3; index += 1) pages.push(await context.newPage());
     const [writer, observer, embedding] = pages;
@@ -204,93 +191,221 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     ).waitFor({ state: "attached" });
     assert.equal(await manuscriptBody(writer), "Saved after replay generation two.");
 
+    // Page 1 adds a second block before page 2 opens the Project.
+    await typeAndSave(writer, "end", "\nThe second block of page one.");
+    assert.equal(await manuscriptBody(writer),
+      "Saved after replay generation two.\nThe second block of page one.");
+
+    // ADR 0107: page 2 opens the same Project and types at once, with no click on a button.
     assert.equal((await observer.goto(projectUrl))?.status(), 200);
-    await observer.locator(MANUSCRIPT_READONLY).waitFor();
-    await observer.locator("[data-take-over-writer]").waitFor();
-    const observerId = await sessionId(observer, projectId);
-    assert.notEqual(observerId, writerId);
-    const options = { baseUrl: origin, projectId,
-      fetchImpl: takeoverFetch(observer, origin, projectId, writerId, observerId) };
-    const prior = await getEditorSession({ ...options, editorSessionId: writerId });
-    assert.ok(prior.writer.kind === "current_writer");
-    const secondary = await getEditorSession({ ...options, editorSessionId: observerId });
-    assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session",
-      observed_writer_generation: prior.writer.writer_generation });
-    const writerEditsHeld = new Promise<void>((resolve) => {
-      releaseWriterEdits = resolve;
-    });
-    let noteAuthorEditPosted = (): void => {};
-    const authorEditPosted = new Promise<void>((resolve) => {
-      noteAuthorEditPosted = resolve;
-    });
-    let recordLateAuthorEdit = (_value: { status: number; body: unknown }): void => {};
-    const lateAuthorEdit = new Promise<{ status: number; body: unknown }>((resolve) => {
-      recordLateAuthorEdit = resolve;
-    });
-    await writer.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
-      if (route.request().method() !== "POST") {
-        await route.continue();
-        return;
-      }
-      noteAuthorEditPosted();
-      await writerEditsHeld;
-      const response = await route.fetch();
-      const body: unknown = JSON.parse(await response.text());
-      recordLateAuthorEdit({ status: response.status(), body });
-      await route.fulfill({
-        status: response.status(),
-        headers: response.headers(),
-        body: JSON.stringify(body),
-      });
-    });
-    await writer.locator(MANUSCRIPT_EDITOR).click();
-    await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
-    await writer.keyboard.insertText("Unsettled before takeover.");
-    await writer.locator('[data-save-state="saving"]').waitFor();
-    await authorEditPosted;
-    await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
-    const generation = String(BigInt(prior.writer.writer_generation) + 1n);
-    const winner = await getEditorSession({ ...options, editorSessionId: observerId });
-    assert.deepEqual(winner.writer, { kind: "current_writer", writer_generation: generation });
-    const fenced = await getEditorSession({ ...options, editorSessionId: writerId });
-    assert.deepEqual(fenced.writer, { kind: "read_only", reason: "superseded_by_takeover",
-      observed_writer_generation: generation });
-    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
-    releaseWriterEdits();
-    const refused = await lateAuthorEdit;
-    assert.equal(refused.status, 412);
-    const problem = refused.body;
-    assert.ok(typeof problem === "object" && problem !== null);
-    assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
-    await writer.locator(MANUSCRIPT_READONLY).waitFor();
-    await writer.locator('[data-save-state="needs_attention"]').waitFor();
-    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
-    const oldJournal = await readJournal(writer, projectId);
-    assert.ok(oldJournal.intents.length > 0 && oldJournal.payload_chains.length > 0);
-    const takeoverPartition = oldJournal.partitions.find((record) =>
-      typeof record === "object" && record !== null
-      && Reflect.get(record, "editor_session_id") === observerId
-      && Reflect.get(record, "writer_generation") === generation
-      && Reflect.get(record, "disposition") === "current_writer_open");
-    assert.ok(takeoverPartition !== undefined);
+    assert.notEqual(await sessionId(observer, projectId), writerId);
+    await typeAndSave(observer, "start", "Page two: ");
+    const afterPageTwo = "Page two: Saved after replay generation two.\nThe second block of page one.";
     await observer.reload();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
-    assert.equal(await sessionId(observer, projectId), observerId);
-    const newJournal = await readJournal(observer, projectId);
-    assertPreservedJournal(oldJournal, newJournal);
-    assert.equal(await manuscriptBody(observer), "Saved after replay generation two.");
-    await replaceAndSave(observer, "Saved by the new production writer.");
-    assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
-    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
+    assert.equal(await manuscriptBody(observer), afterPageTwo);
+
+    // Page 1 did not read again, so its base is earlier. It types on the second block, which page 2 did not change, and
+    // both edits stay (ADR 0107, section 2).
+    const afterPageOne = `${afterPageTwo} Page one again.`;
+    await typeOnEarlierBase(writer, "end", " Page one again.", afterPageOne);
+    await writer.reload();
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(writer), afterPageOne);
+
+    // Both pages type on the first block. Page 2 types later on its earlier base, so its text of that block wins, and
+    // the second block keeps the text of page 1.
+    await typeOnEarlierBase(writer, "start", "One: ", `One: ${afterPageOne}`);
+    const afterSameBlock = `Two: ${afterPageOne}`;
+    await typeOnEarlierBase(observer, "start", "Two: ", afterSameBlock);
+    await observer.reload();
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(observer), afterSameBlock);
+    // The editor can send a typed line feed and the text after it in one or two Author Edits, so the count of that
+    // kind comes from the store. Each applied Author Edit, the Volume, and the Chapter is one author action. Each save
+    // on an earlier base also has a conflicted Receipt, which is no author action.
+    const count = async (result: string) => Number(await queryPostgres(`SELECT count(*)::text
+      FROM storyos.domain_receipts WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'
+      AND result_kind ${result}`));
+    const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("= 'conflicted'")];
+    assert.ok(applied >= 5 && conflicted === 2);
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
-      createChapter: 1, applyAuthorEdit: 3, takeOverProjectWriter: 1 }, authorActions: 5 });
+      createChapter: 1, applyAuthorEdit: applied + conflicted }, authorActions: applied + 2 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
     assert.ok(requests.every((url) => !url.pathname.startsWith("/@vite/")));
   } finally {
-    releaseWriterEdits();
+    await context.close();
+  }
+}
+
+/**
+ * #1953: page 1 has unsent text on Chapter A, and page 2 writes on A and then selects Chapter B. A new load of page 1
+ * sets A current again, puts its text on the later Revision of A, and sends it. The journey has its own Project, so its
+ * Command Challenges stay in the budget of one Project.
+ *
+ * With `held` "challenge" (#1964), the save of page 1 freezes its group, and page 1 leaves its document before the
+ * Command Challenge answers, so the group never went to the Server. Then page 2 only selects Chapter B. The new load of
+ * page 1 sets A current again with its stored Editor Session and sends the group.
+ *
+ * With `held` "response" (#1972), the Server applies the Author Edit of page 1, page 1 gets no response, and page 1
+ * leaves its document, so the group has an unknown result. Then page 2 only selects Chapter B. The new load of page 1
+ * asks the outcome first, settles the group, and opens Chapter B. Page 1 then selects Chapter A, which has the text, and
+ * types on it.
+ *
+ * With `held` "outcome_unavailable" (#1972), the same lost response comes first, and the outcome Query of the new load
+ * fails. The load sends no command and opens Chapter A with the text of the group, not saved. When the Query answers,
+ * the group settles, and a reload shows the text on the Server.
+ */
+export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext,
+  held: "clock" | "challenge" | "response" | "outcome_unavailable" = "clock"): Promise<void> {
+  const configured = process.env.STORYOS_DEV_SERVER;
+  assert.ok(configured, "run the production journey through the Project Scope verification entry");
+  const origin = new URL(configured).origin;
+  const browser = sharedContext.browser();
+  assert.ok(browser, "the production journey needs an owned browser context");
+  // Page 1 has its own browser context, so the paused clock that keeps its text unsent stops no timer of page 2.
+  const context = await browser.newContext();
+  const late = await browser.newContext();
+  try {
+    await late.clock.install();
+    const observer = await context.newPage();
+    const writer = await late.newPage();
+    const errors: string[] = [];
+    for (const page of [observer, writer]) {
+      page.setDefaultTimeout(10_000);
+      page.on("pageerror", (error) => errors.push(error.message));
+    }
+    assert.equal((await observer.goto(`${origin}/`))?.status(), 200);
+    await observer.locator('#app[data-boot-state="protected-ready"]').waitFor();
+    await observer.locator('input[name="title"]').fill("Chapter switch at a load");
+    await observer.locator('input[name="title"]').press("Enter");
+    await observer.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
+    const projectId = await observer.locator("[data-project-id]").getAttribute("data-project-id");
+    assert.ok(projectId !== null && UUID.test(projectId));
+    await observer.locator("[data-add-chapter]").click();
+    await observer.locator("[data-create-volume-action]").click();
+    await observer.locator('input[name="volume-title"]').fill("Switch Volume");
+    await observer.locator('input[name="volume-title"]').press("Enter");
+    const addChapter = async (title: string) => {
+      await observer.locator("[data-add-chapter]").click();
+      await observer.locator('[data-chapter-placement="append"]').click();
+      await observer.locator('input[name="chapter-title"]').fill(title);
+      await observer.locator('input[name="chapter-title"]').press("Enter");
+    };
+    await addChapter("Chapter A");
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    await typeAndSave(observer, "end", "The first block.\nThe second block.");
+
+    assert.equal((await writer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(writer), "The first block.\nThe second block.");
+    // The pause moves the clock of page 1 only a little, so page 1 sees no time of the Server as late.
+    if (held === "clock") await late.clock.pauseAt(Date.now() + 100);
+    // The Command Challenge of the Author Edit of page 1 gets no response. The save freezes its group before it asks.
+    // With "response", the Author Edit goes to the Server and its response does not come back to page 1.
+    let resolveHeld = () => {};
+    const requestHeld = new Promise<void>((resolve) => { resolveHeld = resolve; });
+    if (held === "challenge") {
+      await writer.route("**/anti-forgery-challenges", async (route) => {
+        if (route.request().postData()?.includes("/manuscript/author-edits")) resolveHeld();
+        else await route.continue();
+      });
+    } else if (held === "response" || held === "outcome_unavailable") {
+      await writer.route("**/manuscript/author-edits", async (route) => {
+        assert.equal((await route.fetch()).status(), 200);
+        resolveHeld();
+      });
+    }
+    await writer.locator(MANUSCRIPT_EDITABLE).focus();
+    await writer.locator(MANUSCRIPT_EDITABLE).evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    });
+    // Page 1 types on the second block, and page 2 types on the first block (only with the clock pause), so both edits
+    // stay (ADR 0107, section 2).
+    await writer.keyboard.insertText(" Unsent on page one.");
+    await writer.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
+    if (held !== "clock") {
+      await requestHeld;
+      // Page 1 leaves its document while its request has no response. The tab keeps its sessionStorage, so its next
+      // load has its stored Editor Session.
+      await writer.unrouteAll({ behavior: "ignoreErrors" });
+      await writer.goto("about:blank");
+    }
+
+    if (held === "clock") await typeAndSave(observer, "start", "Later: ");
+    await addChapter("Chapter B");
+    const selected = observer.waitForResponse((response) =>
+      response.url().endsWith("/current-chapter") && response.request().method() === "PUT");
+    await observer.locator("button[data-chapter-id]", { hasText: "Chapter B" }).click();
+    assert.equal((await selected).status(), 200);
+
+    // The commands of page 1 after this point.
+    const commands: string[] = [];
+    writer.on("request", (request) => {
+      if (request.method() !== "GET") commands.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    if (held === "outcome_unavailable") {
+      await writer.route("**/manuscript/author-edit-outcomes/**", (route) => route.abort());
+    }
+    if (held === "clock") await writer.reload();
+    else assert.equal((await writer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+    if (held === "clock") await late.clock.resume();
+    const afterLoad = `${held === "clock" ? "Later: " : ""}The first block.\nThe second block. Unsent on page one.`;
+    if (held === "outcome_unavailable") {
+      // The result is not known, so the load sends no command and opens Chapter A with the text of the group.
+      await writer.waitForFunction((expected) => {
+        const status = document.querySelector('[data-save-state="saving"][data-unsettled-intent-count="1"]');
+        const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+          .map((block) => block.textContent ?? "").join("\n");
+        return status !== null && shown === expected;
+      }, afterLoad);
+      assert.equal(await writer.locator('[data-save-state="saved"]').count(), 0);
+      assert.deepEqual(commands, []);
+      await writer.unrouteAll({ behavior: "ignoreErrors" });
+    }
+    if (held === "response") {
+      // The text of the group is on the Server, so the load opens the Chapter that page 2 set current.
+      await writer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      assert.equal(await manuscriptBody(writer), "");
+      await writer.locator("button[data-chapter-id]", { hasText: "Chapter A" }).click();
+    }
+    await writer.waitForFunction((expected) => {
+      const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+      const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+        .map((block) => block.textContent ?? "").join("\n");
+      return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
+    }, afterLoad);
+    if (held === "outcome_unavailable") {
+      // The Project keeps Chapter B current, so the reload opens B. Chapter A has the text on the Server.
+      await writer.reload();
+      await writer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      await writer.locator("button[data-chapter-id]", { hasText: "Chapter A" }).click();
+      await writer.waitForFunction((expected) => [...document.querySelectorAll("[data-manuscript-editor] > p")]
+        .map((block) => block.textContent ?? "").join("\n") === expected, afterLoad);
+    } else {
+      await typeAndSave(writer, "end", " Typed after the load.");
+      await writer.reload();
+      await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+      assert.equal(await manuscriptBody(writer), `${afterLoad} Typed after the load.`);
+    }
+    // Each applied Author Edit, the Volume, each Chapter, and each Set Current Chapter is one author action.
+    const count = async (result: string) => Number(await queryPostgres(`SELECT count(*)::text
+      FROM storyos.domain_receipts WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'
+      AND result_kind ${result}`));
+    const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("<> 'authoritative_applied'")];
+    assert.ok(applied >= (held === "clock" ? 4 : held === "outcome_unavailable" ? 2 : 3));
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
+      createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: applied + conflicted }, authorActions: applied + 5 });
+    assert.deepEqual(errors, []);
+  } finally {
+    await late.close();
     await context.close();
   }
 }

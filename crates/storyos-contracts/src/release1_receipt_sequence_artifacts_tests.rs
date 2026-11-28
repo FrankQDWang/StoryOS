@@ -45,7 +45,7 @@ fn each_schema_with_a_receipt_gives_the_sequence_one_nullable_shape() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 19, "each schema with a Receipt is checked");
+    assert_eq!(checked, 18, "each schema with a Receipt is checked");
 }
 
 /// The Author Undo response schema accepts the Receipt of an applied, a conflicted, and an

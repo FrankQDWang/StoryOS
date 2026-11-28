@@ -15,7 +15,7 @@ pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-09-27-exp
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
 pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v7";
 pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v6";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v32";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v34";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -30,19 +30,19 @@ pub(super) const PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID: &str =
 pub const CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID: &str =
     "storyos.command.create-editor-session.request.v1";
 pub(super) const CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
-    "storyos.command.create-editor-session.response.v1";
+    "storyos.command.create-editor-session.response.v2";
 pub(super) const GET_EDITOR_SESSION_REQUEST_SCHEMA_ID: &str =
     "storyos.query.editor-session.request.v1";
 pub(super) const GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
-    "storyos.query.editor-session.response.v1";
+    "storyos.query.editor-session.response.v2";
 pub const APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID: &str =
-    "storyos.command.apply-author-edit.request.v1";
+    "storyos.command.apply-author-edit.request.v2";
 pub const EDITOR_CONTRACT_REVISION: &str = "storyos.editor-contract.release-1.v3";
 pub const AUTHOR_EDIT_MAX_UNITS: usize = 240;
 pub const AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES: usize = 240;
 pub const AUTHOR_EDIT_MAX_WIRE_BODY_BYTES: usize = 1024 * 1024;
 pub const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID: &str =
-    "storyos.command.apply-author-edit.response.v2";
+    "storyos.command.apply-author-edit.response.v3";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";
 pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.positive.v1";
 
@@ -220,7 +220,7 @@ pub const CREATE_EDITOR_SESSION_PATH: &str = CREATE_EDITOR_SESSION.path;
 pub const CREATE_EDITOR_SESSION_METHOD: &str = CREATE_EDITOR_SESSION.method.as_str();
 pub const GET_EDITOR_SESSION_PATH: &str = GET_EDITOR_SESSION.path;
 pub const GET_EDITOR_SESSION_METHOD: &str = GET_EDITOR_SESSION.method.as_str();
-pub(super) const REQUIRED_CAPABILITIES: [&str; 15] = [
+pub(super) const REQUIRED_CAPABILITIES: [&str; 14] = [
     "project_lifecycle",
     "volume_chapter_lifecycle",
     "chapter_navigation",
@@ -231,7 +231,6 @@ pub(super) const REQUIRED_CAPABILITIES: [&str; 15] = [
     "manuscript_statistics",
     "human_readable_manuscript_export",
     "portable_project_archive",
-    "editor_session_takeover",
     "snapshot_resync",
     "proposal_draft_lifecycle",
     "project_activity",
@@ -326,26 +325,6 @@ pub struct CreateEditorSessionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum EditorWriterProjection {
-    CurrentWriter {
-        writer_generation: String,
-    },
-    ReadOnly {
-        observed_writer_generation: String,
-        reason: EditorReadOnlyReason,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum EditorReadOnlyReason {
-    SecondarySession,
-    SupersededByTakeover,
-    BindingInvalid,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct EditorSessionBinding {
     pub editor_session_id: String,
@@ -372,6 +351,18 @@ pub struct EditorBaseSnapshot {
     pub created_at: String,
 }
 
+/// The state of the Editor Session after a command that moved its base: the binding, the base
+/// Snapshot, and the Author Undo Frontier that a read of the Editor Session gives (ADR 0106
+/// section 3, ADR 0107 section 3).
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EditorSessionState {
+    pub editor_session: EditorSessionBinding,
+    pub base_snapshot: EditorBaseSnapshot,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_undo_frontier_sequence: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct CreateEditorSessionResponse {
@@ -379,7 +370,6 @@ pub struct CreateEditorSessionResponse {
     pub correlation_id: String,
     pub project_scope: ProjectScope,
     pub editor_session: EditorSessionBinding,
-    pub writer: EditorWriterProjection,
     pub base_snapshot: EditorBaseSnapshot,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author_undo_frontier_sequence: Option<String>,
@@ -392,7 +382,6 @@ pub struct GetEditorSessionResponse {
     pub correlation_id: String,
     pub project_scope: ProjectScope,
     pub editor_session: EditorSessionBinding,
-    pub writer: EditorWriterProjection,
     pub base_snapshot: EditorBaseSnapshot,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author_undo_frontier_sequence: Option<String>,

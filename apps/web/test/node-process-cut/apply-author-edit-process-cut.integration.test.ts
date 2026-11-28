@@ -61,34 +61,27 @@ async function projectAuthoritySnapshot() {
 }
 
 async function openCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
-  const editorSessionId = await queryPostgres(`SELECT current_editor_session_id::text
-    FROM storyos.project_writer_generations
-    WHERE owner_user_id = '${USER}'::uuid AND project_id = '${PROJECT}'::uuid`);
+  const editorSessionId = await queryPostgres(`SELECT editor_session_id::text
+    FROM storyos.editor_sessions
+    WHERE owner_user_id = '${USER}'::uuid AND project_id = '${PROJECT}'::uuid
+    ORDER BY opened_at DESC, editor_session_id DESC LIMIT 1`);
   assert.match(editorSessionId, UUID);
   const session = await getEditorSession({
     baseUrl, projectId: PROJECT, editorSessionId,
     fetchImpl: browserFetch(baseUrl, SESSION_HANDLE),
   });
-  assert.equal(session.writer.kind, "current_writer");
-  if (session.writer.kind !== "current_writer") {
-    throw new Error("the fixture did not expose the current writer");
-  }
   return session;
 }
 
 function authorEditRequest(session: GetEditorSessionResponse): ApplyAuthorEditRequest {
-  if (session.writer.kind !== "current_writer") {
-    throw new Error("the Author Edit requires the current writer");
-  }
   const body = session.base_snapshot.materialized_revision.body;
   const from = body.length;
   return {
-    command_schema: "storyos.command.apply-author-edit.request.v1",
+    command_schema: "storyos.command.apply-author-edit.request.v2",
     client_contract_revision: "storyos.web-client.release-1.v3",
     security_policy_revision: SECURITY_POLICY_REVISION,
     correlation_id: "018f0000-0000-7001-8000-000000002100",
     editor_session_id: session.editor_session.editor_session_id,
-    writer_generation: session.writer.writer_generation,
     chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: session.base_snapshot.proposal_head_revision_ids,
@@ -177,7 +170,7 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
         project_scope: unknownAfterRestart.project_scope,
         outcome: unknownAfterRestart.outcome,
       }, {
-        schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+        schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
         project_scope: { owner_user_id: USER, project_id: PROJECT },
         outcome: {
           outcome_kind: "still_unknown",

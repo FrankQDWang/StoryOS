@@ -5,8 +5,7 @@ use storyos_application::{
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    Admitted, BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch,
-    SchemaMismatch, TargetValidation, admit, controlled_project,
+    Admitted, BodyValidation, ProjectCommandRoute, TargetValidation, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -18,11 +17,8 @@ const ACCEPT_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::ACCEPT_PROPOSAL_PATH,
     schema_id: contracts::ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID,
     digest_profile: contracts::ACCEPT_PROPOSAL_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn accept_proposal(
@@ -79,9 +75,14 @@ fn accept_response(
     let envelope = &admitted.envelope;
     let input = &admitted.input;
     let expected = vec![input.expected_authoritative_revision_id.clone()];
+    let mut session = None;
     let (result, effect, resulting, commits) = match settlement.outcome {
         TransitionOutcome::Applied(applied) => (
-            contracts::AcceptanceReceiptResult::Applied,
+            {
+                // The first run of an Acceptance that moved the base of its Editor Session has it.
+                session = applied.session.map(|session| *session);
+                contracts::AcceptanceReceiptResult::Applied
+            },
             contracts::AcceptProposalEffect::Applied {
                 author_action_sequence: applied.author_action_sequence.to_string(),
                 authoritative_commit_id: applied.ids.authoritative_commit_id.clone(),
@@ -151,6 +152,7 @@ fn accept_response(
         },
         project: controlled_project(settlement.response),
         effect,
+        editor_session_state: session.map(super::editor_session::session_state),
     }))
 }
 
@@ -181,7 +183,7 @@ fn accept_problem(error: RefusableCommandError<AcceptanceRefusalReason>) -> ApiE
         ) => problem(
             StatusCode::CONFLICT,
             "acceptance_session_ineligible",
-            "This Acceptance session is no longer eligible. Inspect the Proposal and restore writer access before a new attempt.",
+            "This Acceptance session is no longer eligible. Inspect the Proposal and open the Project again before a new attempt.",
         ),
         RefusableCommandError::Command(error) => ACCEPT_PROPOSAL.problem(error),
     }

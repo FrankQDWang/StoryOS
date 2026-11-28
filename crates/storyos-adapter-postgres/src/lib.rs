@@ -14,10 +14,6 @@ mod tests;
 mod author_edit_outcome_tests;
 
 #[cfg(test)]
-#[path = "takeover_admission_tests.rs"]
-mod takeover_admission_tests;
-
-#[cfg(test)]
 #[path = "create_project_challenge_tests.rs"]
 mod create_project_challenge_tests;
 
@@ -40,6 +36,10 @@ mod create_project_tests;
 #[cfg(test)]
 #[path = "recovery_visibility_proof_tests.rs"]
 mod recovery_visibility_proof_tests;
+
+#[cfg(test)]
+#[path = "each_editor_session_writes_migration_tests.rs"]
+mod each_editor_session_writes_migration_tests;
 
 #[cfg(test)]
 #[path = "project_settings_tests.rs"]
@@ -224,7 +224,6 @@ mod stream_proposal_generation;
 mod structural_authority_settlement;
 mod subrun;
 mod subrun_read;
-mod takeover;
 mod tool_registration;
 mod undo_compensation;
 mod undo_frontier;

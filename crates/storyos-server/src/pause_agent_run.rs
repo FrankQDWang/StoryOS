@@ -2,8 +2,8 @@ use storyos_application::{PauseAgentRunInput, RefusableCommandError};
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, TargetValidation, admit, controlled_project,
+    BodyValidation, ProjectCommandRoute, SettledReceipt, TargetValidation, admit,
+    controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::steer_agent_run::control_refusal;
@@ -16,11 +16,8 @@ const PAUSE_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::PAUSE_AGENT_RUN_PATH,
     schema_id: contracts::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
     digest_profile: contracts::PAUSE_AGENT_RUN_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn pause_agent_run(

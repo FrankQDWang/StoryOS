@@ -75,9 +75,8 @@ async function write(baseUrl, fetchImpl, text) {
   }
   const from = snapshot.materialized_revision.body.length;
   await challenged(command, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits", {
-    command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING, correlation_id: key("0009"),
+    command_schema: "storyos.command.apply-author-edit.request.v2", ...BINDING, correlation_id: key("0009"),
     editor_session_id: session.editor_session.editor_session_id,
-    writer_generation: session.writer.writer_generation,
     chapter_id: snapshot.chapter_id,
     expected_authoritative_revision_id: snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: snapshot.proposal_head_revision_ids,

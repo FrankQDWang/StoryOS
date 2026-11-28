@@ -168,7 +168,8 @@ pub(crate) async fn compensate_revision(
             members: RevisionMembers::CopyFrom(frontier.prior_revision_id.clone()),
             disposition: ActionDisposition::Compensation { source_sequence },
             editor_session_id: command.editor_session_id.as_ref().to_owned(),
-            writer_base: RevisionBase::Required,
+            session_base: RevisionBase::Required,
+            reports_session: false,
         },
     )
     .await?;

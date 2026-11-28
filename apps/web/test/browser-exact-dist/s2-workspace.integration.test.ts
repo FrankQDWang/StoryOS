@@ -101,8 +101,6 @@ it("the production page uses the approved workspace without losing writing state
     expandVolume: root.querySelector("[data-volume-expand]") !== null,
     chapter: currentChapter.textContent,
     heading: root.querySelector("h2")?.textContent ?? null,
-    writerKind: shell.getAttribute("data-writer-kind"),
-    writerGeneration: shell.getAttribute("data-writer-generation"),
     availability: assistant.getAttribute("data-assistant-availability"),
   }).toEqual({
     tree: true,
@@ -112,8 +110,6 @@ it("the production page uses the approved workspace without losing writing state
     expandVolume: true,
     chapter: "Chapter A",
     heading: "Chapter A",
-    writerKind: "current_writer",
-    writerGeneration: "1",
     availability: "unavailable",
   });
   expect(Number.parseInt(childWindow.getComputedStyle(currentChapter).fontWeight, 10))
@@ -140,14 +136,10 @@ it("the production page uses the approved workspace without losing writing state
     chapter: root.querySelector(
       'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
     )?.textContent ?? null,
-    writerKind: shell.getAttribute("data-writer-kind"),
-    writerGeneration: shell.getAttribute("data-writer-generation"),
     readOnly: !manuscriptIsEditable(editor),
   }).toEqual({
     body: "Quiet prose",
     chapter: "Chapter A",
-    writerKind: "current_writer",
-    writerGeneration: "1",
     readOnly: false,
   });
 
@@ -159,7 +151,6 @@ it("the production page uses the approved workspace without losing writing state
   composer.requestSubmit();
   expect(assistant.getAttribute("data-assistant-dispatch")).toBe("idle");
   expect(manuscriptBody(editor)).toBe("Quiet prose");
-  expect(shell.getAttribute("data-writer-generation")).toBe("1");
 
   focusManuscriptEnd(editor, childWindow);
   await applyTrustedInput({ operation: "insert_text", text: " remains" });

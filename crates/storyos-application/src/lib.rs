@@ -83,7 +83,6 @@ mod reject_proposal_operations;
 mod research_source;
 mod set_current_chapter;
 mod snapshot;
-mod takeover;
 mod undo_latest_author_action;
 mod update_project_assistance;
 mod update_project_instruction;
@@ -273,12 +272,10 @@ pub use withdraw_proposal::{
 };
 
 pub use editor_session::{
-    EditorClientBinding, EditorReadOnlyReason, EditorSession, EditorSessionError, EditorSessionId,
-    EditorSessionLookup, EditorSessionSnapshot, EditorSessionStore, EditorWriterState,
-    OpenEditorSession, create_editor_session, get_editor_session,
+    EditorClientBinding, EditorSession, EditorSessionError, EditorSessionId, EditorSessionLookup,
+    EditorSessionSnapshot, EditorSessionStore, OpenEditorSession, create_editor_session,
+    get_editor_session,
 };
-
-pub use takeover::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement, WriterTakeover};
 
 pub use project_activity::{ActivityAggregateRef, ProjectActivityEvent, ProjectActivityKind};
 pub use snapshot::{

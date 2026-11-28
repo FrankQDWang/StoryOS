@@ -201,7 +201,7 @@ async fn persist_create_project(
         .execute(
             "INSERT INTO storyos.author_command_admissions
                (owner_user_id, project_id, author_command_admission_id, command_id,
-                editor_session_id, writer_generation, client_session_binding_ref,
+                editor_session_id, client_session_binding_ref,
                 client_session_generation, client_contract_revision, security_policy_revision,
                 action_class, method, route_template, command_schema, command_kind,
                 canonical_command_digest, idempotency_key, challenge_consumed_at,
@@ -210,7 +210,7 @@ async fn persist_create_project(
                 target_refs, observed_ownership_partition, editor_contract_revision,
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     NULL, NULL, $5, $6::text::numeric, $7, $8,
+                     NULL, $5, $6::text::numeric, $7, $8,
                      'explicit_project_command', $9, $10, $11, 'createProject',
                      $12, $13::text::uuid, NULL, NULL, $14::text::uuid, NULL, NULL,
                      '{}'::uuid[], '{}'::text[], NULL, $7, NULL, NULL, NULL,

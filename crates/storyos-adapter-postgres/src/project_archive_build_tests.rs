@@ -311,14 +311,6 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         .unwrap();
     cleanup
         .execute(
-            "DELETE FROM storyos.project_writer_generations
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
             "DELETE FROM storyos.editor_sessions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND editor_session_id = $3::text::uuid",

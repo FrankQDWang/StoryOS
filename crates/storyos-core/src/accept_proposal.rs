@@ -282,3 +282,26 @@ pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
 #[cfg(test)]
 #[path = "accept_proposal_tests.rs"]
 mod tests;
+
+/// The Blocks of an accepted candidate of `target` (ADR 0106, section 2). Each line feed of the
+/// candidate ends a part, and an empty part makes no Block. The first part keeps the identity and
+/// the type of the target Block. Each next part is a new paragraph Block with the identity that
+/// `new_block_id` gives, in order. When no part has text, the target Block has empty text.
+pub fn split_accepted_candidate(
+    target: &crate::ManuscriptBlock,
+    candidate: &str,
+    mut new_block_id: impl FnMut() -> String,
+) -> Vec<crate::ManuscriptBlock> {
+    let mut parts = candidate.split('\n').filter(|part| !part.is_empty());
+    let first = crate::ManuscriptBlock {
+        text: parts.next().unwrap_or_default().to_owned(),
+        ..target.clone()
+    };
+    std::iter::once(first)
+        .chain(parts.map(|text| crate::ManuscriptBlock {
+            manuscript_block_id: new_block_id(),
+            block_kind: crate::ManuscriptBlockKind::Paragraph,
+            text: text.to_owned(),
+        }))
+        .collect()
+}

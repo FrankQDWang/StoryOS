@@ -2,8 +2,8 @@ use storyos_application::{CreateVolumeInput, CreateVolumePublicOrder};
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, TargetValidation, admit, controlled_project, positive, structure_title,
+    BodyValidation, ProjectCommandRoute, SettledReceipt, TargetValidation, admit,
+    controlled_project, positive, structure_title,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -15,11 +15,8 @@ const CREATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::CREATE_VOLUME_PATH,
     schema_id: contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::CREATE_VOLUME_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::BeforeContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn create_volume(

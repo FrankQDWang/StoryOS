@@ -104,7 +104,7 @@ function navigationFetch(scenario: ReturnType<typeof createBrowserScenario>, cha
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       });
     }
     if (path.endsWith("/activity")) return emptyActivityStream();

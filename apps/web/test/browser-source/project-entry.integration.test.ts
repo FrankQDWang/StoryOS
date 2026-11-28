@@ -39,7 +39,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     if (path === `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`) {
       return jsonResponse(scenario.chapter);
     }
-    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree` && (init?.method ?? "GET") === "GET") {
       return jsonResponse({
         project_scope: { owner_user_id: OWNER, project_id: PROJECT },
         tree_revision: "3",
@@ -70,12 +70,24 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       });
     }
     if (path.endsWith("/activity")) return emptyActivityStream();
+    // The test is not about the statistics, the assistant panel, and the open suggestions, so their reads are
+    // unavailable.
+    const request = `${init?.method ?? "GET"} ${path}`;
+    if ([`GET /api/v1/projects/${PROJECT}/manuscript/statistics`, `GET /api/v1/projects/${PROJECT}/assistance`,
+      `GET /api/v1/projects/${PROJECT}/skills`,
+      `GET /api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}/open-proposals`]
+      .includes(request)) {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
+        503);
+    }
+    unexpected.push(request);
     throw new Error(`unexpected request: ${path}`);
   };
+  const unexpected: string[] = [];
   const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
@@ -110,14 +122,20 @@ it("opens the URL-selected Project and fails closed before invalid entry request
         "data-authoritative-revision-id",
       ),
     ).toBe(scenario.chapter.chapter.current_revision.revision_id);
-    expect(requests.slice(0, 4).map(({ path }) => path)).toEqual([
-      "/api/v1/protocol",
-      `/api/v1/projects/${PROJECT}`,
-      "/api/v1/projects",
-      `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`,
+    // The reads of the Project start with the Chapter read (#1937).
+    expect(requests.slice(0, 8).map(({ init, path }) => `${init?.method ?? "GET"} ${path}`)).toEqual([
+      "GET /api/v1/protocol",
+      `GET /api/v1/projects/${PROJECT}`,
+      "GET /api/v1/projects",
+      `GET /api/v1/projects/${PROJECT}/manuscript/tree`,
+      `GET /api/v1/projects/${PROJECT}/manuscript/statistics`,
+      `GET /api/v1/projects/${PROJECT}/assistance`,
+      `GET /api/v1/projects/${PROJECT}/skills`,
+      `GET /api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`,
     ]);
-    expect(requests.slice(0, 4).every(({ init }) => init?.credentials === "same-origin"))
+    expect(requests.slice(0, 8).every(({ init }) => init?.credentials === "same-origin"))
       .toBe(true);
+    expect(unexpected).toEqual([]);
     if (state.kind === "project-ready" && state.editor.kind === "editor-ready") {
       state.editor.database.close();
     }

@@ -4,9 +4,8 @@ use storyos_application::{
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    AntiForgery, BodyValidation, ProblemMapping, ProjectCommandRequest, ProjectCommandRoute,
-    RevisionMismatch, SchemaMismatch, SettledReceipt, TargetValidation, admit_body,
-    controlled_project, read_body,
+    AntiForgery, BodyValidation, ProjectCommandRequest, ProjectCommandRoute, SettledReceipt,
+    TargetValidation, admit_body, controlled_project, read_body,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -18,11 +17,8 @@ const STEER_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::STEER_AGENT_RUN_PATH,
     schema_id: contracts::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
     digest_profile: contracts::STEER_AGENT_RUN_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 /// The most characters that one steering message can have.

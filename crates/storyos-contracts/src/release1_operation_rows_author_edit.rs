@@ -14,7 +14,7 @@ use crate::release1_author_edit::{
 };
 use crate::release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
-    ApplyAuthorEditUnknownObservation, GET_APPLY_AUTHOR_EDIT_OUTCOME,
+    ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit, GET_APPLY_AUTHOR_EDIT_OUTCOME,
     GetApplyAuthorEditOutcomeRequest, GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
@@ -37,7 +37,7 @@ pub(super) const APPLY_AUTHOR_EDIT_ROW: OperationRow = OperationRow {
             "strict_origin",
             "protected_client_session_binding",
             "project_command_challenge",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "expected_authoritative_head",
         ],
         OperationCatalog::new(
@@ -46,7 +46,7 @@ pub(super) const APPLY_AUTHOR_EDIT_ROW: OperationRow = OperationRow {
             Binding {
                 action_class: ActionClass::DirectEditorAction,
                 admission: Admission::AuthorCommand,
-                editor: EditorRule::CurrentWriter,
+                editor: EditorRule::Required,
                 idempotency: Idempotency::HeaderAndAdmissionRecord,
                 settlement: Settlement::CommittedOrReconfirmation,
                 error_profile: ErrorProfile::EditorCommand,
@@ -143,7 +143,45 @@ pub(super) const APPLY_AUTHOR_EDIT_ROW: OperationRow = OperationRow {
         "result": "authoritative_applied",
         "resulting_heads": ["018f0000-0000-7001-8000-000000000034"]
       },
-      "schema_id": "storyos.command.apply-author-edit.response.v2"
+      "schema_id": "storyos.command.apply-author-edit.response.v3",
+      "editor_session_state": {
+        "author_undo_frontier_sequence": "1",
+        "base_snapshot": {
+          "authoritative_head_revision_id": "018f0000-0000-7001-8000-000000000034",
+          "chapter_id": "018f0000-0000-7001-8000-000000000003",
+          "created_at": "2026-08-15T08:00:00.000Z",
+          "materialized_payload_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.canonical-payload.sha256.v1",
+            "value_hex_lowercase": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "materialized_revision": {
+            "blocks": [
+              {
+                "block_kind": "paragraph",
+                "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+                "text": "雨落在窗沿。"
+              }
+            ],
+            "body": "雨落在窗沿。",
+            "revision_id": "018f0000-0000-7001-8000-000000000034"
+          },
+          "observed_ownership_partition": "authoritative",
+          "project_activity_position": "1",
+          "proposal_head_revision_ids": [],
+          "snapshot_id": "018f0000-0000-7001-8000-000000000038",
+          "target_refs": ["manuscript:018f0000-0000-7001-8000-000000000003"]
+        },
+        "editor_session": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "client_session_binding_ref": "binding:7af2",
+          "client_session_generation": "1",
+          "disposition": "open",
+          "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+          "opened_at": "2026-08-13T08:00:00.000Z",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1"
+        }
+      }
     }"#,
     ),
 };
@@ -154,7 +192,7 @@ pub(super) const UNDO_LATEST_AUTHOR_ACTION_ROW: OperationRow = OperationRow {
         &[
             "server_derived_project_scope",
             "project_active",
-            "editor_session_writer_generation",
+            "session_scope_join",
             "author_undo_frontier_exact",
             "expected_authoritative_head",
         ],
@@ -269,7 +307,7 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME_ROW: OperationRow = OperationRow 
             Binding {
                 action_class: ActionClass::None,
                 admission: Admission::Query,
-                editor: EditorRule::BoundToOriginalAdmission,
+                editor: EditorRule::Required,
                 idempotency: Idempotency::None,
                 settlement: Settlement::Read,
                 error_profile: ErrorProfile::QueryCanonical,
@@ -296,7 +334,7 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME_ROW: OperationRow = OperationRow 
     schemas: SchemaSources::get(
         SchemaSource::typed("apply-author-edit-outcome-response", raw_schema::<GetApplyAuthorEditOutcomeResponse>, "StoryOS Apply Author Edit Outcome Response", GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE),
     ),
-    typescript: &[GetApplyAuthorEditOutcomeRequest::decl, ApplyAuthorEditRejectionReason::decl, ApplyAuthorEditReconfirmationReason::decl, ApplyAuthorEditUnknownObservation::decl, ApplyAuthorEditOutcome::decl, GetApplyAuthorEditOutcomeResponse::decl],
+    typescript: &[GetApplyAuthorEditOutcomeRequest::decl, ApplyAuthorEditRejectionReason::decl, ApplyAuthorEditReconfirmationReason::decl, ApplyAuthorEditUnknownObservation::decl, CommittedApplyAuthorEdit::decl, ApplyAuthorEditOutcome::decl, GetApplyAuthorEditOutcomeResponse::decl],
     fixture: Fixture::Json(r#"{
       "correlation_id": "018f0000-0000-7001-8000-000000000081",
       "outcome": {
@@ -356,14 +394,14 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME_ROW: OperationRow = OperationRow 
             "result": "authoritative_applied",
             "resulting_heads": ["018f0000-0000-7001-8000-000000000034"]
           },
-          "schema_id": "storyos.command.apply-author-edit.response.v2"
+          "schema_id": "storyos.command.apply-author-edit.response.v3"
         }
       },
       "project_scope": {
         "owner_user_id": "018f0000-0000-7001-8000-000000000001",
         "project_id": "018f0000-0000-7001-8000-000000000002"
       },
-      "schema_id": "storyos.query.apply-author-edit-outcome.response.v1"
+      "schema_id": "storyos.query.apply-author-edit-outcome.response.v2"
     }"#),
 };
 
@@ -390,13 +428,7 @@ fn get_apply_author_edit_outcome_client_source() -> String {
     )
 }
 
-const APPLY_AUTHOR_EDIT_REQUEST: &[Patch] = &[Patch(
-    U64,
-    &[
-        "/properties/local_intent_sequence",
-        "/properties/writer_generation",
-    ],
-)];
+const APPLY_AUTHOR_EDIT_REQUEST: &[Patch] = &[Patch(U64, &["/properties/local_intent_sequence"])];
 
 const APPLY_AUTHOR_EDIT_RESPONSE: &[Patch] = &[Patch(
     U64,
@@ -404,6 +436,8 @@ const APPLY_AUTHOR_EDIT_RESPONSE: &[Patch] = &[Patch(
         "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/author_action_sequence",
         "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/project_activity_position",
         "/$defs/ApplyAuthorEditEffect/oneOf/1/properties/author_action_sequence",
+        "/$defs/EditorBaseSnapshot/properties/project_activity_position",
+        "/$defs/EditorSessionBinding/properties/client_session_generation",
         "/properties/local_intent_sequence",
     ],
 )];
@@ -439,7 +473,7 @@ const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE: &[Patch] = &[
             "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/author_action_sequence",
             "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/project_activity_position",
             "/$defs/ApplyAuthorEditEffect/oneOf/1/properties/author_action_sequence",
-            "/$defs/ApplyAuthorEditResponse/properties/local_intent_sequence",
+            "/$defs/CommittedApplyAuthorEdit/properties/local_intent_sequence",
         ],
     ),
     Patch(

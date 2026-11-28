@@ -1,0 +1,432 @@
+{
+ "note": "main 54525595: GET /api/v1/projects/018f0000-0000-7001-8000-000000000002/editor-sessions/018f0000-0000-7001-8000-000000000021, POST /api/v1/projects/018f0000-0000-7001-8000-000000000002/anti-forgery-challenges, POST /api/v1/projects/018f0000-0000-7001-8000-000000000002/manuscript/author-edits; the page closed while the POST had no answer",
+ "version": 5,
+ "stores": [
+  {
+   "name": "intents",
+   "keyPath": [
+    "journal_partition_id",
+    "local_intent_sequence"
+   ],
+   "indexes": [
+    {
+     "name": "partition",
+     "keyPath": "journal_partition_id",
+     "unique": false
+    },
+    {
+     "name": "working_partition",
+     "keyPath": "working_set_partition_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "working_set_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "completed_intent_record_id": "01a21e74-f150-7681-8947-9374c959ec4c",
+     "local_intent_sequence": 1,
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+     },
+     "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+     "writer_generation": "1",
+     "limit_profile_revision": "storyos.foundation.absolute.v1",
+     "batch_policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
+     "input_origin": "typing",
+     "chapter_object_id": "018f0000-0000-7001-8000-000000000003",
+     "base_snapshot_id": "018f0000-0000-7001-8000-000000000022",
+     "base_activity_position": "0",
+     "target_refs": [
+      "manuscript:018f0000-0000-7001-8000-000000000003"
+     ],
+     "expected_authoritative_heads": [
+      "018f0000-0000-7001-8000-000000000004"
+     ],
+     "expected_proposal_heads": [],
+     "proposal_anchors": [],
+     "observed_ownership_partition": "authoritative",
+     "author_edit_unit": {
+      "normalized_primitives": [
+       {
+        "kind": "replace_block_selection",
+        "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+        "from": 4,
+        "to": 4,
+        "text": "!"
+       }
+      ],
+      "selection_snapshot": {
+       "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+       "from": 4,
+       "to": 4
+      }
+     },
+     "retry_source": {
+      "kind": "fresh_editor_intent"
+     },
+     "editor_contract_revision": "storyos.editor-contract.release-1.v3",
+     "undo_group_binding": {
+      "kind": "direct_author_input",
+      "undo_group_id": "01a21e74-f150-7dab-a943-bbb45404a178"
+     },
+     "payload_chain_ref": "01a21e74-f150-7066-abd8-a8c14071161b",
+     "payload_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.local-edit-journal.payload.sha256.v1",
+      "value_hex_lowercase": "a278f69d2f47f1e5bb8fbd3400ac76bea1a47fe0815566f5a51c0800ec94376f"
+     },
+     "projection_dependency": {
+      "snapshot_id": "018f0000-0000-7001-8000-000000000022",
+      "prior_sequence": 0
+     },
+     "created_at": "2026-08-15T08:00:01.000Z"
+    }
+   ]
+  },
+  {
+   "name": "metadata",
+   "keyPath": "key",
+   "indexes": [],
+   "rows": [
+    {
+     "key": "active_base:018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "value": {
+      "snapshot_id": "018f0000-0000-7001-8000-000000000022",
+      "chapter_id": "018f0000-0000-7001-8000-000000000003",
+      "project_activity_position": "0",
+      "authoritative_head_revision_id": "018f0000-0000-7001-8000-000000000004",
+      "proposal_head_revision_ids": [],
+      "target_refs": [
+       "manuscript:018f0000-0000-7001-8000-000000000003"
+      ],
+      "observed_ownership_partition": "authoritative",
+      "materialized_revision": {
+       "revision_id": "018f0000-0000-7001-8000-000000000004",
+       "body": "Base",
+       "blocks": [
+        {
+         "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+         "block_kind": "paragraph",
+         "text": "Base"
+        }
+       ]
+      },
+      "materialized_payload_digest": {
+       "algorithm": "sha256",
+       "profile": "storyos.canonical-payload.sha256.v1",
+       "value_hex_lowercase": "7b47361aad19bb483aeab081a7df0a55f7cb0fdb3327efe6dd016e6353a17880"
+      },
+      "created_at": "2026-08-13T08:00:00.000Z"
+     }
+    },
+    {
+     "key": "durable_high_watermark:018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "value": 1
+    },
+    {
+     "key": "local_intent_sequence",
+     "value": 1
+    },
+    {
+     "key": "schema",
+     "version": 5
+    }
+   ]
+  },
+  {
+   "name": "outcome_query_attempts",
+   "keyPath": "outcome_query_attempt_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "outcome_query_observations",
+   "keyPath": "outcome_query_observation_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "partitions",
+   "keyPath": "journal_partition_id",
+   "indexes": [],
+   "rows": [
+    {
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+     },
+     "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+     "writer_generation": "1",
+     "client_session_binding_ref": "binding:test",
+     "client_session_generation": "1",
+     "client_contract_revision": "storyos.web-client.release-1.v3",
+     "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+     "limit_profile_revision": "storyos.foundation.absolute.v1",
+     "created_at": "2026-08-13T08:00:00.000Z",
+     "disposition": "current_writer_open"
+    }
+   ]
+  },
+  {
+   "name": "payload_chains",
+   "keyPath": "payload_chain_id",
+   "indexes": [
+    {
+     "name": "partition",
+     "keyPath": "journal_partition_id",
+     "unique": false
+    },
+    {
+     "name": "working_partition",
+     "keyPath": "working_set_partition_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "working_set_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "payload_chain_id": "01a21e74-f150-7066-abd8-a8c14071161b",
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "checkpoint_ref": {
+      "chapter_object_id": "018f0000-0000-7001-8000-000000000003",
+      "materialized_payload": "Base",
+      "materialized_payload_digest": {
+       "algorithm": "sha256",
+       "profile": "storyos.canonical-payload.sha256.v1",
+       "value_hex_lowercase": "7b47361aad19bb483aeab081a7df0a55f7cb0fdb3327efe6dd016e6353a17880"
+      },
+      "source_snapshot_id": "018f0000-0000-7001-8000-000000000022",
+      "source_heads": [
+       "018f0000-0000-7001-8000-000000000004"
+      ]
+     },
+     "ordered_patch_refs": [
+      {
+       "patch_id": "01a21e74-f150-785f-befc-24c3de2f3818",
+       "completed_intent_record_id": "01a21e74-f150-7681-8947-9374c959ec4c",
+       "local_intent_sequence": 1,
+       "normalized_primitives": [
+        {
+         "kind": "replace_block_selection",
+         "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+         "from": 4,
+         "to": 4,
+         "text": "!"
+        }
+       ],
+       "resulting_payload_digest": {
+        "algorithm": "sha256",
+        "profile": "storyos.local-edit-journal.payload.sha256.v1",
+        "value_hex_lowercase": "aa5b10236bf8f37b95f0c98dc9a3b30e4562add84c7b8092f69b1d82425df49b"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "protocol_observations",
+   "keyPath": "protocol_observation_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": []
+  },
+  {
+   "name": "submission_groups",
+   "keyPath": "journal_submission_group_id",
+   "indexes": [
+    {
+     "name": "partition",
+     "keyPath": "journal_partition_id",
+     "unique": false
+    },
+    {
+     "name": "working_partition",
+     "keyPath": "working_set_partition_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "working_set_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "journal_submission_group_id": "01a21e74-f152-72f7-9f38-8055aa6e040a",
+     "journal_partition_id": "018f0000-0000-7001-8000-000000000001:018f0000-0000-7001-8000-000000000002:018f0000-0000-7001-8000-000000000021:1:binding:test:1:storyos.web-client.release-1.v3:storyos.web-security-policy.release-1.v1:storyos.foundation.absolute.v1",
+     "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+     },
+     "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+     "writer_generation": "1",
+     "batch_policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
+     "ordered_coverage": [
+      {
+       "local_intent_sequence": 1,
+       "intent_record_ref": "01a21e74-f150-7681-8947-9374c959ec4c",
+       "payload_digest": {
+        "algorithm": "sha256",
+        "profile": "storyos.local-edit-journal.payload.sha256.v1",
+        "value_hex_lowercase": "a278f69d2f47f1e5bb8fbd3400ac76bea1a47fe0815566f5a51c0800ec94376f"
+       }
+      }
+     ],
+     "covered_sequence_range": {
+      "first": 1,
+      "last": 1
+     },
+     "action_class": "direct_editor_action",
+     "api_major": 1,
+     "method": "POST",
+     "route_template": "/api/v1/projects/{project_id}/manuscript/author-edits",
+     "command_schema": "storyos.command.apply-author-edit.request.v1",
+     "command_kind": "applyAuthorEdit",
+     "digest_profile": "storyos.command.applyAuthorEdit.jcs.v1",
+     "idempotency_key": "01a21e74-f152-7e82-982c-36dcaf37aa96",
+     "frozen_request_body": {
+      "command_schema": "storyos.command.apply-author-edit.request.v1",
+      "client_contract_revision": "storyos.web-client.release-1.v3",
+      "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+      "correlation_id": "01a21e74-f152-7ede-89a0-6cebb9f8cc4b",
+      "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+      "writer_generation": "1",
+      "chapter_id": "018f0000-0000-7001-8000-000000000003",
+      "expected_authoritative_revision_id": "018f0000-0000-7001-8000-000000000004",
+      "expected_proposal_head_revision_ids": [],
+      "target_refs": [
+       "manuscript:018f0000-0000-7001-8000-000000000003"
+      ],
+      "observed_ownership_partition": "authoritative",
+      "editor_contract_revision": "storyos.editor-contract.release-1.v3",
+      "undo_group_id": "01a21e74-f150-7dab-a943-bbb45404a178",
+      "completed_intent_record_id": "01a21e74-f150-7681-8947-9374c959ec4c",
+      "local_intent_sequence": "1",
+      "author_edit_units": [
+       {
+        "normalized_primitives": [
+         {
+          "kind": "replace_block_selection",
+          "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+          "from": 4,
+          "to": 4,
+          "text": "!"
+         }
+        ],
+        "selection_snapshot": {
+         "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+         "from": 4,
+         "to": 4
+        }
+       }
+      ]
+     },
+     "frozen_request_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+      "value_hex_lowercase": "38dcd00821d989b94b349c432804258f3d40e9f9a648d484b935e3a534d72853"
+     },
+     "frozen_payload_coverage_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.local-edit-journal.submission-coverage.sha256.v1",
+      "value_hex_lowercase": "8a1a497238d62c6b2029cfa74e90c44e62b49eaef8cb3f49df449a9047a085e5"
+     },
+     "settlement": {
+      "kind": "unsettled"
+     },
+     "frozen_at": "2026-11-27T19:21:50.162Z"
+    }
+   ]
+  },
+  {
+   "name": "transport_attempts",
+   "keyPath": "transport_attempt_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "transport_attempt_id": "01a21e74-f153-7f70-adc2-eb523bdca2b9",
+     "journal_submission_group_id": "01a21e74-f152-72f7-9f38-8055aa6e040a",
+     "attempt_ordinal": 1,
+     "attempt_kind": {
+      "kind": "initial"
+     },
+     "exact_transport_retry_capsule_id": "01a21e74-f153-7fe8-8251-7cf38ba94695",
+     "started_at": "2026-11-27T19:21:50.164Z",
+     "outcome": {
+      "kind": "in_flight"
+     }
+    }
+   ]
+  },
+  {
+   "name": "transport_capsules",
+   "keyPath": "exact_transport_retry_capsule_id",
+   "indexes": [
+    {
+     "name": "group",
+     "keyPath": "journal_submission_group_id",
+     "unique": false
+    }
+   ],
+   "rows": [
+    {
+     "exact_transport_retry_capsule_id": "01a21e74-f153-7fe8-8251-7cf38ba94695",
+     "journal_submission_group_id": "01a21e74-f152-72f7-9f38-8055aa6e040a",
+     "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+     },
+     "client_session_binding_ref": "binding:test",
+     "client_session_generation": "1",
+     "request_identity": {
+      "api_major": 1,
+      "method": "POST",
+      "route_template": "/api/v1/projects/{project_id}/manuscript/author-edits",
+      "command_schema": "storyos.command.apply-author-edit.request.v1",
+      "command_kind": "applyAuthorEdit"
+     },
+     "exact_request_body_ref": "01a21e74-f152-72f7-9f38-8055aa6e040a",
+     "canonical_command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+      "value_hex_lowercase": "38dcd00821d989b94b349c432804258f3d40e9f9a648d484b935e3a534d72853"
+     },
+     "digest_profile": "storyos.command.applyAuthorEdit.jcs.v1",
+     "exact_client_controlled_headers": {
+      "Idempotency-Key": "01a21e74-f152-7e82-982c-36dcaf37aa96",
+      "X-StoryOS-Anti-Forgery": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "Content-Type": "application/json"
+     },
+     "challenge_expires_at": "2026-08-15T09:00:00.000Z",
+     "committed_before_send_at": "2026-11-27T19:21:50.163Z",
+     "disposition": {
+      "kind": "available"
+     }
+    }
+   ]
+  }
+ ]
+}

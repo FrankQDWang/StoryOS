@@ -57,7 +57,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
   const scenario = createBrowserScenario();
   const freshSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
     correlation_id: "018f0000-0000-7001-8000-000000000037",
     base_snapshot: {
       ...scenario.session.base_snapshot,
@@ -79,7 +79,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
   let lastIdempotencyKey: string | undefined;
   let canonicalSession: GetEditorSessionResponse = {
     ...scenario.session,
-    schema_id: "storyos.query.editor-session.response.v1",
+    schema_id: "storyos.query.editor-session.response.v2",
   };
   const counts = { authorEdits: 0, outcomes: 0, paths: [] as string[] };
   const openDatabases = new Set<IDBDatabase>();
@@ -91,7 +91,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     expect(path).not.toMatch(/draft/i);
     if (path.endsWith("/anti-forgery-challenges")) {
       const request = requireRequestBody(init);
-      if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+      if (request.command_schema === "storyos.command.apply-author-edit.request.v2") {
         commandDigest = requireDigestValue(request.canonical_command_digest, "command digest");
       }
       return jsonResponse({
@@ -170,7 +170,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    expect(workspace.database.version).toBe(5);
+    expect(workspace.database.version).toBe(6);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
       "metadata",
@@ -214,7 +214,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     groupId: string;
     workspace: EditorReadyState;
   }> {
-    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
     outcomeMode = "unavailable";
     const workspace = await openReady();
     await appendAuthorEdit(workspace, {
@@ -323,7 +323,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     expect(unavailableAttempts).toEqual([expectedUnavailable]);
     unresolved.workspace.database.close();
 
-    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
     outcomeMode = "committed";
     let reopened = await openReady();
     expect(await submitOnePendingAuthorEdit({
@@ -415,7 +415,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       unresolved.workspace.database.close();
       canonicalSession = {
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       };
       outcomeMode = mode;
       reopened = await openReady();
@@ -466,7 +466,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     clear.objectStore("transport_capsules").clear();
     await transactionResult(clear);
     opened.close();
-    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
     outcomeMode = "committed";
     reopened = await openReady();
     expect(await submitOnePendingAuthorEdit({
@@ -485,7 +485,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     counts.outcomes = 0;
     unresolved = await loseAcknowledgement();
     unresolved.workspace.database.close();
-    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
     outcomeMode = "unavailable";
     reopened = await openReady();
     expect(await submitOnePendingAuthorEdit({

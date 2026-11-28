@@ -23,7 +23,7 @@ function appliedAuthorEditTransport(scenario: ReturnType<typeof createBrowserSce
   let position = 0;
   let commandDigest: DigestValue | undefined;
   let session: GetEditorSessionResponse = {
-    ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
+    ...scenario.session, schema_id: "storyos.query.editor-session.response.v2",
   };
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
@@ -285,7 +285,7 @@ it("refuses input when a full working set cannot retire its prefix", async () =>
     await refusesInput(reopened);
     await replacePrefix(reopened, saved);
     const firstFence = saved.fences[0] as Record<string, unknown>;
-    const { partition_disposition: _disposition, ...incompleteFence } = firstFence;
+    const { reason: _reason, ...incompleteFence } = firstFence;
     const invalidFenceWrite = reopened.database.transaction("metadata", "readwrite");
     await requestResult(invalidFenceWrite.objectStore("metadata").put({
       key: `collection_fences:${partitionId}`, value: [incompleteFence, ...saved.fences.slice(1)],

@@ -91,9 +91,15 @@ fn every_event_has_an_owner_a_profile_and_an_operation_mapping() {
         })
         .map(text)
         .collect::<BTreeSet<_>>();
+    // ADR 0107 removed the takeover, and only its Activity of the past stays.
+    let historical = [
+        "storyos.event.writer-takeover-applied.v1",
+        "storyos.event.writer-takeover-compare-failed.v1",
+    ];
     let schema_ids = events
         .iter()
         .map(|event| text(&event["schema_id"]))
+        .filter(|schema_id| !historical.contains(schema_id))
         .collect::<BTreeSet<_>>();
     assert_eq!(
         mapped, schema_ids,
@@ -197,11 +203,7 @@ fn conditional_commands_bind_the_exact_author_and_producer_causes() {
             ),
             "{id}"
         );
-        assert_eq!(
-            author["editor"],
-            json!({"session": "required", "writer_generation": "current", "takeover": "no"}),
-            "{id}"
-        );
+        assert_eq!(author["editor"], json!({"session": "required"}), "{id}");
         assert_eq!(
             author["recovery"]["requires_reconfirmation"], "allowed",
             "{id}"
@@ -234,7 +236,7 @@ fn conditional_commands_bind_the_exact_author_and_producer_causes() {
         );
         assert_eq!(
             producer["editor"],
-            json!({"session": "not-applicable", "writer_generation": "not-applicable", "takeover": "no"}),
+            json!({"session": "not-applicable"}),
             "{id}"
         );
         assert_eq!(
@@ -352,10 +354,7 @@ fn author_edit_keeps_its_one_ingress_and_its_independent_outcome_query() {
             "cache_control": "no-store",
         })
     );
-    assert_eq!(
-        outcome["editor"]["writer_generation"],
-        "bound-to-original-admission-when-present"
-    );
+    assert_eq!(outcome["editor"], json!({"session": "required"}));
     let settlement = &outcome["settlement"];
     assert_eq!(settlement["mode"], "read");
     assert_eq!(settlement["acknowledgements"], json!([]));

@@ -409,7 +409,7 @@ Every state-changing request:
   command kind, `idempotency_key`, canonical command digest, and exact
   pre-domain idempotency record;
 - for editor-bound commands, carries and validates the exact
-  `editor_session_id` and current or expected Project writer generation;
+  `editor_session_id`;
 - validates the command's author action class, trusted client-contract and
   security-policy identities, Approval, Acceptance, Capability, and expected
   Revision as applicable;
@@ -455,7 +455,10 @@ response, or unrelated Query. Every success and Problem response uses
 
 The result is the closed
 `Committed | Rejected | RequiresReconfirmation | StillUnknown` union.
-`Committed` contains the exact `ApplyAuthorEditResponse` v2. `Rejected` is
+The response form is `storyos.query.apply-author-edit-outcome.response.v2`.
+`Committed` contains the exact `ApplyAuthorEditResponse` v3 with no Editor
+Session state: the state is a read after the command, not a part of the
+acknowledgement (ADR 0106 section 3). `Rejected` is
 possible only when a lock-serialized read proves that the exact challenge is
 expired, unconsumed, and pending, with no Admission or Receipt.
 `RequiresReconfirmation` is the terminal no-Receipt settlement for an
@@ -542,14 +545,14 @@ a parallel list. The catalog lists each served operation and no planned
 operation. [Section 7.1.2](#712-planned-operations-of-later-stages) lists the
 planned operations of later Stages.
 
-The catalog covers Project lifecycle, volume/chapter structure, one editor
-session and writer takeover, direct author editing, search and replacement,
+The catalog covers Project lifecycle, volume/chapter structure, the editor
+session, direct author editing, search and replacement,
 statistics, human-readable manuscript export, portable Project Export Archive
 export, Snapshot and resync, Proposal and Draft lifecycle, Agent-run
 control, and Project Activity.
 Each entry names one stable `operation_id`, method/path, resource/action shape,
 semantic owner, wire owner, request/response schema IDs, action/admission
-class, Editor Session and writer-generation rule, idempotency and
+class, Editor Session rule, idempotency and
 preconditions, settlement/status profile, stable error profile, Project
 Activity mapping, and positive/negative golden fixture IDs.
 The catalog's machine-readable `release1_capability_coverage` crosswalk is
@@ -604,13 +607,13 @@ does not list it.
 `WithdrawProposal` has one public operation and a closed request
 discriminator for its two Core-legal causes. The `author`
 profile is an explicit protected editor command. It requires the current
-Editor Session and writer generation, an `AuthorCommandAdmission`, its
+Editor Session, an `AuthorCommandAdmission`, its
 idempotency record, and the author-only `RequiresReconfirmation` recovery
 branch.
 
 The `current_producer` profile binds the exact `AgentRunDecision`
 producer cause. For `WithdrawProposal`, this is the producer of the Proposal.
-The profile has no Editor Session, writer generation, or
+The profile has no Editor Session or
 `AuthorCommandAdmission` field or requirement. It uses its own producer-cause
 idempotency record. It can settle only with the committed result of the
 producer. The catalog's discriminated request/response schemas encode
@@ -661,17 +664,15 @@ CommandMeta {
   expected: command-specific closed preconditions
   author_action_class: AuthorCommandActionClass | null
   editor_session_id: EditorSessionId | null
-  writer_generation: uint64 | null
   client_contract_revision: ClientContractRevision
   security_policy_revision: SecurityPolicyRevision
   correlation_id: CorrelationId
 }
 ```
 
-The Editor Session fields are both present or both absent. A normal editor
-command must name the active generation; takeover names the observed generation
-it intends to fence and returns the new one. A stale generation cannot create
-an Author Command Admission.
+An editor command names its Editor Session. No command names a Project writer
+generation, and no Editor Session is read-only because another Editor Session
+exists (ADR 0107).
 
 The client-contract and security-policy revisions are closed equality claims
 from the deployed application assets. The Server derives their accepted values
@@ -690,7 +691,7 @@ newtype generated before first submission. The canonical command digest covers:
 - resolved existing or prospective Project Scope;
 - all target identities and expected Revisions/Heads;
 - the exact typed body after closed-schema validation;
-- author action class, Editor Session and writer generation, Web Client
+- author action class, Editor Session, Web Client
   contract revision, security-policy revision, Approval, and exact typed
   Receipt identities where applicable, including Validation, Acceptance, Undo
   Acceptance, and Author Undo Receipts.

@@ -29,7 +29,6 @@ async function decide(workspace: EditorReadyState, index: number, proposalId: st
     journal_partition_id: partition.journal_partition_id,
     project_scope: partition.project_scope,
     editor_session_id: partition.editor_session_id,
-    writer_generation: partition.writer_generation,
     author_visible_decision_ref: { proposal_id: proposalId, operation_id: operationId,
       revision_id: revisionId },
     settlement: "frozen" as const,

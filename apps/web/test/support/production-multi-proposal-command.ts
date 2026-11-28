@@ -300,18 +300,113 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect.poll(async () => (await getChapter({ ...options, chapterId: first.chapter_id })).chapter.current_revision.blocks
       .find(block => block.manuscript_block_id === first.manuscript_block_id)?.text)
       .toContain('Author continues writing.');
+    phase = "split-secondary";
+    // The author starts a second paragraph in the secondary candidate. Enter in a candidate adds a line feed, and the
+    // candidate stays one candidate of its block until the Acceptance splits it (ADR 0106, section 2).
+    const unsplit = (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)!.candidate_text;
+    // A selection, or the caret when `from` is `to`, at offsets of the secondary candidate text.
+    const selectInCandidate = (from: number, to: number) => page.evaluate(({ proposalId, operationId, from, to }) => {
+      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
+        '[data-manuscript-editor]')?.editor;
+      let start: number | undefined;
+      editor?.state.doc.descendants((node, position) => {
+        if (node.type.name === 'blockProposal' && node.attrs.proposalId === proposalId
+          && node.attrs.operationId === operationId) start = position + 1;
+      });
+      if (editor === undefined || start === undefined) throw new Error('The candidate is not in the editor');
+      editor.commands.setTextSelection({ from: start + from, to: start + to });
+      editor.view.focus();
+    }, { proposalId, operationId: secondaryOutcome.operation_id, from, to });
+    // The caret at an offset of the candidate text.
+    const caretInCandidate = (offset: number) => selectInCandidate(offset, offset);
+    const savedCandidate = (text: string) => expect.poll(async () => (await getProposal({ ...options, proposalId }))
+      .proposal.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text,
+    { timeout: 10_000 }).toBe(text);
+    // The Chapter read can answer before the client installs the saved base, and the candidate shows only after that.
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
+    await caretInCandidate(unsplit.length);
+    // The author presses Enter at the end of the candidate and types at once, while the candidate edit of Enter is in
+    // progress. The input stays in the candidate, and the editor accepts more input (#1944).
+    let releaseEnter!: () => void;
+    let observedEnter!: () => void;
+    const enterHeld = new Promise<void>(resolve => { releaseEnter = resolve; });
+    const enterObserved = new Promise<void>(resolve => { observedEnter = resolve; });
+    let enterPosts = 0;
+    await page.route(editRoute, async route => {
+      if (route.request().method() === 'POST' && ++enterPosts === 1) { observedEnter(); await enterHeld; }
+      await route.continue();
+    });
+    await page.keyboard.press('Enter');
+    await enterObserved;
+    await page.keyboard.insertText('A second');
+    releaseEnter();
+    await page.keyboard.insertText(' paragraph.');
+    const splitText = `${unsplit}\nA second paragraph.`;
+    await savedCandidate(splitText);
+    await page.unroute(editRoute, undefined);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    // A new load shows the stored candidate text with all typed text.
+    await page.reload();
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
+    await expect(candidate()).toHaveCount(1);
+    assert.equal(await candidate().locator('.block-proposal-text').textContent(), splitText);
+    // The author adds a part of each paragraph of the candidate to the message.
+    for (const [from, to] of [[0, 4], [unsplit.length + 1, splitText.length]] as const) {
+      await selectInCandidate(from, to);
+      await page.locator('[data-add-selection-reference]').click();
+    }
+    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(2);
     // The Chapter Head moved after the Proposal opened, so the Acceptance replaces the secondary Block text (ADR 0064).
     const pending = (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)!;
     assert.equal(pending.resolution, 'pending');
-    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await candidate().locator('[data-proposal-accept]').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution).toBe('applied');
     await expect(candidate()).toHaveCount(0);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
-    await expect(page.locator(`[data-manuscript-editor] > p[data-id="${secondary.manuscript_block_id}"]`))
-      .toHaveText(pending.candidate_text);
+    // The line feed of the accepted candidate starts a new block after the target block.
+    const secondaryBlock = page.locator(`[data-manuscript-editor] > p[data-id="${secondary.manuscript_block_id}"]`);
+    await expect(secondaryBlock).toHaveText(unsplit);
+    const addedBlock = secondaryBlock.locator('xpath=following-sibling::p[1]');
+    await expect(addedBlock).toHaveText('A second paragraph.');
+    const addedId = await addedBlock.getAttribute('data-id');
+    assert.ok(addedId !== null && addedId !== secondary.manuscript_block_id);
+    // A later selection of a part of the new paragraph gives a reference to the new block (ticket item 5).
+    await page.evaluate((blockId) => {
+      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
+        '[data-manuscript-editor]')?.editor;
+      let from: number | undefined;
+      editor?.state.doc.descendants((node, position) => {
+        if (node.attrs.id === blockId) from = position + 1;
+      });
+      if (editor === undefined || from === undefined) throw new Error('The new block is not in the editor');
+      editor.commands.setTextSelection({ from, to: from + 'A second'.length });
+      editor.view.focus();
+    }, addedId);
+    await page.locator('[data-add-selection-reference]').click();
+    // The editor of the accepted Revision also made each earlier reference to the candidate Chapter text of the block
+    // that shows its paragraph (ADR 0062).
+    await expect(page.locator('[data-selection-reference-label]')).toHaveCount(3);
+    assert.deepEqual(await page.evaluate((projectId) => {
+      const key = Object.keys(sessionStorage).find((name) => name.startsWith('selection_references:')
+        && name.endsWith(`:${projectId}`));
+      const draft = JSON.parse(sessionStorage.getItem(key ?? '') ?? '{"entries":[]}') as
+        { entries: { reference: { kind: string; start?: { manuscript_block_id: string; offset: number };
+          end?: { manuscript_block_id: string; offset: number } } }[] };
+      return draft.entries.map(({ reference }) => [reference.kind, reference.start?.manuscript_block_id,
+        reference.start?.offset, reference.end?.manuscript_block_id, reference.end?.offset]);
+    }, projectId), [['chapter_text', secondary.manuscript_block_id, 0, secondary.manuscript_block_id, 4],
+      ['chapter_text', addedId, 0, addedId, 'A second paragraph.'.length],
+      ['chapter_text', addedId, 0, addedId, 'A second'.length]]);
+    // The later request of the journey works on the whole Chapter, so the author removes the references again.
+    for (const left of [2, 1, 0]) {
+      await page.locator('[data-selection-reference-label] [data-remove-selection-reference]').first().click();
+      await expect(page.locator('[data-selection-reference-label]')).toHaveCount(left);
+    }
     await expect(authorBlock).toContainText('Author continues writing.');
     assert.deepEqual(await retainedHistory(), originalHistory);
     await page.locator(`[data-assistant-history-run="${run.run_id}"]`).waitFor();

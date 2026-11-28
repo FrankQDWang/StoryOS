@@ -71,40 +71,28 @@ pub(super) enum Admission {
     ConditionalByCause,
 }
 
-/// The Editor Session, writer generation, and takeover rule of one operation.
+/// The Editor Session rule of one operation.
 #[derive(Clone, Copy)]
 pub(super) enum EditorRule {
     Unbound,
     Optional,
     NotApplicable,
     NewSession,
-    ObservedWriter,
-    ExplicitTakeover,
-    CurrentWriter,
-    BoundToOriginalAdmission,
+    Required,
     ConditionalByCause,
 }
 
 impl EditorRule {
     fn json(self) -> Value {
-        let (session, writer_generation, takeover) = match self {
-            Self::Unbound => ("none", "none", "none"),
-            Self::Optional => ("optional", "not-applicable", "no"),
-            Self::NotApplicable => ("not-applicable", "not-applicable", "no"),
-            Self::NewSession => ("new", "returned_projection", "no"),
-            Self::ObservedWriter => ("required", "observed", "no"),
-            Self::ExplicitTakeover => ("required", "observed", "explicit"),
-            Self::CurrentWriter => ("required", "current", "no"),
-            Self::BoundToOriginalAdmission => {
-                ("required", "bound-to-original-admission-when-present", "no")
-            }
-            Self::ConditionalByCause => (
-                "conditional_by_cause",
-                "conditional_by_cause",
-                "conditional_by_cause",
-            ),
+        let session = match self {
+            Self::Unbound => "none",
+            Self::Optional => "optional",
+            Self::NotApplicable => "not-applicable",
+            Self::NewSession => "new",
+            Self::Required => "required",
+            Self::ConditionalByCause => "conditional_by_cause",
         };
-        json!({ "session": session, "writer_generation": writer_generation, "takeover": takeover })
+        json!({ "session": session })
     }
 }
 
@@ -225,7 +213,7 @@ impl Binding {
     pub(super) const EDITOR_COMMAND: Self = Self {
         action_class: ActionClass::ExplicitEditorCommand,
         admission: Admission::AuthorCommand,
-        editor: EditorRule::CurrentWriter,
+        editor: EditorRule::Required,
         idempotency: Idempotency::HeaderAndAdmissionRecord,
         settlement: Settlement::CommittedOrReconfirmation,
         error_profile: ErrorProfile::EditorCommand,

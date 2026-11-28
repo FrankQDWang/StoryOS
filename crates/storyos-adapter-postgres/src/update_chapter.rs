@@ -12,8 +12,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
-    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, SessionBase, Structural,
+    StructureIdentity, StructureWrite, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -175,7 +175,7 @@ impl ProjectCommand for UpdateChapterInput {
                 resulting_tree_revision: applied.tree_revision,
                 identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
                 current_chapter: CurrentChapterChange::Preserve,
-                writer_base: WriterBase::Keep,
+                session_base: SessionBase::Keep,
                 activity: serde_json::json!({
                     "chapter_id": self.chapter_id.as_ref(),
                     "title": applied.title,

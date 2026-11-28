@@ -35,7 +35,6 @@ impl From<ProjectCommandError> for AuthorEditFailure {
                 AuthorEditError::BindingConflict
             }
             ProjectCommandError::InvalidChallenge => AuthorEditError::InvalidChallenge,
-            ProjectCommandError::WriterIneligible => AuthorEditError::StaleWriter,
             ProjectCommandError::HistoricalAcknowledgementUnavailable => {
                 AuthorEditError::Unavailable(Box::new(std::io::Error::other(
                     "the Author Edit acknowledgement is unavailable",
@@ -61,7 +60,6 @@ impl CommandError for AuthorEditFailure {
         match self.0 {
             AuthorEditError::BindingConflict => "binding_conflict",
             AuthorEditError::InvalidChallenge => "invalid_challenge",
-            AuthorEditError::StaleWriter => "stale_writer",
             AuthorEditError::AdmissionExpired => "admission_expired",
             AuthorEditError::Unavailable(_) => "unavailable",
         }
@@ -111,6 +109,8 @@ pub(crate) struct AuthorEdit<'a> {
     pub(crate) fault: AuthorEditFault,
     /// The identity of a Proposal Revision that the edit can append.
     proposal_revision_id: String,
+    /// The settlement has the Editor Session state after a base move (ADR 0106 section 3).
+    reports_session: bool,
 }
 
 impl<'a> AuthorEdit<'a> {
@@ -119,6 +119,15 @@ impl<'a> AuthorEdit<'a> {
             command,
             fault,
             proposal_revision_id: Uuid::now_v7().to_string(),
+            reports_session: true,
+        }
+    }
+
+    /// The same edit with no Editor Session state in its settlement, so it reads no Editor Session.
+    pub(crate) fn without_session(self) -> Self {
+        Self {
+            reports_session: false,
+            ..self
         }
     }
 
@@ -129,8 +138,7 @@ impl<'a> AuthorEdit<'a> {
         }
     }
 
-    /// The error of an Admission that the head query does not find, as on `main`: expired, a stale
-    /// writer, or a binding conflict.
+    /// The error of an Admission that the head query does not find: expired, or a binding conflict.
     async fn diagnose_closed_admission(&self, client: &Client) -> AuthorEditFailure {
         let command = self.command;
         let diagnosis = client
@@ -139,17 +147,7 @@ impl<'a> AuthorEdit<'a> {
                    SELECT 1 FROM storyos.author_command_admissions
                     WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                       AND author_command_admission_id = $3::text::uuid
-                      AND challenge_expires_at <= clock_timestamp()),
-                        EXISTS (
-                   SELECT 1 FROM storyos.author_command_admissions AS admission
-                    WHERE admission.owner_user_id = $1::text::uuid
-                      AND admission.project_id = $2::text::uuid
-                      AND admission.author_command_admission_id = $3::text::uuid
-                      AND admission.writer_generation < (
-                        SELECT max(current_writer.writer_generation)
-                          FROM storyos.project_writer_generations AS current_writer
-                         WHERE (current_writer.owner_user_id, current_writer.project_id) =
-                               (admission.owner_user_id, admission.project_id)))",
+                      AND challenge_expires_at <= clock_timestamp())",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
@@ -159,7 +157,6 @@ impl<'a> AuthorEdit<'a> {
             .await;
         AuthorEditFailure(match diagnosis {
             Ok(row) if row.get::<_, bool>(/*idx*/ 0) => AuthorEditError::AdmissionExpired,
-            Ok(row) if row.get::<_, bool>(/*idx*/ 1) => AuthorEditError::StaleWriter,
             Ok(_) => AuthorEditError::BindingConflict,
             Err(error) => AuthorEditError::Unavailable(Box::new(error)),
         })
@@ -169,7 +166,6 @@ impl<'a> AuthorEdit<'a> {
         let command = self.command;
         Admission::DirectEditorAction(DirectEditorAdmission {
             editor_session_id: command.editor_session_id.as_ref().to_owned(),
-            writer_generation: command.writer_generation,
             chapter_object_id: command.chapter_id.clone(),
             expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
             expected_proposal_head_revision_ids: command
@@ -220,24 +216,12 @@ impl ProjectCommand for AuthorEdit<'_> {
     ) -> Result<Classification<Self>, AuthorEditFailure> {
         let command = self.command;
         let scope = &command.project_scope;
-        // The Admission, its current writer, and the Chapter head, under the head lock, as on
-        // `main`. A writer takeover can settle while this query waits.
+        // The Admission and the Chapter head, under the head lock.
         let row = client
             .query_opt(
                 "SELECT head.current_revision_id::text,
                         convert_from(payload.canonical_bytes, 'UTF8')
                    FROM storyos.author_command_admissions AS admission
-                   JOIN storyos.project_writer_generations AS writer
-                     ON (writer.owner_user_id, writer.project_id,
-                         writer.current_editor_session_id, writer.writer_generation) =
-                        (admission.owner_user_id, admission.project_id,
-                         admission.editor_session_id, admission.writer_generation)
-                    AND writer.writer_generation = (
-                      SELECT max(current_writer.writer_generation)
-                        FROM storyos.project_writer_generations AS current_writer
-                       WHERE (current_writer.owner_user_id, current_writer.project_id) =
-                             (admission.owner_user_id, admission.project_id)
-                    )
                    JOIN storyos.authoritative_heads AS head
                      ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
                         (admission.owner_user_id, admission.project_id,
@@ -335,42 +319,10 @@ impl ProjectCommand for AuthorEdit<'_> {
 
     async fn diagnose_missing_admission(
         &self,
-        client: &Client,
+        _client: &Client,
         _envelope: &ProjectCommandEnvelope,
     ) -> AuthorEditFailure {
-        let command = self.command;
-        let stale_writer = client
-            .query_one(
-                "SELECT EXISTS (
-                   SELECT 1 FROM storyos.editor_sessions AS session
-                    WHERE session.owner_user_id = $1::text::uuid
-                      AND session.project_id = $2::text::uuid
-                      AND session.editor_session_id = $3::text::uuid)
-                  AND NOT EXISTS (
-                   SELECT 1 FROM storyos.project_writer_generations AS writer
-                    WHERE writer.owner_user_id = $1::text::uuid
-                      AND writer.project_id = $2::text::uuid
-                      AND writer.current_editor_session_id = $3::text::uuid
-                      AND writer.writer_generation = $4::text::numeric
-                      AND writer.writer_generation = (
-                        SELECT max(current_writer.writer_generation)
-                          FROM storyos.project_writer_generations AS current_writer
-                         WHERE current_writer.owner_user_id = $1::text::uuid
-                           AND current_writer.project_id = $2::text::uuid))",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &command.editor_session_id.as_ref(),
-                    &command.writer_generation.to_string(),
-                ],
-            )
-            .await
-            .map(|row| row.get::<_, bool>(/*idx*/ 0));
-        AuthorEditFailure(match stale_writer {
-            Ok(true) => AuthorEditError::StaleWriter,
-            Ok(false) => AuthorEditError::BindingConflict,
-            Err(error) => AuthorEditError::Unavailable(Box::new(error)),
-        })
+        AuthorEditFailure(AuthorEditError::BindingConflict)
     }
 
     fn applied_receipt(
@@ -429,7 +381,8 @@ impl ProjectCommand for AuthorEdit<'_> {
                     members,
                     disposition: crate::command_sequence::ActionDisposition::Forward,
                     editor_session_id: command.editor_session_id.as_ref().to_owned(),
-                    writer_base: RevisionBase::Required,
+                    session_base: RevisionBase::Required,
+                    reports_session: self.reports_session,
                 }))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {
@@ -528,7 +481,6 @@ impl AdmittedCommand for AuthorEdit<'_> {
     fn admitted_refusal(refusal: AdmittedRefusal) -> AuthorEditFailure {
         AuthorEditFailure(match refusal {
             AdmittedRefusal::Expired => AuthorEditError::AdmissionExpired,
-            AdmittedRefusal::StaleWriter => AuthorEditError::StaleWriter,
         })
     }
 

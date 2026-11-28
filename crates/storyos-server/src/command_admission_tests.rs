@@ -7,11 +7,8 @@ const STANDARD_ROUTE: ProjectCommandRoute = ProjectCommandRoute {
     path: "/api/v1/projects/{project_id}/updates",
     schema_id: "storyos.command.update-project.request.v1",
     digest_profile: "storyos.command.update-project.digest.v1",
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::BeforeContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 // ADR 0032: a replay without its stored acknowledgement is a 409, and damaged stored evidence is a 503. The

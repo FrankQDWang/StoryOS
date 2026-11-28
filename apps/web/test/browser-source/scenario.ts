@@ -85,7 +85,7 @@ export function createBrowserScenario(): BrowserScenario {
     },
   };
   const session: CreateEditorSessionResponse = {
-    schema_id: "storyos.command.create-editor-session.response.v1",
+    schema_id: "storyos.command.create-editor-session.response.v2",
     correlation_id: "018f0000-0000-7001-8000-000000000020",
     project_scope: project.project_scope,
     editor_session: {
@@ -97,7 +97,6 @@ export function createBrowserScenario(): BrowserScenario {
       opened_at: "2026-08-13T08:00:00.000Z",
       disposition: "open",
     },
-    writer: { kind: "current_writer", writer_generation: "1" },
     base_snapshot: {
       snapshot_id: EDITOR_SNAPSHOT,
       chapter_id: CHAPTER,

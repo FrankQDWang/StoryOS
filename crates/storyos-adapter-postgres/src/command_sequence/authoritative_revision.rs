@@ -1,5 +1,5 @@
 //! The `AuthoritativeRevision` settlement profile: one new Authoritative Revision of a Chapter
-//! with its Commit, Author Action, Activity record, writer base, and canonical Snapshot
+//! with its Commit, Author Action, Activity record, session base, and canonical Snapshot
 //! (ADR 0076).
 
 use crate::statement_cache::Client;
@@ -36,11 +36,13 @@ pub(crate) enum ActionDisposition {
     },
 }
 
-/// The move of the writer base Snapshot of the Editor Session to the new Revision.
+/// The move of the base Snapshot of the Editor Session to the new Revision.
 pub(crate) enum RevisionBase {
     /// Moves the base when it is on the prior Revision. Another base stays.
     WhenOnPrior,
-    /// Moves the base. A base that is not on the prior Revision is a binding conflict.
+    /// Moves the base when it is on the Chapter of the new Revision, also from an earlier Revision of that Chapter,
+    /// because another Editor Session can write the Chapter (ADR 0107). A base on another Chapter is a binding
+    /// conflict.
     Required,
 }
 
@@ -57,15 +59,18 @@ pub(crate) struct RevisionWrite<E> {
     pub(crate) effect: E,
     pub(crate) chapter_id: String,
     /// The current head that the new Revision replaces: its parent, and the guard of the Head and
-    /// writer base updates.
+    /// session base updates.
     pub(crate) prior_revision_id: String,
     /// The canonical bytes of the new Revision payload.
     pub(crate) payload: String,
     pub(crate) members: RevisionMembers,
     pub(crate) disposition: ActionDisposition,
-    /// The writer Editor Session whose base Snapshot moves to the new Revision.
+    /// The Editor Session whose base Snapshot moves to the new Revision.
     pub(crate) editor_session_id: String,
-    pub(crate) writer_base: RevisionBase,
+    pub(crate) session_base: RevisionBase,
+    /// The response of the command has the Editor Session state after a base move (ADR 0106 section 3). The
+    /// response of Author Undo has no state, so Undo reads no Editor Session.
+    pub(crate) reports_session: bool,
 }
 
 pub(crate) struct AuthoritativeRevision;
@@ -158,6 +163,8 @@ impl SettlementProfile for AuthoritativeRevision {
                 .map_err(|_| damaged())?,
             body: display_body_from_stored(&revision.payload, &blocks),
             blocks,
+            // A replay comes after the first run, when other commands can have moved the base.
+            session: None,
         })
     }
 }
@@ -349,14 +356,11 @@ pub(crate) async fn write_revision<E>(
                     authoritative_revision_id = $5::text::uuid,
                     project_activity_position = $6::text::numeric,
                     created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
               WHERE snapshot.owner_user_id = $1::text::uuid
                 AND snapshot.project_id = $2::text::uuid
                 AND snapshot.editor_session_id = $3::text::uuid
-                AND snapshot.authoritative_revision_id = $7::text::uuid
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id, snapshot.editor_session_id)",
+                AND snapshot.chapter_object_id = $8::text::uuid
+                AND ($9::bool OR snapshot.authoritative_revision_id = $7::text::uuid)",
             &[
                 &owner_user_id,
                 &project_id,
@@ -365,11 +369,13 @@ pub(crate) async fn write_revision<E>(
                 &revision.revision_id,
                 &position,
                 &write.prior_revision_id,
+                &write.chapter_id,
+                &matches!(write.session_base, RevisionBase::Required),
             ],
         )
         .await
         .map_err(unavailable)?;
-    match write.writer_base {
+    match write.session_base {
         RevisionBase::WhenOnPrior => {}
         RevisionBase::Required => {
             if base_updates != 1 {
@@ -395,10 +401,25 @@ pub(crate) async fn write_revision<E>(
     )
     .await
     .map_err(unavailable)?;
+    // The read comes after each write of the command, so it gives what a read after the commit gives.
+    let session = if write.reports_session && base_updates == 1 {
+        crate::editor_session::session_after_command(client, scope, &write.editor_session_id)
+            .await
+            .map_err(|error| match error {
+                storyos_application::EditorSessionError::Unavailable(source) => {
+                    ProjectCommandError::Unavailable(source)
+                }
+                _ => ProjectCommandError::BindingConflict,
+            })?
+            .map(Box::new)
+    } else {
+        None
+    };
     Ok(RevisionApplied {
         effect: write.effect,
         body: display_body_from_stored(&write.payload, &blocks),
         blocks,
+        session,
         ids: sequences.ids,
         author_action_sequence: sequences.author_action_sequence,
         project_activity_position: sequences.project_activity_position,

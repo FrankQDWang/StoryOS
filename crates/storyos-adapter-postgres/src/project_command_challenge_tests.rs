@@ -210,7 +210,7 @@ fn author_edit_request(index: u64, generation: u64) -> IssueProjectCommandChalle
         "storyos.project-command-challenge-rate.author-edit.fixed-window.v1".to_owned();
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();
-    binding.command_schema = "storyos.command.apply-author-edit.request.v1".to_owned();
+    binding.command_schema = "storyos.command.apply-author-edit.request.v2".to_owned();
     binding.command_kind = CommandKind::ApplyAuthorEdit.as_str().to_owned();
     binding.canonical_command_digest = binding.canonical_command_digest.replace(
         CommandKind::UpdateProject.as_str(),

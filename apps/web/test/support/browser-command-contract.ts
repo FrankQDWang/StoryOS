@@ -3,6 +3,7 @@ export const storyOSBrowserCommandNames = {
   clipboardPermission: "storyosClipboardPermission",
   clientSessionCookie: "storyosClientSessionCookie",
   commandChallengeRateWindows: "storyosCommandChallengeRateWindows",
+  frameRequests: "storyosFrameRequests",
   imeComposition: "storyosImeComposition",
   projectReceipts: "storyosProjectReceipts",
   trustedInput: "storyosTrustedInput",
@@ -36,21 +37,22 @@ export type TrustedInputResult = Readonly<{ kind: "trusted_input_applied" }>;
 export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_updated" }>;
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
 /**
- * `hold_set_current_chapter` holds the Set Current Chapter command requests in place of the Author Edit commands. With
- * `lose_set_current_chapter`, the Server gets the next two Set Current Chapter command requests, and their responses do
- * not arrive.
+ * `hold_set_current_chapter` holds the Set Current Chapter command requests in place of the Author Edit commands, and
+ * `hold_chapter_read` holds the Chapter reads (`GET .../chapters/<id>`). With `lose_set_current_chapter`, the Server
+ * gets the next two Set Current Chapter command requests, and their responses do not arrive.
  */
 export type AuthorEditSubmissionHoldRequest = Readonly<{
-  action: "hold" | "hold_set_current_chapter" | "lose_set_current_chapter" | "release";
+  action: "hold" | "hold_set_current_chapter" | "hold_chapter_read" | "lose_set_current_chapter" | "release";
 }>;
 type AuthorEditSubmissionHoldResult = Readonly<{
   kind: "author_edit_submission_hold_updated";
 }>;
 export type ProductionHostRequest = Readonly<{
-  scenario: "open_edit_reload_takeover" | "prose_request" | "first_owner_edit"
+  scenario: "open_edit_reload_two_pages" | "prose_request" | "first_owner_edit"
     | "conflicted_proposal" | "run_evidence" | "captured_memory" | "multi_proposal" | "composer_controls"
     | "selection_reference" | "research_journey" | "skill_journey" | "plan_journey" | "subrun_journey" | "stage9_journey" | "project_conversations" | "project_settings"
-    | "memory_settings_journey" | "stage7_journey" | "author_voice_journey" | "stage11_journey";
+    | "memory_settings_journey" | "stage7_journey" | "author_voice_journey" | "stage11_journey" | "chapter_switch_load"
+    | "chapter_switch_load_challenge" | "chapter_switch_load_outcome" | "chapter_switch_load_outcome_unavailable";
 }>;
 export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
 /** The expected Receipts of one Project. `listed` counts only the command kinds of `receipts`. */
@@ -223,8 +225,8 @@ export function parseAuthorEditSubmissionHoldRequest(
 ): AuthorEditSubmissionHoldRequest {
   const request = exactObject(value, ["action"], "Author Edit submission hold request");
   const action = property(request, "action");
-  if (action !== "hold" && action !== "hold_set_current_chapter" && action !== "lose_set_current_chapter"
-    && action !== "release") {
+  if (action !== "hold" && action !== "hold_set_current_chapter" && action !== "hold_chapter_read"
+    && action !== "lose_set_current_chapter" && action !== "release") {
     throw new TypeError("Author Edit submission hold action is unsupported");
   }
   return { action };
@@ -243,7 +245,7 @@ export function parseAuthorEditSubmissionHoldResult(
 export function parseProductionHostRequest(value: unknown): ProductionHostRequest {
   const request = exactObject(value, ["scenario"], "production host request");
   const scenario = property(request, "scenario");
-  if (scenario !== "open_edit_reload_takeover" && scenario !== "prose_request" && scenario !== "first_owner_edit" && scenario !== "conflicted_proposal" && scenario !== "run_evidence" && scenario !== "captured_memory" && scenario !== "multi_proposal" && scenario !== "composer_controls" && scenario !== "selection_reference" && scenario !== "research_journey" && scenario !== "skill_journey" && scenario !== "plan_journey" && scenario !== "subrun_journey" && scenario !== "stage9_journey" && scenario !== "project_conversations" && scenario !== "project_settings" && scenario !== "memory_settings_journey" && scenario !== "stage7_journey" && scenario !== "author_voice_journey" && scenario !== "stage11_journey") {
+  if (scenario !== "open_edit_reload_two_pages" && scenario !== "prose_request" && scenario !== "first_owner_edit" && scenario !== "conflicted_proposal" && scenario !== "run_evidence" && scenario !== "captured_memory" && scenario !== "multi_proposal" && scenario !== "composer_controls" && scenario !== "selection_reference" && scenario !== "research_journey" && scenario !== "skill_journey" && scenario !== "plan_journey" && scenario !== "subrun_journey" && scenario !== "stage9_journey" && scenario !== "project_conversations" && scenario !== "project_settings" && scenario !== "memory_settings_journey" && scenario !== "stage7_journey" && scenario !== "author_voice_journey" && scenario !== "stage11_journey" && scenario !== "chapter_switch_load" && scenario !== "chapter_switch_load_challenge" && scenario !== "chapter_switch_load_outcome" && scenario !== "chapter_switch_load_outcome_unavailable") {
     throw new TypeError("production host scenario is unsupported");
   }
   return { scenario };
@@ -251,6 +253,30 @@ export function parseProductionHostRequest(value: unknown): ProductionHostReques
 
 export function parseProductionHostResult(value: unknown): ProductionHostResult {
   return parseResult(value, "production_host_verified", "production host");
+}
+
+/**
+ * `start` records each request of the application frame when it starts, as its method and its path. `read` ends the
+ * record and gives its requests in their order.
+ */
+export type FrameRequestsRequest = Readonly<{ action: "start" | "read" }>;
+export type FrameRequestsResult = Readonly<{ kind: "frame_requests_recorded"; requests: readonly string[] }>;
+
+export function parseFrameRequestsRequest(value: unknown): FrameRequestsRequest {
+  const request = exactObject(value, ["action"], "Frame request record request");
+  const action = property(request, "action");
+  if (action !== "start" && action !== "read") throw new TypeError("Frame request record action is unsupported");
+  return { action };
+}
+
+export function parseFrameRequestsResult(value: unknown): FrameRequestsResult {
+  const result = exactObject(value, ["kind", "requests"], "Frame request record result");
+  const requests: unknown = property(result, "requests");
+  if (property(result, "kind") !== "frame_requests_recorded" || !Array.isArray(requests)
+    || requests.some((request) => typeof request !== "string")) {
+    throw new TypeError("Frame request record result is invalid");
+  }
+  return { kind: "frame_requests_recorded", requests: requests as string[] };
 }
 
 export function parseCommandChallengeRateWindowsRequest(

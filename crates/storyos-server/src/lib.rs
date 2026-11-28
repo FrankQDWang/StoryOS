@@ -63,7 +63,6 @@ mod skill_selections;
 mod snapshot;
 mod steer_agent_run;
 mod subrun;
-mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
@@ -126,7 +125,6 @@ use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use steer_agent_run::steer_agent_run;
 use subrun::get_subrun;
-use takeover::take_over_project_writer;
 use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;
 use update_project::update_project;
@@ -298,7 +296,6 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
     let create_editor_method = method_filter(contracts::CREATE_EDITOR_SESSION_METHOD);
     let get_editor_method = method_filter(contracts::GET_EDITOR_SESSION_METHOD);
     let apply_author_edit_method = method_filter(contracts::APPLY_AUTHOR_EDIT_METHOD);
-    let take_over_project_writer_method = method_filter(contracts::TAKE_OVER_PROJECT_WRITER_METHOD);
     let get_author_edit_outcome_method =
         method_filter(contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD);
     let get_snapshot_method = method_filter(contracts::GET_SNAPSHOT_METHOD);
@@ -551,10 +548,6 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
                 method_filter(contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD),
                 undo_latest_author_action,
             ),
-        )
-        .route(
-            contracts::TAKE_OVER_PROJECT_WRITER_PATH,
-            routing::on(take_over_project_writer_method, take_over_project_writer),
         )
         .route(
             contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH,

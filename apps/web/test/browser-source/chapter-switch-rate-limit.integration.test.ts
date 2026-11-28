@@ -26,6 +26,8 @@ type Timer = { callback: () => void; timeout: number; cleared: boolean };
 const PROJECT_PATH = `/api/v1/projects/${PROJECT}`;
 const CHALLENGE = `POST ${PROJECT_PATH}/anti-forgery-challenges`;
 const readChapter = (chapterId: string) => `GET ${PROJECT_PATH}/chapters/${chapterId}`;
+// A Chapter with no fact "no open suggestion" reads its open suggestions together with the Chapter read of a switch.
+const readList = (chapterId: string) => `GET ${PROJECT_PATH}/chapters/${chapterId}/open-proposals`;
 
 const LIMITED_BODY = JSON.stringify({ schema_id: "storyos.problem.v1", code: "challenge_rate_limited",
   message: "The command challenge rate limit is exceeded." });
@@ -108,7 +110,7 @@ function fakeServer(chapters: string[]) {
     }
     if (name === `POST ${P}/editor-sessions`) return jsonResponse(session());
     if (name === `GET ${P}/editor-sessions/${SESSION}`) {
-      return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v1" });
+      return jsonResponse({ ...session(), schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === `GET ${P}/activity`) return emptyActivityStream();
     if (name === CURRENT_CHAPTER && !server.switchRefused) {
@@ -230,13 +232,14 @@ it("ends the wait of a switch when the author clicks another Chapter, and opens 
   await drainMicrotasks();
 
   const sent = opened.sent();
-  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, sent: sent.slice(0, 9),
+  expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, sent: sent.slice(0, 11),
     // The panels of the editor part of Chapter C read with no order between them.
-    panels: sent.slice(9).sort(), shown: opened.shown() }).toEqual({
+    panels: sent.slice(11).sort(), shown: opened.shown() }).toEqual({
     cleared: true,
     // The switch to Chapter B ends at the refused Challenge. The switch to Chapter C then reopens the workspace.
-    sent: [readChapter(CHAPTER_B), CHALLENGE, readChapter(CHAPTER_C), CHALLENGE, CURRENT_CHAPTER, readChapter(CHAPTER_C),
-      `GET ${PROJECT_PATH}`, "GET /api/v1/projects", `GET ${PROJECT_PATH}/editor-sessions/${SESSION}`],
+    sent: [readList(CHAPTER_B), readChapter(CHAPTER_B), CHALLENGE, readList(CHAPTER_C), readChapter(CHAPTER_C), CHALLENGE,
+      CURRENT_CHAPTER, readChapter(CHAPTER_C), `GET ${PROJECT_PATH}`, "GET /api/v1/projects",
+      `GET ${PROJECT_PATH}/editor-sessions/${SESSION}`],
     panels: [`GET ${PROJECT_PATH}/activity`, `GET ${PROJECT_PATH}/chapters/${CHAPTER_C}/open-proposals`,
       `GET ${PROJECT_PATH}/manuscript/statistics`, `GET ${PROJECT_PATH}/manuscript/tree`],
     shown: { title: "Chapter C", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" },
@@ -251,7 +254,7 @@ it("ends the wait of a switch and shows the earlier Chapter again when the autho
   await expect.poll(opened.shown).toEqual({ title: "Chapter A", save: "saved", failure: "", alert: undefined, status: undefined, waiting: "" });
   await drainMicrotasks();
   expect({ cleared: opened.timers.find((timer) => timer.timeout === 7_000)!.cleared, sent: opened.sent() })
-    .toEqual({ cleared: true, sent: [readChapter(CHAPTER_B), CHALLENGE] });
+    .toEqual({ cleared: true, sent: [readList(CHAPTER_B), readChapter(CHAPTER_B), CHALLENGE] });
 });
 
 it("shows the sentence of the wait only while the later switch also waits", async () => {

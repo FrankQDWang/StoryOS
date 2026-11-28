@@ -288,8 +288,7 @@ async fn editor_session_tables_force_scope_and_composite_references() {
             "SELECT relname, relrowsecurity, relforcerowsecurity
              FROM pg_class WHERE relname IN
                ('authority_history_floors', 'editor_session_base_snapshots', 'editor_sessions',
-                'project_snapshots', 'project_writer_generations', 'replay_floors',
-                'replay_generations')
+                'project_snapshots', 'replay_floors', 'replay_generations')
              ORDER BY relname",
             &[],
         )
@@ -311,7 +310,6 @@ async fn editor_session_tables_force_scope_and_composite_references() {
             "editor_session_base_snapshots",
             "editor_sessions",
             "project_snapshots",
-            "project_writer_generations",
             "replay_floors",
             "replay_generations",
         ]

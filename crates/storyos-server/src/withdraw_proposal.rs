@@ -7,8 +7,8 @@ use storyos_core::{
 };
 
 use super::command_admission::{
-    Admitted, AntiForgery, BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch,
-    SchemaMismatch, TargetValidation, admit_body, controlled_project, read_body,
+    Admitted, AntiForgery, BodyValidation, ProjectCommandRoute, TargetValidation, admit_body,
+    controlled_project, read_body,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -20,11 +20,8 @@ const WITHDRAW_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::WITHDRAW_PROPOSAL_PATH,
     schema_id: contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
     digest_profile: contracts::WITHDRAW_PROPOSAL_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 /// The author form settles through the command sequence. The current-producer form is an

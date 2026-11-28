@@ -1,4 +1,5 @@
 import type { JournalWorkingBoundary } from "./journal-working-set.ts";
+import type { ProjectReads } from "./project-reads.ts";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
@@ -8,7 +9,6 @@ import type {
   DomainReceipt,
   EditorBaseSnapshot,
   EditorSessionBinding,
-  EditorWriterProjection,
   GetEditorSessionResponse,
   GetChapterResponse,
   GetProjectResponse,
@@ -34,14 +34,12 @@ export interface JournalPartition {
   journal_partition_id: string;
   project_scope: ProjectScope;
   editor_session_id: string;
-  writer_generation: string;
   client_session_binding_ref: string;
   client_session_generation: string;
   client_contract_revision: string;
   security_policy_revision: string;
   limit_profile_revision: string;
   created_at: string;
-  disposition: "current_writer_open" | "read_only_observer";
 }
 
 interface ProposalJournalAnchor {
@@ -58,7 +56,6 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   journal_partition_id: string;
   project_scope: ProjectScope;
   editor_session_id: string;
-  writer_generation: string;
   limit_profile_revision: string;
   batch_policy_revision: string;
   input_origin: InputOrigin;
@@ -169,7 +166,6 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
   journal_partition_id: string;
   project_scope: ProjectScope;
   editor_session_id: string;
-  writer_generation: string;
   batch_policy_revision: string;
   ordered_coverage: JournalCoverage[];
   covered_sequence_range: { first: number; last: number };
@@ -239,10 +235,7 @@ export interface EditorReadyState extends EditorWorkspace {
 
 interface EditorReadOnlyState {
   kind: "editor-read-only-recovery";
-  code: "editor_session_read_only" | "local_journal_unavailable";
-  editor_session?: EditorSessionBinding;
-  writer?: EditorWriterProjection;
-  pending?: PendingEditProjection;
+  code: "local_journal_unavailable";
   error?: unknown;
 }
 
@@ -401,8 +394,8 @@ export interface ProjectReadyState {
   revision: string;
   chapter: GetChapterResponse;
   editor: EditorState;
-  /** The tree that the takeover check of the open read, when it ran. */
-  tree?: GetManuscriptTreeResponse | undefined;
+  /** The reads of the Project that the open started early. The view takes each one one time (#1937). */
+  reads?: ProjectReads;
 }
 
 /** The settings page of a Project (ADR 0094 section 9). It opens no Editor Session. */

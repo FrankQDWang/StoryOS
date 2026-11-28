@@ -39,7 +39,7 @@ impl Owner {
                 "docs/foundation/author-command-admission.md#3-exact-admission-bindings"
             }
             Self::Editor => {
-                "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md#22-one-current-writer-generation-per-project"
+                "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md#22-each-editor-session-writes"
             }
             Self::Assistance => {
                 "docs/foundation/plain-language-discovery-writing-assistance-semantics.md#4-prose-change-request-and-proposal-handoff"

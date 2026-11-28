@@ -40,7 +40,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       return jsonResponse({
         ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
+        schema_id: "storyos.query.editor-session.response.v2",
       });
     }
     throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);

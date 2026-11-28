@@ -3,14 +3,14 @@ import {
   createProjectCommandChallenge,
   digestApplyAuthorEdit,
   getEditorSession,
-  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditResponse,
-  EditorWriterProjection,
+  GetEditorSessionResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
+  APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS,
   commitOutcomeQueryWithGroup,
   commitStrongerGroup,
   markOutcomeQueryUnresolved,
@@ -46,6 +46,7 @@ import {
 } from "./protected-transport-capsule.ts";
 import { uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
+import { hasVersion5Request } from "./journal-version-5-upgrade.ts";
 
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -58,23 +59,6 @@ async function canonicalBodyDigest(body: string, cryptoImpl: Crypto): Promise<st
     "SHA-256", new TextEncoder().encode(body),
   ));
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function writerProjectionAllowsLateDurableSettlement(
-  canonicalWriter: EditorWriterProjection,
-  sessionWriter: EditorWriterProjection,
-  partitionGeneration: string,
-): boolean {
-  if (JSON.stringify(canonicalWriter) === JSON.stringify(sessionWriter)) return true;
-  // A fenced tab may observe generation N+1 while its journal partition stays
-  // bound to generation N. Do not treat that writer delta as Snapshot mismatch.
-  return sessionWriter?.kind === "current_writer"
-    && canonicalWriter?.kind === "read_only"
-    && canonicalWriter.reason === "superseded_by_takeover"
-    && !("writer_generation" in canonicalWriter)
-    && positiveU64(canonicalWriter.observed_writer_generation)
-    && sessionWriter.writer_generation === partitionGeneration
-    && BigInt(canonicalWriter.observed_writer_generation) > BigInt(sessionWriter.writer_generation);
 }
 
 const HARD_FLUSH_ORIGINS = new Set<InputOrigin>([
@@ -99,13 +83,12 @@ async function validateFrozenGroup(
     || !UUID.test(group.journal_submission_group_id ?? "")
     || JSON.stringify(group.project_scope) !== JSON.stringify(workspace.partition.project_scope)
     || group.editor_session_id !== workspace.partition.editor_session_id
-    || group.writer_generation !== workspace.partition.writer_generation
     || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
     || group.action_class !== "direct_editor_action"
     || group.api_major !== 1
     || group.method !== "POST"
     || group.route_template !== "/api/v1/projects/{project_id}/manuscript/author-edits"
-    || group.command_schema !== "storyos.command.apply-author-edit.request.v1"
+    || (group.command_schema !== "storyos.command.apply-author-edit.request.v2" && !hasVersion5Request(group))
     || group.command_kind !== "applyAuthorEdit"
     || group.digest_profile !== "storyos.command.applyAuthorEdit.jcs.v1"
     || !UUID.test(group.idempotency_key ?? "")
@@ -117,7 +100,6 @@ async function validateFrozenGroup(
     || group.covered_sequence_range?.last !== records.at(-1)!.local_intent_sequence
     || request?.command_schema !== group.command_schema
     || request?.editor_session_id !== workspace.partition.editor_session_id
-    || request?.writer_generation !== workspace.partition.writer_generation
     || request?.chapter_id !== firstRecord.chapter_object_id
     || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
@@ -159,9 +141,6 @@ export async function freezeOneIntentSubmission(
   workspace: EditorWorkspace,
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<JournalSubmissionGroup> {
-  if (workspace.partition.disposition !== "current_writer_open") {
-    throw new Error("Editor Session is read only");
-  }
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   if (existing) {
@@ -210,12 +189,11 @@ export async function freezeOneIntentSubmission(
   }
   const firstRecord = records[0]!;
   const request: ApplyAuthorEditRequest = {
-    command_schema: "storyos.command.apply-author-edit.request.v1",
+    command_schema: "storyos.command.apply-author-edit.request.v2",
     client_contract_revision: workspace.partition.client_contract_revision,
     security_policy_revision: workspace.partition.security_policy_revision,
     correlation_id: uuidV7(cryptoImpl),
     editor_session_id: workspace.partition.editor_session_id,
-    writer_generation: workspace.partition.writer_generation,
     chapter_id: firstRecord.chapter_object_id,
     expected_authoritative_revision_id: firstRecord.expected_authoritative_heads[0]!,
     expected_proposal_head_revision_ids: firstRecord.expected_proposal_heads,
@@ -248,7 +226,6 @@ export async function freezeOneIntentSubmission(
     journal_partition_id: workspace.partition.journal_partition_id,
     project_scope: workspace.partition.project_scope,
     editor_session_id: workspace.partition.editor_session_id,
-    writer_generation: workspace.partition.writer_generation,
     batch_policy_revision: AUTHOR_EDIT_BATCH_POLICY_REVISION,
     ordered_coverage: orderedCoverage,
     covered_sequence_range: coveredSequenceRange,
@@ -296,6 +273,22 @@ export async function freezeOneIntentSubmission(
   return group;
 }
 
+/** The Editor Session read of `session` after a command that gave `state`, in the form of a read. */
+export function sessionWithState(
+  session: GetEditorSessionResponse,
+  state: NonNullable<ApplyAuthorEditResponse["editor_session_state"]>,
+): GetEditorSessionResponse {
+  const { author_undo_frontier_sequence: _earlierFrontier, ...rest } = session;
+  return {
+    ...rest,
+    schema_id: "storyos.query.editor-session.response.v2",
+    editor_session: state.editor_session,
+    base_snapshot: state.base_snapshot,
+    ...(state.author_undo_frontier_sequence
+      ? { author_undo_frontier_sequence: state.author_undo_frontier_sequence } : {}),
+  };
+}
+
 async function settleAuthorEditResponse({
   workspace, group, response, baseUrl, fetchImpl, cryptoImpl, durableQuery,
 }: {
@@ -311,7 +304,7 @@ async function settleAuthorEditResponse({
   const settledResponse = response as ApplyAuthorEditResponse;
   const effect = settledResponse.effect;
   const receipt = settledResponse.receipt;
-  if (settledResponse.schema_id !== "storyos.command.apply-author-edit.response.v2"
+  if (!APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS.includes(settledResponse.schema_id)
     || settledResponse.correlation_id !== group.frozen_request_body.correlation_id
     || !UUID.test(settledResponse.command_id ?? "")
     || !UUID.test(settledResponse.author_command_admission_id ?? "")
@@ -429,12 +422,17 @@ async function settleAuthorEditResponse({
     || !positiveU64(effect.project_activity_position)) {
     throw new Error("Author Edit acknowledgement does not converge");
   }
-  const canonical = await getEditorSession({
-    baseUrl,
-    projectId: workspace.partition.project_scope.project_id,
-    editorSessionId: workspace.partition.editor_session_id,
-    fetchImpl,
-  });
+  // The first run of the edit gives the Editor Session state, so the Web sends no read. A replay and an
+  // earlier response form have none, and the Web reads the Editor Session (ADR 0106 section 3).
+  const state = settledResponse.editor_session_state ?? undefined;
+  const canonical: GetEditorSessionResponse = state === undefined
+    ? await getEditorSession({
+      baseUrl,
+      projectId: workspace.partition.project_scope.project_id,
+      editorSessionId: workspace.partition.editor_session_id,
+      fetchImpl,
+    })
+    : sessionWithState(workspace.session, state);
   const freshBase = canonical.base_snapshot;
   const request = group.frozen_request_body;
   const primitive = request.author_edit_units[0]?.normalized_primitives[0];
@@ -457,13 +455,10 @@ async function settleAuthorEditResponse({
   const recoveredCanonicalBase = durableQuery !== undefined && canonicalInlineEdgeProjection
     && edgeRecord!.base_snapshot_id !== freshBase.snapshot_id
     && JSON.stringify(freshBase) === JSON.stringify(workspace.session.base_snapshot);
-  if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
+  if (canonical.schema_id !== "storyos.query.editor-session.response.v2"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
     || JSON.stringify(canonical.editor_session) !== JSON.stringify(workspace.session.editor_session)
-    || !writerProjectionAllowsLateDurableSettlement(
-      canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
-    )
     || !UUID.test(freshBase?.snapshot_id ?? "")
     || (freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id && !recoveredCanonicalBase)
     || freshBase.chapter_id !== group.frozen_request_body.chapter_id
@@ -486,12 +481,6 @@ async function settleAuthorEditResponse({
     || Number.isNaN(Date.parse(freshBase.created_at))) {
     throw new Error("Editor Base Snapshot did not converge");
   }
-  const previousPartition = workspace.partition;
-  if (writerProjectionAllowsLateDurableSettlement(
-    canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
-  ) && canonical.writer?.kind === "read_only") {
-    workspace.partition = { ...previousPartition, disposition: "read_only_observer" };
-  }
   const rest = { ...group };
   delete rest.reconciliation;
   const next: JournalSubmissionGroup = {
@@ -508,28 +497,38 @@ async function settleAuthorEditResponse({
       installed_base_snapshot: freshBase,
     },
   };
-  try {
-    if (durableQuery) {
-      await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next, activeBase: freshBase });
-    } else {
-      await commitStrongerGroup(workspace, next, freshBase);
-    }
-  } catch (error) {
-    workspace.partition = previousPartition;
-    throw error;
+  if (durableQuery) {
+    await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next, activeBase: freshBase });
+  } else {
+    await commitStrongerGroup(workspace, next, freshBase);
   }
   workspace.session = canonical;
 }
 
+/**
+ * Sends the protected outcome Query of an Author Edit group that went out with no known result, and settles the group
+ * with the answer. After a load, the contract permits only this Query before each other command of the Editor Session
+ * (`web-editor-session-synchronization-and-recovery-semantics.md`, `DeliveryUnknown`). A group with no available
+ * capsule also becomes unresolved with no Query, so its save sends no fresh Command Challenge and no replay.
+ */
+export async function queryLostOutcome(workspace: EditorWorkspace, group: JournalSubmissionGroup, { baseUrl,
+  fetchImpl, cryptoImpl }: { baseUrl: string; fetchImpl: typeof fetch; cryptoImpl: Crypto }): Promise<void> {
+  const unresolved = group.reconciliation?.kind === "outcome_query_unresolved";
+  if (!unresolved && !await readAvailableCommandProof(workspace, group)) {
+    await markOutcomeQueryUnresolved(workspace, group);
+    return;
+  }
+  await reconcileLostAcknowledgement({ workspace, group: unresolved ? group : await markOutcomeQueryUnresolved(workspace,
+    group), baseUrl, fetchImpl, cryptoImpl, settleFromCommandResponse: settleAuthorEditResponse });
+}
+
 export async function submitOnePendingAuthorEdit({
   workspace, baseUrl, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-  onWriterFenced = () => {},
 }: {
   workspace: EditorWorkspace;
   baseUrl: string;
   fetchImpl?: typeof fetch;
   cryptoImpl?: Crypto;
-  onWriterFenced?: () => void;
 }): Promise<PendingEditProjection> {
   const run = async (): Promise<PendingEditProjection> => {
     let group: JournalSubmissionGroup;
@@ -577,25 +576,8 @@ export async function submitOnePendingAuthorEdit({
         antiForgery: challenge.nonce,
         fetchImpl,
       });
-    } catch (error) {
-      let staleWriter = false;
-      if (error instanceof StoryOSProtocolError
-        && error.code === "command_http_error" && error.status === 412) {
-        try {
-          const problem: unknown = JSON.parse(error.responseBody ?? "");
-          staleWriter = typeof problem === "object" && problem !== null
-            && Reflect.get(problem, "schema_id") === "storyos.problem.v1"
-            && Reflect.get(problem, "code") === "editor_writer_stale"
-            && typeof Reflect.get(problem, "message") === "string";
-        } catch {
-          // An invalid Problem cannot establish a writer fence.
-        }
-      }
-      if (staleWriter) {
-        workspace.partition = { ...workspace.partition, disposition: "read_only_observer" };
-        onWriterFenced();
-      }
-      // Persist the fence with unresolved evidence. Staleness does not settle an older command.
+    } catch {
+      // Persist the unresolved evidence. A refusal does not settle an older command.
       const current = await markOutcomeQueryUnresolved(workspace, group);
       if (current.settlement.kind === "unsettled") {
         await reconcileLostAcknowledgement({
@@ -604,7 +586,7 @@ export async function submitOnePendingAuthorEdit({
         });
       }
       const pending = await rebuildPendingProjection(workspace);
-      return staleWriter ? { ...pending, save_state: "needs_attention" } : pending;
+      return pending;
     }
     await settleAuthorEditResponse({
       workspace, group, response, baseUrl, fetchImpl, cryptoImpl,

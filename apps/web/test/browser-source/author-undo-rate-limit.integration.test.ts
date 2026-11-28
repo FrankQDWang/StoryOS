@@ -62,7 +62,7 @@ async function openUndoEditor() {
     }
     if (path.endsWith(`/editor-sessions/${SESSION}`)) {
       sessionReads += 1;
-      const response = jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
+      const response = jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2",
         author_undo_frontier_sequence: "1" });
       if (sessionReads !== 2) return response;
       // The second read is the refresh after a compensated Undo.

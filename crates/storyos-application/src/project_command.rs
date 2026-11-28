@@ -25,8 +25,6 @@ pub enum ProjectCommandError {
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
-    /// The Editor Session does not hold the writer generation that the command requires.
-    WriterIneligible,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -39,9 +37,6 @@ impl std::fmt::Display for ProjectCommandError {
             }
             Self::InvalidChallenge => formatter.write_str("The command challenge is invalid"),
             Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
-            Self::WriterIneligible => {
-                formatter.write_str("The Editor Session is not the required writer")
-            }
             Self::Unavailable(_) => formatter.write_str("The Project store is unavailable"),
         }
     }
@@ -54,8 +49,7 @@ impl std::error::Error for ProjectCommandError {
             Self::BindingConflict
             | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
-            | Self::MissingProject
-            | Self::WriterIneligible => None,
+            | Self::MissingProject => None,
         }
     }
 }
@@ -129,6 +123,10 @@ pub struct RevisionApplied<A> {
     /// The display text of the new Revision.
     pub body: String,
     pub blocks: Vec<ManuscriptBlock>,
+    /// The Editor Session of the command after it moved the base of that Session, as a read of it
+    /// gives it in the same transaction. A command that did not move the base and a replay have
+    /// none (ADR 0106 section 3, ADR 0107 section 3).
+    pub session: Option<Box<crate::EditorSession>>,
 }
 
 /// The settled outcome of one Manuscript Structure Transition command.

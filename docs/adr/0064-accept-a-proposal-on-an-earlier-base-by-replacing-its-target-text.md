@@ -73,3 +73,5 @@ This decision replaces these earlier rules:
 [ADR 0099](0099-remove-the-compatibility-with-earlier-local-edit-journal-versions.md) amends the Editor rule: the editor does not remove a stored Replan entry at load.
 
 [ADR 0098](0098-remove-the-three-proposal-recovery-commands-that-no-client-sends.md) removes the commands `replanProposal`, `reopenWithdrawnProposal`, and `reopenRejectedOperations`, and the Author Undo of each.
+
+[ADR 0106](0106-take-over-the-writer-when-a-project-opens-split-an-accepted-candidate-at-line-feeds-and-return-the-editor-session-state-in-command-responses.md) section 2 amends this decision for a candidate with a line feed: in each target resolution, each line feed of the accepted candidate starts a new Block after its target Block.

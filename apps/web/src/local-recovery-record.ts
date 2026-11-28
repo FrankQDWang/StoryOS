@@ -16,9 +16,27 @@ export interface LocalRecoveryMaterial {
   blocks: ValidatedJournalSnapshot["blocksBySequence"] extends Map<number, infer T> ? T : never;
 }
 
+/**
+ * A text of a version 5 Journal (ADR 0107): the last text of a partition that the upgrade did not change, or the text
+ * of a version 5 group that the Server rejected (`journal_submission_group_id`). It is the Chapter text, or the text of
+ * one candidate when it has `proposal_target`.
+ */
+export interface EarlierJournalText {
+  disposition: "retained_from_earlier_journal";
+  format_version: 1;
+  project_scope: JournalSubmissionGroup["project_scope"];
+  journal_partition_id: string;
+  journal_submission_group_id?: string;
+  proposal_target?: { proposal_id: string; operation_id: string };
+  text: string;
+}
+
 export const RECOVERY_PAGE_SIZE = 20;
 export const recoveryPrefix = "local_retained_recovery:";
 export const recoveryKey = (material: LocalRecoveryMaterial) => recoveryPrefix + material.group.journal_partition_id + ":" + material.group.journal_submission_group_id;
+export const earlierJournalKey = (text: EarlierJournalText) => recoveryPrefix + text.journal_partition_id + ":earlier_journal"
+  + (text.journal_submission_group_id ? `:${text.journal_submission_group_id}` : "")
+  + (text.proposal_target ? `:${text.proposal_target.proposal_id}:${text.proposal_target.operation_id}` : "");
 
 export async function readRecoveryDispositions(transaction: IDBTransaction, workspace: EditorWorkspace): Promise<LocalRecoveryMaterial[]> {
   const prefix = recoveryPrefix + workspace.partition.journal_partition_id + ":";
@@ -26,7 +44,9 @@ export async function readRecoveryDispositions(transaction: IDBTransaction, work
     IDBKeyRange.bound(prefix, prefix + "\uffff"), MAX_WORKING_JOURNAL_ITEMS + 1,
   )) as { value: LocalRecoveryMaterial }[];
   if (rows.length > MAX_WORKING_JOURNAL_ITEMS) throw new Error("Local recovery limit failed");
-  return rows.map((row) => row.value);
+  // A text of a version 5 Journal has no group. Only the local recovery panel reads it.
+  return rows.map((row) => row.value).filter((value) =>
+    (value as { disposition?: unknown }).disposition !== "retained_from_earlier_journal");
 }
 
 export function validateRecoveryDispositions(snapshot: ValidatedJournalSnapshot): void {

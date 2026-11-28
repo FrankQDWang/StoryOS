@@ -7,8 +7,7 @@ use storyos_application::{
 use storyos_core::ExportProjectArchiveRefusal;
 
 use super::command_admission::{
-    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    TargetValidation, admit, controlled_project,
+    BodyValidation, ProjectCommandRoute, TargetValidation, admit, controlled_project,
 };
 use super::*;
 
@@ -19,11 +18,8 @@ const EXPORT_PROJECT_ARCHIVE: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::EXPORT_PROJECT_ARCHIVE_PATH,
     schema_id: contracts::EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
     digest_profile: contracts::EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE,
-    revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
     target_validation: TargetValidation::AfterContentType,
-    schema_mismatch: SchemaMismatch::InvalidRequest,
-    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn export_project_archive(

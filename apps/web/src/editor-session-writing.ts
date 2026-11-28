@@ -42,7 +42,8 @@ interface EditorWritingSnapshot {
 }
 
 /** Why the quiet entry did not run a structural command. */
-export type QuietRefusal = "incomplete_semantic_intent" | "unsettled_input" | "journal_unavailable";
+/** `earlier_base`: a save found a later Revision, and the editor waits for the catch-up (ADR 0107, section 2). */
+export type QuietRefusal = "incomplete_semantic_intent" | "unsettled_input" | "journal_unavailable" | "earlier_base";
 
 /** The only owner of the Pending Edit Projection of one current-writer Editor Session (ADR 0046). */
 export interface EditorSessionWritingController {
@@ -77,6 +78,13 @@ export interface EditorSessionWritingController {
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
   /** An IME composition holds submission until it ends. */
   setComposing(composing: boolean): void;
+  /**
+   * Ends input, submission, and Author Undo before the tab opens again on a later Revision. Captured input still enters
+   * the Journal, and a submission in flight still settles.
+   */
+  endInput(): void;
+  /** Resolves when no IME composition is open, after the confirmation of an open composition is captured. */
+  whenComposed(): Promise<void>;
   fail(error: unknown): void;
   close(): void;
 }
@@ -121,6 +129,13 @@ async function candidateOutcome(workspace: EditorWorkspace, key: string)
     : { kind: "other" };
 }
 
+/** True when a group of the partition settled with `stale_authoritative_head`: the base is earlier than the Server. */
+async function hasEarlierBase(workspace: EditorWorkspace): Promise<boolean> {
+  return (await readJournalSnapshot(workspace)).groups.some(({ settlement }) =>
+    settlement.kind === "zero_authority_receipt_settled" && settlement.effect.kind === "conflicted"
+    && settlement.effect.reason === "stale_authoritative_head");
+}
+
 export function createEditorSessionWritingController({
   workspace,
   baseUrl,
@@ -128,6 +143,7 @@ export function createEditorSessionWritingController({
   cryptoImpl = globalThis.crypto,
   submitGroup = submitOnePendingAuthorEdit,
   onFailure,
+  onEarlierBase,
   now = Date.now,
   setTimeoutImpl = (callback, timeout) => globalThis.setTimeout(callback, timeout),
   clearTimeoutImpl = (timer) => globalThis.clearTimeout(timer),
@@ -138,6 +154,11 @@ export function createEditorSessionWritingController({
   cryptoImpl?: Crypto;
   submitGroup?: typeof submitOnePendingAuthorEdit;
   onFailure: (error: unknown) => void;
+  /**
+   * Runs when a save finds a later Revision on the Server. Later captured input stays visible and held, and the caller
+   * catches up with the text that the editor shows (ADR 0107, section 2). Without it, the save requires attention.
+   */
+  onEarlierBase?: () => void;
   now?: () => number;
   setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
   clearTimeoutImpl?: (timer: TimerHandle) => void;
@@ -159,6 +180,11 @@ export function createEditorSessionWritingController({
   let failed = false;
   // After a failed edit, later captured input stays visible and held. The Journal refuses appends (ADR 0046).
   let attention = false;
+  // A save found a later Revision (ADR 0107, section 2).
+  let earlierBase = false;
+  // The tab ended input for a catch-up: no input, no new submission, and no Author Undo.
+  let inputEnded = false;
+  let composedWaiters: (() => void)[] = [];
   let composing = false;
   let abandonUndo: (() => void) | undefined;
   // A Challenge wait does not hold the queue, so input of the wait enters the Journal at once (ADR 0065).
@@ -273,13 +299,13 @@ export function createEditorSessionWritingController({
       undoGroupId = undefined;
       return;
     }
-    if (pendingIntentCount === 0 || composing || attention || journal.save_state === "needs_attention") return;
+    if (pendingIntentCount === 0 || composing || attention || inputEnded
+      || journal.save_state === "needs_attention") return;
     submissionClosed = true;
     const submittedCandidate = openCandidate;
     // The same frozen group retries after a Challenge rate limit. The retry is a queued operation.
     const attempt = await challengeAdmission.attempt(() => submitGroup({
       workspace, baseUrl, fetchImpl, cryptoImpl,
-      onWriterFenced: () => fail(new Error("Editor Session is read only")),
     }), () => {
       void enqueue(async () => {
         const ended = endWait;
@@ -316,6 +342,13 @@ export function createEditorSessionWritingController({
         enterAttention();
         return;
       }
+    }
+    if (projection.save_state === "needs_attention" && onEarlierBase !== undefined && await hasEarlierBase(workspace)) {
+      earlierBase = true;
+      attention = true;
+      submissionClosed = true;
+      onEarlierBase();
+      return;
     }
     if (projection.save_state === "saved") await collectEligibleJournalPayload(workspace);
     install(projection, projection.save_state === "saved");
@@ -477,7 +510,7 @@ export function createEditorSessionWritingController({
     flush,
     whenIdle,
     undo() {
-      if (abandonUndo !== undefined || stopped) return Promise.resolve(undefined);
+      if (abandonUndo !== undefined || stopped || inputEnded) return Promise.resolve(undefined);
       let abandoned = false;
       const isCurrent = () => !abandoned && !stopped;
       const undoAdmission = createChallengeAdmissionWait({ setTimeoutImpl, clearTimeoutImpl });
@@ -529,6 +562,7 @@ export function createEditorSessionWritingController({
       const capturedBefore = captured;
       if (condition === "settled") await flush();
       await whenIdle();
+      if (earlierBase) return { kind: "refused", reason: "earlier_base" };
       if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
       let projection: PendingEditProjection;
       try {
@@ -556,11 +590,23 @@ export function createEditorSessionWritingController({
       if (key !== undefined && (key === openCandidate || key === capturedCandidate)) return true;
       return !submissionClosed && (!hardBoundary || pendingIntentCount === 0 && unjournaled === 0);
     },
+    endInput() {
+      inputEnded = true;
+      submissionClosed = true;
+      clearIdle();
+    },
+    whenComposed: () => composing ? new Promise<void>((resolve) => { composedWaiters.push(resolve); })
+      : Promise.resolve(),
     fail,
     setComposing(value) {
       composing = value;
       if (value) clearIdle();
       else if (pendingIntentCount > 0) scheduleIdle();
+      if (value) return;
+      // A waiter runs after the end of the composition, so the editor first captures the confirmed text.
+      const waiters = composedWaiters;
+      composedWaiters = [];
+      for (const resolve of waiters) void Promise.resolve().then(resolve);
     },
     close() {
       stopped = true;

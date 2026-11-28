@@ -54,12 +54,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.create-editor-session.request.v1",
     ),
     target(
-        CommandKind::TakeOverProjectWriter,
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
-        "storyos.command.take-over-project-writer.request.v1",
-    ),
-    target(
         CommandKind::CreateVolume,
         "POST",
         "/api/v1/projects/{project_id}/volumes",
@@ -105,7 +99,7 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         CommandKind::ApplyAuthorEdit,
         "POST",
         "/api/v1/projects/{project_id}/manuscript/author-edits",
-        "storyos.command.apply-author-edit.request.v1",
+        "storyos.command.apply-author-edit.request.v2",
     ),
     target(
         CommandKind::AcceptProposal,

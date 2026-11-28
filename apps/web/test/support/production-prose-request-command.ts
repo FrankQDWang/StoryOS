@@ -233,7 +233,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
           before.chapter.current_revision.revision_id });
       await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
         createChapter: 1, applyAuthorEdit: 4, updateProjectAssistance: 1, createAgentRun: 1,
-        acceptProposal: 1, takeOverProjectWriter: 1 }, authorActions: 7 });
+        acceptProposal: 1 }, authorActions: 7 });
       assert.deepEqual(errors, []);
       return;
     }
@@ -575,7 +575,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     let firstAcceptanceRequest: string | undefined;
     let firstAcceptanceKey: string | undefined;
     let firstAcceptanceNonce: string | undefined;
-    let appliedResponse: unknown;
+    let appliedAcknowledgement: Record<string, unknown> | undefined;
     await page.route((url) => url.pathname.endsWith(`/proposals/${firstProposalId}/acceptances`),
       async (route) => {
         acceptancePosts += 1;
@@ -596,17 +596,19 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
         }
         const response = await route.fetch();
         assert.equal(response.status(), 200);
-        const body = await response.json();
+        const body = await response.json() as Record<string, unknown>;
+        const acknowledgement = { ...body };
+        delete acknowledgement.editor_session_state;
         if (acceptancePosts === 3) {
-          appliedResponse = body;
+          appliedAcknowledgement = acknowledgement;
           await route.abort("failed");
-        } else if (acceptancePosts === 4) {
-          assert.deepEqual(body, appliedResponse);
-          await route.abort("failed");
-        } else {
-          assert.deepEqual(body, appliedResponse);
-          await route.fulfill({ response });
+          return;
         }
+        // ADR 0106 section 3: an exact retry gives the acknowledgement of the first run with no Editor Session state.
+        assert.equal(Object.hasOwn(body, "editor_session_state"), false);
+        assert.deepEqual(acknowledgement, appliedAcknowledgement);
+        if (acceptancePosts === 4) await route.abort("failed");
+        else await route.fulfill({ response });
       });
     await ready.locator("button[data-proposal-accept]").click();
     await page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByText(

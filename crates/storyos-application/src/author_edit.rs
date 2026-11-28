@@ -39,7 +39,6 @@ pub struct ApplyAuthorEditCommand {
     pub correlation_id: String,
     pub ids: AuthorCommandAdmissionIds,
     pub editor_session_id: EditorSessionId,
-    pub writer_generation: u64,
     pub chapter_id: String,
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
@@ -68,6 +67,8 @@ pub struct AuthorEditSettlement {
     pub receipt_created_at: String,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: u64,
+    /// The Editor Session after the first run of an applied edit, as its read gives it.
+    pub editor_session: Option<crate::EditorSession>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -99,7 +100,6 @@ pub enum AuthorEditSettlementEffect {
 pub enum AuthorEditError {
     BindingConflict,
     InvalidChallenge,
-    StaleWriter,
     AdmissionExpired,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -109,9 +109,6 @@ impl std::fmt::Display for AuthorEditError {
         match self {
             Self::BindingConflict => formatter.write_str("The Author Edit binding conflicts"),
             Self::InvalidChallenge => formatter.write_str("The Author Edit challenge is invalid"),
-            Self::StaleWriter => {
-                formatter.write_str("The Editor Session is not the current writer")
-            }
             Self::AdmissionExpired => formatter.write_str("The Author Command Admission expired"),
             Self::Unavailable(_) => formatter.write_str("The Author Edit store is unavailable"),
         }
@@ -122,10 +119,7 @@ impl std::error::Error for AuthorEditError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict
-            | Self::InvalidChallenge
-            | Self::StaleWriter
-            | Self::AdmissionExpired => None,
+            Self::BindingConflict | Self::InvalidChallenge | Self::AdmissionExpired => None,
         }
     }
 }

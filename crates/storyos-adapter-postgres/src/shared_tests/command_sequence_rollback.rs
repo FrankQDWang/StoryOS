@@ -289,8 +289,7 @@ pub(crate) async fn failed_then_settled<C: ProjectCommand<Error: SequenceError> 
                 ProjectCommandError::BindingConflict
                 | ProjectCommandError::HistoricalAcknowledgementUnavailable
                 | ProjectCommandError::InvalidChallenge
-                | ProjectCommandError::MissingProject
-                | ProjectCommandError::WriterIneligible,
+                | ProjectCommandError::MissingProject,
             )
             | Ok(_) => None,
         };

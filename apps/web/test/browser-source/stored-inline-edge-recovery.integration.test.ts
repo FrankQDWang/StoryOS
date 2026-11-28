@@ -35,7 +35,7 @@ it("settles a stored edge insertion of an earlier client next to an inline Propo
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       if (path.endsWith("/anti-forgery-challenges")) {
         const request = requireRequestBody(init);
-        if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+        if (request.command_schema === "storyos.command.apply-author-edit.request.v2") {
           digest = requireDigestValue(request.canonical_command_digest, "command digest");
         }
         return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-08-13T08:05:00.000Z",
@@ -44,7 +44,7 @@ it("settles a stored edge insertion of an earlier client next to an inline Propo
       if (path.endsWith("/editor-sessions")) return jsonResponse(current);
       if (path.endsWith(`/editor-sessions/${SESSION}`)) {
         return jsonResponse({ ...current,
-          schema_id: "storyos.query.editor-session.response.v1" } as GetEditorSessionResponse);
+          schema_id: "storyos.query.editor-session.response.v2" } as GetEditorSessionResponse);
       }
       if (path.endsWith("/manuscript/author-edits")) {
         sent.authorEdits += 1;

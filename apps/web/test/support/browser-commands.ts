@@ -7,6 +7,7 @@ import {
   parseClientSessionCookieRequest,
   parseClipboardPermissionRequest,
   parseCommandChallengeRateWindowsRequest,
+  parseFrameRequestsRequest,
   parseImeCompositionRequest,
   parseProjectReceiptsRequest,
   parseProductionHostRequest,
@@ -17,7 +18,7 @@ import {
 import { settleOnce } from "./acceptance";
 import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionRunEvidence } from "./production-run-evidence-command";
-import { verifyProductionHostJourney } from "./production-host-command";
+import { verifyProductionChapterSwitchLoad, verifyProductionHostJourney } from "./production-host-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
 import { verifyProductionCapturedMemory } from "./production-captured-memory.ts";
 
@@ -41,6 +42,7 @@ import { assertProjectReceipts } from "./project-receipts.ts";
 const CLIENT_SESSION_COOKIE = "storyos_session";
 const AUTHOR_EDIT_COMMAND_PATH = /^\/api\/v1\/projects\/[^/]+\/manuscript\/author-edits$/u;
 const SET_CURRENT_CHAPTER_PATH = /^\/api\/v1\/projects\/[^/]+\/current-chapter$/u;
+const CHAPTER_READ_PATH = /^\/api\/v1\/projects\/[^/]+\/chapters\/[^/]+$/u;
 
 function authorEditCommand(url: URL): boolean {
   return AUTHOR_EDIT_COMMAND_PATH.test(url.pathname);
@@ -49,6 +51,13 @@ function authorEditCommand(url: URL): boolean {
 function setCurrentChapterCommand(url: URL): boolean {
   return SET_CURRENT_CHAPTER_PATH.test(url.pathname);
 }
+
+function chapterRead(url: URL): boolean {
+  return CHAPTER_READ_PATH.test(url.pathname);
+}
+
+// The record of the requests of the application frame, from `start` to `read`.
+let frameRequests: { readonly requests: string[]; readonly listener: (request: Request) => void } | undefined;
 
 let authorEditHold: {
   readonly release: () => void;
@@ -72,10 +81,12 @@ export const storyOSBrowserCommands = {
       const request = parseAuthorEditSubmissionHoldRequest(value);
       if (request.action !== "release") {
         if (authorEditHold !== undefined) throw new Error("Author Edit submissions are already held");
-        const current = request.action !== "hold";
+        const reading = request.action === "hold_chapter_read";
+        const current = request.action !== "hold" && !reading;
         const losing = request.action === "lose_set_current_chapter";
         let lost = 0;
-        const routed = current ? setCurrentChapterCommand : authorEditCommand;
+        const routed = reading ? chapterRead : current ? setCurrentChapterCommand : authorEditCommand;
+        const heldMethod = reading ? "GET" : current ? "PUT" : "POST";
         let release = (): void => undefined;
         const released = new Promise<void>((resolve) => {
           release = resolve;
@@ -89,9 +100,9 @@ export const storyOSBrowserCommands = {
             await route.abort("failed");
             return;
           }
-          if (!losing && held.method() === (current ? "PUT" : "POST") && held.frame() !== orchestrator) {
+          if (!losing && held.method() === heldMethod && held.frame() !== orchestrator) {
             // The test waits for this count before its next step.
-            if (current) {
+            if (current || reading) {
               await held.frame().evaluate(() => {
                 const root = document.documentElement;
                 root.dataset.storyosHeldRequests = String(Number(root.dataset.storyosHeldRequests ?? "0") + 1);
@@ -113,6 +124,31 @@ export const storyOSBrowserCommands = {
         await context.page.unroute(hold.route, hold.handler);
       }
       return { kind: "author_edit_submission_hold_updated" } as const;
+    },
+  ),
+  [storyOSBrowserCommandNames.frameRequests]: defineBrowserCommand<[request: unknown]>(
+    async (context, value) => {
+      const request = parseFrameRequestsRequest(value);
+      const earlier = frameRequests;
+      frameRequests = undefined;
+      if (earlier !== undefined) context.page.off("request", earlier.listener);
+      if (request.action === "read") {
+        if (earlier === undefined) throw new Error("the requests of the application frame have no record");
+        return { kind: "frame_requests_recorded", requests: earlier.requests } as const;
+      }
+      // The test frame and the orchestrator also load files, so the record has only the frames that they hold.
+      const orchestrator = context.page.mainFrame();
+      const testFrame = await context.frame();
+      const requests: string[] = [];
+      const listener = (started: Request) => {
+        const frame = started.frame();
+        if (frame !== orchestrator && frame !== testFrame) {
+          requests.push(`${started.method()} ${new URL(started.url()).pathname}`);
+        }
+      };
+      frameRequests = { requests, listener };
+      context.page.on("request", listener);
+      return { kind: "frame_requests_recorded", requests: [] } as const;
     },
   ),
   [storyOSBrowserCommandNames.settleWorkerOnce]: defineBrowserCommand<[request: unknown]>(
@@ -178,6 +214,12 @@ export const storyOSBrowserCommands = {
         await verifyProductionAuthorVoiceJourney(context.context);
       } else if (request.scenario === "stage11_journey") {
         await verifyProductionStage11Journey(context.context);
+      } else if (request.scenario === "chapter_switch_load" || request.scenario === "chapter_switch_load_challenge"
+        || request.scenario === "chapter_switch_load_outcome"
+        || request.scenario === "chapter_switch_load_outcome_unavailable") {
+        await verifyProductionChapterSwitchLoad(context.context, request.scenario === "chapter_switch_load" ? "clock"
+          : request.scenario === "chapter_switch_load_challenge" ? "challenge"
+            : request.scenario === "chapter_switch_load_outcome" ? "response" : "outcome_unavailable");
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {

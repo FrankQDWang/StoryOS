@@ -78,7 +78,7 @@ impl AcceptProposal {
 /// The new Revision text of an applied Acceptance and how it found its target.
 pub(crate) struct AcceptedRevision {
     chapter_id: String,
-    payload: String,
+    chapter: facts::AcceptedChapter,
     resolution: AcceptanceTargetResolution,
 }
 
@@ -182,7 +182,7 @@ impl ProjectCommand for AcceptProposal {
             TransitionOutcome::Applied(resolution) => TransitionOutcome::Applied((
                 (),
                 AcceptedRevision {
-                    payload: loaded.accepted_body(&input.selected_operation_ids),
+                    chapter: loaded.accepted_chapter(&input.selected_operation_ids),
                     chapter_id: loaded.chapter_id.clone(),
                     resolution,
                 },
@@ -245,11 +245,10 @@ impl ProjectCommand for AcceptProposal {
             Err(error) => return unavailable(error).into(),
         };
         RefusableCommandError::RefusedBeforeAdmission(match session {
-            None => AcceptanceRefusalReason::InvalidChallenge,
-            Some(session) if session.get::<_, bool>(/*idx*/ 0) => {
-                AcceptanceRefusalReason::StaleWriter
+            Some(session) if !session.get::<_, bool>(/*idx*/ 0) => {
+                AcceptanceRefusalReason::SessionChanged
             }
-            Some(_) => AcceptanceRefusalReason::SessionChanged,
+            _ => AcceptanceRefusalReason::InvalidChallenge,
         })
     }
 
@@ -313,13 +312,17 @@ impl ProjectCommand for AcceptProposal {
                 effect: plan.resolution,
                 chapter_id: plan.chapter_id,
                 prior_revision_id: input.expected_authoritative_revision_id.clone(),
-                payload: plan.payload,
-                members: RevisionMembers::CopyFrom(
-                    input.expected_authoritative_revision_id.clone(),
-                ),
+                payload: plan.chapter.payload,
+                members: match plan.chapter.split_blocks {
+                    Some(blocks) => RevisionMembers::Blocks(blocks),
+                    None => {
+                        RevisionMembers::CopyFrom(input.expected_authoritative_revision_id.clone())
+                    }
+                },
                 disposition: ActionDisposition::Forward,
                 editor_session_id: input.editor_session_id.as_ref().to_owned(),
-                writer_base: RevisionBase::WhenOnPrior,
+                session_base: RevisionBase::WhenOnPrior,
+                reports_session: true,
             },
             after_authority: None,
         })

@@ -195,13 +195,11 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     assert.equal((await getAgentRun({ ...options, runId: cancelledId })).status, "cancelled");
     const observer = await context.newPage();
     try {
+      // A second tab of the Project writes with no click, and the first tab stays editable (ADR 0107).
       await observer.goto(`${origin}/projects/${projectId}`);
-      await observer.locator('[data-take-over-writer]').click();
       await observer.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
       await page.reload();
-      await page.locator('[data-manuscript-editor][contenteditable="false"]').waitFor();
-      await composer.fill("Guidance from the old writer.");
-      await expect(page.getByRole("button", { name: "发送", exact: true })).toBeDisabled();
+      await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
       assert.equal(admitted.effect.run_id, cancelledId);
       assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, proposal);
       assert.deepEqual((await getChapter({ ...options, chapterId })).chapter.current_revision, revision);
@@ -210,7 +208,7 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     }
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1, createChapter: 1,
       updateProjectAssistance: 1, applyAuthorEdit: 1, createAgentRun: 3, pauseAgentRun: 2, steerAgentRun: 1,
-      cancelAgentRun: 1, takeOverProjectWriter: 1 }, authorActions: 3 });
+      cancelAgentRun: 1 }, authorActions: 3 });
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     if (held !== undefined) await Promise.allSettled([held]);

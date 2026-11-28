@@ -4,7 +4,8 @@ use ts_rs::TS;
 
 use crate::release1::{
     APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
-    AuthoritativeChapterRevision, DigestValue, HttpMethod, ProjectScope, QueryOperation,
+    AuthoritativeChapterRevision, DigestValue, EditorSessionState, HttpMethod, ProjectScope,
+    QueryOperation,
 };
 
 pub(super) const APPLY_AUTHOR_EDIT: QueryOperation = QueryOperation {
@@ -43,7 +44,6 @@ pub struct ApplyAuthorEditRequest {
     pub security_policy_revision: String,
     pub correlation_id: String,
     pub editor_session_id: String,
-    pub writer_generation: String,
     pub chapter_id: String,
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
@@ -127,6 +127,7 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "applyAuthorEdit")]
     #[ts(rename = "applyAuthorEdit")]
     ApplyAuthorEdit,
+    // A history kind: the Receipt of a writer takeover from before ADR 0107. No command makes it now.
     #[serde(rename = "takeOverProjectWriter")]
     #[ts(rename = "takeOverProjectWriter")]
     TakeOverProjectWriter,
@@ -292,4 +293,8 @@ pub struct ApplyAuthorEditResponse {
     pub effect: ApplyAuthorEditEffect,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: String,
+    // Only the first run of an applied edit has it. A replay and the outcome Query have none. A doc comment would
+    // go into the generated client.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor_session_state: Option<EditorSessionState>,
 }

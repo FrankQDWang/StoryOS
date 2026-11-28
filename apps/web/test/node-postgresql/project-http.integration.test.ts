@@ -1,6 +1,7 @@
 // Verification: {"phase":"http-bootstrap","after":["apps/web/test/node-postgresql/protocol-http-host.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import type { IncomingHttpHeaders, RequestOptions } from "node:http";
 import { test } from "vitest";
@@ -224,7 +225,7 @@ test("Project command challenges bind Origin, Scope, nonce, and idempotency on r
   }
 });
 
-test("one current writer settles one Author Edit and exact retries return one result", async () => {
+test("each Editor Session settles its own Author Edit and exact retries return one result", async () => {
   const { baseUrl, server } = await startServer({ sessions: {
     "session-a": USER_A, "session-a-alt": USER_A, "session-b": USER_B,
   } });
@@ -299,13 +300,10 @@ test("one current writer settles one Author Edit and exact retries return one re
         antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
       });
     }));
-    assert.equal(sessions.filter((session) => session.writer.kind === "current_writer").length, 1);
-    assert.equal(sessions.filter((session) => session.writer.kind === "read_only").length, 1);
-    assert.deepEqual(new Set(sessions.map((session) => session.writer.kind === "current_writer"
-      ? session.writer.writer_generation
-      : session.writer.observed_writer_generation)), new Set(["1"]));
-    const currentIndex = sessions.findIndex((session) => session.writer.kind === "current_writer");
-    assert.notEqual(currentIndex, -1);
+    // ADR 0107: the two Editor Sessions of one Project are both open, and each of them writes.
+    assert.equal(new Set(sessions.map((session) => session.editor_session.editor_session_id)).size, 2);
+    assert.deepEqual(sessions.map((session) => session.editor_session.disposition), ["open", "open"]);
+    const currentIndex = 0;
     const currentSession = sessions[currentIndex];
     const currentRequest = requests[currentIndex];
     const currentKey = keys[currentIndex];
@@ -314,9 +312,6 @@ test("one current writer settles one Author Edit and exact retries return one re
     assert.ok(currentRequest);
     assert.ok(currentKey);
     assert.ok(currentChallenge);
-    if (currentSession.writer.kind !== "current_writer") {
-      throw new Error("the selected Editor Session was not the current writer");
-    }
     assert.deepEqual(await createEditorSession({
       baseUrl, projectId: PROJECT_A, request: currentRequest,
       idempotencyKey: currentKey, antiForgery: currentChallenge.nonce,
@@ -330,8 +325,8 @@ test("one current writer settles one Author Edit and exact retries return one re
     const { schema_id: createSchema, correlation_id: createCorrelation, ...created } = currentSession;
     const { schema_id: readSchema, correlation_id: readCorrelation, ...readPayload } = read;
     assert.deepEqual(readPayload, created);
-    assert.equal(createSchema, "storyos.command.create-editor-session.response.v1");
-    assert.equal(readSchema, "storyos.query.editor-session.response.v1");
+    assert.equal(createSchema, "storyos.command.create-editor-session.response.v2");
+    assert.equal(readSchema, "storyos.query.editor-session.response.v2");
     assert.match(createCorrelation, UUID);
     assert.match(readCorrelation, UUID);
     await assert.rejects(getEditorSession({
@@ -347,12 +342,11 @@ test("one current writer settles one Author Edit and exact retries return one re
     }), (error) => protocolFailure(error, 422));
 
     const authorEditRequest: ApplyAuthorEditRequest = {
-      command_schema: "storyos.command.apply-author-edit.request.v1",
+      command_schema: "storyos.command.apply-author-edit.request.v2",
       client_contract_revision: "storyos.web-client.release-1.v3",
       security_policy_revision: SECURITY_POLICY_REVISION,
       correlation_id: "018f0000-0000-7001-8000-000000000024",
       editor_session_id: currentSession.editor_session.editor_session_id,
-      writer_generation: currentSession.writer.writer_generation,
       chapter_id: currentSession.base_snapshot.chapter_id,
       expected_authoritative_revision_id:
         currentSession.base_snapshot.authoritative_head_revision_id,
@@ -486,7 +480,7 @@ test("one current writer settles one Author Edit and exact retries return one re
     assert.ok(pendingOutcomeResponse);
     assert.equal(pendingOutcomeResponse.headers.get("cache-control"), "no-store");
     assert.deepEqual(pendingOutcomePayload, {
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
       outcome: {
         outcome_kind: "still_unknown",
@@ -644,7 +638,7 @@ test("one current writer settles one Author Edit and exact retries return one re
     const { correlation_id: rejectedCorrelation, ...rejectedPayload } = rejectedOutcome;
     assert.match(rejectedCorrelation, UUID);
     assert.deepEqual(rejectedPayload, {
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
       outcome: {
         outcome_kind: "rejected",
@@ -719,6 +713,47 @@ test("one current writer settles one Author Edit and exact retries return one re
     }
     assert.deepEqual(repeatedCommitted.outcome.response, settlement);
     assert.deepEqual(await projectAuthoritySnapshot(), authorityAfterLostAcknowledgement);
+    // An Author Edit admitted before ADR 0107 has the v1 request form, whose payload names a writer generation. The
+    // statements give the stored rows that form and the digest of its payload, and the outcome stays readable.
+    const rowOf = `owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+      AND idempotency_key = '${authorEditKey}'::uuid`;
+    const storedPayload = JSON.parse(await queryPostgres(`SELECT command_payload::text
+      FROM storyos.author_command_admissions WHERE ${rowOf}`)) as Record<string, unknown>;
+    const sorted = (value: unknown): unknown => Array.isArray(value) ? value.map(sorted)
+      : typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value)
+        .sort(([left], [right]) => left < right ? -1 : 1).map(([key, entry]) => [key, sorted(entry)])) : value;
+    const digestOf = (payload: Record<string, unknown>) => `sha256:storyos.command.applyAuthorEdit.jcs.v1:${
+      createHash("sha256").update(JSON.stringify(sorted(payload))).digest("hex")}`;
+    assert.equal(digestOf(storedPayload), await queryPostgres(`SELECT canonical_command_digest
+      FROM storyos.author_command_admissions WHERE ${rowOf}`));
+    const storedForm = (payload: Record<string, unknown>) => {
+      const digest = digestOf(payload);
+      return queryPostgres(`WITH challenge AS (
+        UPDATE storyos.project_command_challenges SET command_schema = '${String(payload.command_schema)}',
+          canonical_command_digest = '${digest}' WHERE ${rowOf} RETURNING 1
+      ), idempotency AS (
+        UPDATE storyos.command_idempotency SET canonical_command_digest = '${digest}'
+         WHERE ${rowOf} AND command_kind = 'applyAuthorEdit' RETURNING 1
+      ), receipt AS (
+        UPDATE storyos.domain_receipts SET command_digest = '${digest}' WHERE ${rowOf} RETURNING 1
+      ) UPDATE storyos.author_command_admissions SET command_schema = '${String(payload.command_schema)}',
+          canonical_command_digest = '${digest}',
+          command_payload = '${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb
+        FROM challenge, idempotency, receipt WHERE ${rowOf}`);
+    };
+    const earlierPayload = { ...storedPayload, command_schema: "storyos.command.apply-author-edit.request.v1",
+      writer_generation: "1" };
+    await storedForm(earlierPayload);
+    const earlierForm = await getApplyAuthorEditOutcome({
+      baseUrl, projectId: PROJECT_A, idempotencyKey: authorEditKey,
+      antiForgery: authorEditChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    // The Receipt names the digest of the v1 request.
+    const { receipt } = repeatedCommitted.outcome.response;
+    assert.deepEqual(earlierForm.outcome, { outcome_kind: "committed", response: {
+      ...repeatedCommitted.outcome.response, receipt: { ...receipt, command_digest: { ...receipt.command_digest,
+        value_hex_lowercase: digestOf(earlierPayload).split(":").at(-1) } } } });
+    await storedForm(storedPayload);
 
     const outcomeRequests: Array<{
       effect: ApplyAuthorEditEffect;
@@ -864,41 +899,63 @@ test("one current writer settles one Author Edit and exact retries return one re
     assert.deepEqual(unknownAfter.outcome, unknownBefore.outcome);
     assert.deepEqual(await projectAuthoritySnapshot(), authorityBeforeObservation);
 
-    const staleSession = sessions.find((session) => session.writer.kind === "read_only");
-    assert.ok(staleSession);
-    if (staleSession.writer.kind !== "read_only") {
-      throw new Error("the stale Editor Session unexpectedly became current");
-    }
-    const staleRequest: ApplyAuthorEditRequest = {
+    // The other Editor Session names the current Revision, and its Author Edit applies.
+    const otherSession = sessions[1];
+    assert.ok(otherSession);
+    const otherRequest = (ns: string, expectedRevision: string, sequence: string): ApplyAuthorEditRequest => ({
       ...authorEditRequest,
-      correlation_id: "018f0000-0000-7001-8000-000000000060",
-      editor_session_id: staleSession.editor_session.editor_session_id,
-      writer_generation: staleSession.writer.observed_writer_generation,
-      undo_group_id: "018f0000-0000-7001-8000-000000000061",
-      completed_intent_record_id: "018f0000-0000-7001-8000-000000000062",
-      local_intent_sequence: "5",
-    };
-    const staleKey = "018f0000-0000-7001-8000-000000000063";
-    const staleChallenge = await createProjectCommandChallenge({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: staleRequest.command_schema,
-        canonical_command_digest: await digestApplyAuthorEdit(staleRequest),
-        idempotency_key: staleKey,
-      },
+      correlation_id: `018f0000-0000-7001-8000-0000000000${ns}0`,
+      editor_session_id: otherSession.editor_session.editor_session_id,
+      expected_authoritative_revision_id: expectedRevision,
+      undo_group_id: `018f0000-0000-7001-8000-0000000000${ns}1`,
+      completed_intent_record_id: `018f0000-0000-7001-8000-0000000000${ns}2`,
+      local_intent_sequence: sequence,
+      author_edit_units: [{
+        normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: "y" }],
+        selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0 },
+      }],
     });
-    await assert.rejects(applyAuthorEdit({
-      baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
-      antiForgery: "0".repeat(64), fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => protocolFailure(error, 422)
-      && problemCode(error) === "challenge_invalid");
-    await assert.rejects(applyAuthorEdit({
-      baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
-      antiForgery: staleChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => protocolFailure(error, 412)
-      && problemCode(error) === "editor_writer_stale");
+    async function sendOther(request: ApplyAuthorEditRequest, idempotencyKey: string, nonce?: string) {
+      const challenge = await createProjectCommandChallenge({
+        baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+        request: {
+          method: "POST",
+          route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+          command_schema: request.command_schema,
+          canonical_command_digest: await digestApplyAuthorEdit(request),
+          idempotency_key: idempotencyKey,
+        },
+      });
+      return applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request, idempotencyKey,
+        antiForgery: nonce ?? challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+      });
+    }
+    const firstRevision = settlement.effect.authoritative_revision.revision_id;
+    const otherApplied = await sendOther(otherRequest("7", firstRevision, "1"),
+      "018f0000-0000-7001-8000-000000000073");
+    if (otherApplied.effect.kind !== "authoritative_applied") throw new Error("the other Editor Session did not apply");
+    assert.equal(otherApplied.receipt.result, "authoritative_applied");
+    const secondRevision = otherApplied.effect.authoritative_revision.revision_id;
+    assert.notEqual(secondRevision, firstRevision);
+    // The first run gives the Editor Session state that a read right after it gives (ADR 0106 section 3).
+    const { schema_id: _otherSchema, correlation_id: _otherCorrelation, project_scope: _otherScope, ...otherRead } =
+      await getEditorSession({ baseUrl, projectId: PROJECT_A,
+        editorSessionId: otherSession.editor_session.editor_session_id, fetchImpl: browserFetch(baseUrl, "session-a") });
+    assert.equal(otherApplied.editor_session_state?.base_snapshot.authoritative_head_revision_id, secondRevision);
+    assert.deepEqual(otherApplied.editor_session_state, otherRead);
+
+    // The same Editor Session names the earlier Revision, and the Server refuses the stale head.
+    const staleRequest = otherRequest("8", firstRevision, "2");
+    await assert.rejects(sendOther(staleRequest, "018f0000-0000-7001-8000-000000000083", "0".repeat(64)),
+      (error) => protocolFailure(error, 422) && problemCode(error) === "challenge_invalid");
+    const stale = await sendOther(staleRequest, "018f0000-0000-7001-8000-000000000084");
+    assert.equal(stale.receipt.result, "conflicted");
+    assert.deepEqual(stale.effect, {
+      kind: "conflicted",
+      reason: "stale_authoritative_head",
+      current_authoritative_revision_id: secondRevision,
+    });
   } finally {
     await stopRealServer(server);
   }

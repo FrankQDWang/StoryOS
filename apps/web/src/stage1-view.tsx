@@ -14,9 +14,11 @@ import type {
   GetManuscriptTreeResponse,
   GetProjectResponse,
   ProjectListItem,
+  StoryOSQueryOptions,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { openControlledProject, reopenControlledProject } from "./boot.ts";
+import { openControlledProject, readCurrentChapter, reopenControlledProject } from "./boot.ts";
+import { acceptedProjectState } from "./editor-session.ts";
 import {
   CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
@@ -24,7 +26,7 @@ import {
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
 import { ArrivalNoticeSlot, type ArrivalNotice, type UnsavedArrival } from "./arrival-notice.tsx";
-import { createArrivalInput, type ArrivalInput } from "./arrival-input.ts";
+import { createArrivalInput, type ArrivalInput, type EditorSelection } from "./arrival-input.ts";
 import { chapterText, createChapterCopies, editorParagraphs, type ChapterCopies } from "./chapter-copies.ts";
 import { deleteOwnedChapter } from "./delete-chapter.ts";
 import { deleteOwnedVolume } from "./delete-volume.ts";
@@ -50,6 +52,7 @@ import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
 import { relabelDraftReferences } from "./selection-reference-draft.ts";
+import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
@@ -57,7 +60,6 @@ import {
 import { renameOwnedProject } from "./rename-project.ts";
 import { SkippedCurrentChapterError, UnknownCurrentChapterResultError, setOwnedCurrentChapter }
   from "./set-current-chapter.ts";
-import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { navigateProposal, type ProposalDestination, type ProposalFocus, type ProposalNavigation }
   from "./proposal-navigation.ts";
 import { ProjectSettingsLink, ProjectSettingsView } from "./project-settings.tsx";
@@ -86,6 +88,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
   /** Holds a settled rename. It is false when the workspace holds a later revision, and the view keeps its values. */
   onRenamed: (projectId: string, title: string, revision: string) => boolean;
+  /** The Project title and revision that the workspace holds now: from the last taken state or a settled rename. */
+  heldProject: () => { projectId: string; title: string; revision: string } | undefined;
   unsavedNotice: ArrivalNotice;
 }
 
@@ -108,7 +112,8 @@ interface ProjectEditorStatus {
 
 interface ProjectEditorViewProps extends ProjectReadyViewProps {
   tree: GetManuscriptTreeResponse | undefined;
-  treeRead: "reading" | "settled";
+  /** The state of the open whose read gave `tree`, and `first` when that read is the first tree read of the open. */
+  treeOpen: { open: unknown; first: boolean } | undefined;
   /** The number of the last tree read of the workspace. */
   treeReads: { readonly current: number };
   handle: { current: ProjectEditorHandle | undefined };
@@ -116,6 +121,8 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
   copies: ChapterCopies;
   /** The Arrival Input that a switch gives to the next editor part for its hand-over (ADR 0105, section 4). */
   handOverStore: { current: ArrivalInput | undefined };
+  /** The caret of a focused Arriving Chapter with no Arrival Input, which the editor of the next editor part takes. */
+  caretStore: { current: EditorSelection | undefined };
   /** The waiting selection. It stays through the change of the editor part (ADR 0105, section 6). */
   waitingStore: { current: WaitingSelection | undefined };
 }
@@ -170,9 +177,8 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   const editor = useRef<ProjectEditorHandle | undefined>(undefined);
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState(state.revision);
-  const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(state.tree);
-  // The statistics wait for the tree read of each open, also when it fails.
-  const [treeRead, setTreeRead] = useState<"reading" | "settled">(state.tree === undefined ? "reading" : "settled");
+  const [tree, setTree] = useState<GetManuscriptTreeResponse | undefined>(undefined);
+  const [treeOpen, setTreeOpen] = useState<{ open: unknown; first: boolean } | undefined>(undefined);
   const [status, setStatus] = useState<ProjectEditorStatus>({ selectedChapterId: state.chapter.chapter.chapter_id,
     canSubmit: false });
   // The copies of Chapter text of this Project (ADR 0105). They end when the tab leaves the Project.
@@ -180,6 +186,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     timers: props.writingTimers }));
   useEffect(() => () => { copies.close(); }, [copies]);
   const handOverStore = useRef<ArrivalInput | undefined>(undefined);
+  const caretStore = useRef<EditorSelection | undefined>(undefined);
   const waitingStore = useRef<WaitingSelection | undefined>(undefined);
   // The start of the read of an open is not known here, so the open writes only a copy that does not exist.
   useEffect(() => {
@@ -192,9 +199,6 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
     setShown(state);
     setTitle(state.project.project.title);
     setRevision(state.revision);
-    // The new editor part starts with the tree of the new state, or it waits for the tree read of the new state.
-    if (state.tree === undefined) setTreeRead("reading");
-    else setTree(state.tree);
     setStatus((current) => ({ ...current, selectedChapterId: state.chapter.chapter.chapter_id }));
   }
   const currentChapterId = state.project.project.open.kind === "current_chapter"
@@ -203,22 +207,20 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
 
   // Only the latest tree read sets the tree, so an earlier response cannot replace a later tree.
   const treeReads = useRef(0);
-  const readTree = () => {
+  const showTree = (read: Promise<GetManuscriptTreeResponse>, first = false) => {
     treeReads.current += 1;
     const sequence = treeReads.current;
-    void readManuscriptTree({ baseUrl, projectId, fetchImpl })
-      .then((next) => { if (sequence === treeReads.current) setTree(next); }).catch(() => {})
-      .finally(() => { if (sequence === treeReads.current) setTreeRead("settled"); });
+    const open = state;
+    void read.then((next) => {
+      if (sequence !== treeReads.current) return;
+      setTree(next);
+      setTreeOpen({ open, first });
+    }).catch(() => {});
   };
-  // The takeover check of the open read the tree already. Until the new tree arrives, the list shows the last tree.
+  const readTree = () => { showTree(readManuscriptTree({ baseUrl, projectId, fetchImpl })); };
+  // Until the new tree arrives, the list shows the last tree. The first tree read of a state can be a read of its open.
   useEffect(() => {
-    if (state.tree !== undefined) {
-      treeReads.current += 1;
-      setTree(state.tree);
-      setTreeRead("settled");
-      return;
-    }
-    readTree();
+    showTree(state.reads?.take("tree") ?? readManuscriptTree({ baseUrl, projectId, fetchImpl }), true);
   }, [baseUrl, fetchImpl, projectId, state]);
   // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
   useEffect(() => {
@@ -226,14 +228,12 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
   }, [tree, state.project.project_scope]);
 
   const selectChapter = (chapterId: string) => editor.current?.selectChapter(chapterId) ?? Promise.resolve(false);
-  const canChangeCurrentChapter = state.editor.kind === "editor-ready"
-    && state.editor.session.writer.kind === "current_writer";
+  const canChangeCurrentChapter = state.editor.kind === "editor-ready";
   const holdAddressConversation = useAddressChapter({ tree, currentChapterId, open: selectChapter,
     canChangeCurrentChapter,
     onNotFound: () => editor.current?.showRecovery(ADDRESS_CHAPTER_NOT_FOUND_SENTENCE) });
   return (
     <WritingWorkspace
-      writer={state.editor.kind === "editor-ready" ? state.editor.session.writer : state.editor.writer}
       holdAddressConversation={holdAddressConversation}
       onNavigateProposal={(destination) => editor.current?.navigateProposal(destination)}
       onOpenedProposal={(locator) => editor.current?.openedProposal(locator)}
@@ -241,7 +241,7 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
         scope: state.project.project_scope,
         chapterId: currentChapterId, tree,
         canSubmit: status.canSubmit,
-        baseUrl, fetchImpl, cryptoImpl,
+        baseUrl, fetchImpl, cryptoImpl, reads: state.reads,
       }}
       tree={(
         <>
@@ -293,26 +293,26 @@ function ProjectReadyView({ editorKey, ...props }: ProjectReadyViewProps & { edi
           </div>
         </>
       )}
-      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeRead={treeRead} treeReads={treeReads}
+      editor={<ProjectEditorView key={editorKey} {...props} tree={tree} treeOpen={treeOpen} treeReads={treeReads}
         handle={editor}
         copies={copies}
         handOverStore={handOverStore}
+        caretStore={caretStore}
         waitingStore={waitingStore}
         onStatus={setStatus} />}
     />
   );
 }
 
-/** The editor part of the workspace. It starts again with each new Chapter, writer, or base of the Editor Session. */
+/** The editor part of the workspace. It starts again with each new Chapter or base of the Editor Session. */
 function ProjectEditorView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore, writingTimers, tree, treeRead, treeReads, handle, onStatus, copies, unsavedNotice,
-  handOverStore, waitingStore,
+  proposalLocatorStore, writingTimers, tree, treeOpen, treeReads, handle, onStatus, copies, unsavedNotice,
+  handOverStore, caretStore, waitingStore, heldProject,
 }: ProjectEditorViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const structureInFlightRef = useRef(false);
-  const takeOverInFlightRef = useRef(false);
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
@@ -372,6 +372,11 @@ function ProjectEditorView({
     return given;
   });
   const handOverRef = useRef(handOver);
+  const [caret] = useState(() => {
+    const given = caretStore.current;
+    caretStore.current = undefined;
+    return given;
+  });
   useSyncExternalStore(handOver?.subscribe ?? noChanges, () => handOver?.version());
   // Each end of an arrival with no hand-over shows the Arrival Input as text that is not saved.
   const showUnsaved = (ended: ArrivalInput | undefined) => {
@@ -413,11 +418,13 @@ function ProjectEditorView({
   };
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
+  const onEarlierBaseRef = useRef<() => void>(() => {});
   const editorState = state.editor;
   // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
   const writing = useMemo(() => editorState.kind === "editor-ready"
     ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl, ...writingTimers,
-      onFailure: (error) => { onEditorFailureRef.current(error); } })
+      onFailure: (error) => { onEditorFailureRef.current(error); },
+      onEarlierBase: () => { onEarlierBaseRef.current(); } })
     : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
   // Ends the hand-over: each held edit goes to the normal capture entry in its order, or the notice shows the input.
@@ -470,22 +477,98 @@ function ProjectEditorView({
     if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
   }), [writing, currentChapterId]);
 
-  // A tree read of the workspace that starts during an open can be later than the tree of the open. Then the open gives
-  // no tree, so it cannot replace the later tree, and the workspace reads the tree again (#1876).
-  const treeCheck = () => {
-    const sequence = treeReads.current;
-    return (next: ControlledProjectState): ControlledProjectState =>
-      next.kind !== "project-ready" || treeReads.current === sequence ? next : { ...next, tree: undefined };
-  };
-  const opening = async (open: () => Promise<ControlledProjectState>) => {
-    const checked = treeCheck();
-    return checked(await open());
-  };
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string) => opening(() => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl,
-    opened: { profile: state.profile, project: state.project, editor: state.editor }, chapterId }));
+  const opened = { profile: state.profile, project: state.project };
+  const reopen = (chapterId?: string) => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened, chapterId });
+
+  // The tab found a later Revision: it opens again on it with its text, and shows no sentence (ADR 0107, section 2).
+  // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
+  // read-only. It lets the captured input enter the Journal and the submission in flight settle, and closes the
+  // controller before the reopen. The close abandons an Author Undo, so the Undo is not sent after the reopen. The
+  // reopen uses `chapter`, or else the read of a front check in flight. When the reopen keeps the Chapter and opens
+  // nothing, the editor stays read-only with its text, and the next return to the front reads the Chapter and opens
+  // again (`keptRef`).
+  const catchingUpRef = useRef(false);
+  const [catchingUp, setCatchingUp] = useState(false);
+  const frontReadRef = useRef<Promise<GetChapterResponse | undefined>>(undefined);
+  const keptRef = useRef<readonly ManuscriptParagraph[]>(undefined);
+  const reopenWith = async (shown: readonly ManuscriptParagraph[], read: GetChapterResponse | undefined) => {
+    const next = await reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened, shown, chapter: read });
+    if (next.kind === "chapter-kept") keptRef.current = shown;
+    else onReopened(next);
+  };
+  const catchUp = (chapter?: GetChapterResponse) => {
+    if (catchingUpRef.current || writing === undefined) return;
+    catchingUpRef.current = true;
+    const front = frontReadRef.current;
+    void (async () => {
+      await writing.whenComposed();
+      writing.endInput();
+      // The editor is read-only at once, so no input comes after the end of input.
+      flushSync(() => { setCatchingUp(true); });
+      await writing.whenIdle();
+      const read = chapter ?? await front;
+      const shown = writing.snapshot().projection.blocks;
+      writing.close();
+      await reopenWith(shown, read);
+    })();
+  };
+  // A structural command in flight catches up when its quiet step refuses with `earlier_base`.
+  onEarlierBaseRef.current = () => {
+    if (!structureInFlightRef.current) catchUp();
+  };
+  // When the tab comes to the front, it waits for the end of an open IME composition, saves its input, and reads the
+  // Chapter one time. At a later Revision, the reopen uses that read. A save that finds a later Revision during the
+  // check also uses it.
+  useEffect(() => {
+    if (writing === undefined) return undefined;
+    const front = () => {
+      const kept = keptRef.current;
+      if (document.visibilityState === "visible" && kept !== undefined) {
+        keptRef.current = undefined;
+        void readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions, state.project.project.project_id,
+          currentChapterId, state.project.project_scope.owner_user_id).then((read) => reopenWith(kept, read),
+          () => { keptRef.current = kept; });
+        return;
+      }
+      if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
+        || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
+        || catchingUpRef.current) return;
+      // Input during the quiet step refuses it, so the check waits for the end of that input and its save, and runs
+      // again, with no limit: each wait is for the editor, not a timer. A tab that went to the background ends the
+      // check, and its next return to the front starts a new one. A Revision that the tab installed during the read is
+      // not earlier than the read, so that read starts no catch-up.
+      const check = async () => {
+        for (;;) {
+          await writing.whenComposed();
+          if (document.visibilityState !== "visible") return undefined;
+          let installed: string | undefined;
+          const quiet = await writing.runAfterQuiesce("settled", () => {
+            installed = writing.snapshot().projection.authoritative_revision_id;
+            return readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions, state.project.project.project_id,
+              currentChapterId, state.project.project_scope.owner_user_id);
+          });
+          if (quiet.kind === "ran") {
+            const editor = writing.snapshot().projection.authoritative_revision_id;
+            return editor !== installed || quiet.result.chapter.current_revision.revision_id === editor
+              ? undefined : quiet.result;
+          }
+          if (quiet.reason !== "incomplete_semantic_intent" || catchingUpRef.current) return undefined;
+          await writing.whenIdle();
+        }
+      };
+      const read = check().catch(() => undefined);
+      frontReadRef.current = read;
+      void read.then((chapter) => {
+        frontReadRef.current = undefined;
+        if (chapter !== undefined && !structureInFlightRef.current) catchUp(chapter);
+      });
+    };
+    document.addEventListener("visibilitychange", front);
+    return () => { document.removeEventListener("visibilitychange", front); };
+  }, [writing]);
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
@@ -493,7 +576,7 @@ function ProjectEditorView({
     ? command(null).then((result) => ({ kind: "ran" as const, result }))
     : writing.runAfterQuiesce(condition, command);
 
-  // Without a writer, a selected Chapter opens read-only.
+  // Without a ready editor, a selected Chapter opens read-only.
   const browseChapter = (chapterId: string) => {
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
@@ -654,13 +737,12 @@ function ProjectEditorView({
                   movedRef.current = true;
                   reopenAt = current;
                 }
-                // With no move and no writer in the read, the tab shows the Project as the read gives it.
-                const writer = next.kind === "project-ready" && next.editor.kind === "editor-ready"
-                  && next.editor.session.writer.kind === "current_writer";
+                // With no move and no ready editor in the read, the tab shows the Project as the read gives it.
+                const ready = next.kind === "project-ready" && next.editor.kind === "editor-ready";
                 // The command of this switch had no effect, and its Chapter is still the newest selection. This editor
                 // accepts input again only when no earlier command moved its base.
                 const noEffect = !moved && chapter === unknownChapter && chapter === goal();
-                if (current === undefined || (!moved && !writer) || (noEffect && movedRef.current)) {
+                if (current === undefined || (!moved && !ready) || (noEffect && movedRef.current)) {
                   handedOff = true;
                   onReopened(next);
                   return;
@@ -675,6 +757,10 @@ function ProjectEditorView({
               if (chapter !== serverChapterRef.current) {
                 let target = targets.get(chapter);
                 if (target === undefined) {
+                  // With no fact "no open suggestion", the tab reads the open suggestions together with the Chapter
+                  // read, so that the Arriving Chapter can accept input before the switch ends (ADR 0105, section 3).
+                  // Only a selection in the contents has an Arriving Chapter.
+                  if (arrives && copies.get(chapter)?.noOpenSuggestion !== true) void copies.readSuggestions(chapter);
                   const write = copies.chapterRead(chapter);
                   const opened = await openSelectedChapter({
                     baseUrl,
@@ -780,16 +866,20 @@ function ProjectEditorView({
               const typed = inputRef.current;
               if (typed !== undefined && next.kind === "project-ready" && next.editor.kind === "editor-ready") {
                 await compositionEnded(typed);
-                // A ready editor has the writer. A Revision is of one Chapter, and a stop of the input comes from another
+                // A Revision is of one Chapter, and a stop of the input comes from another
                 // Revision, so the base check also refuses an editor of another Chapter and a stopped input. The base
                 // has no unsettled input: the quiet step settled the Local Edit Journal of the Editor Session.
                 if (typed.hasInput() && next.editor.openedProjection.authoritative_revision_id === typed.revisionId) {
                   inputRef.current = undefined;
                   handOverStore.current = typed;
+                } else if (!typed.hasInput() && typed.focused() && next.chapter.chapter.chapter_id === typed.chapterId) {
+                  // The editor of the Chapter keeps the focus and the caret of a click in the Arriving Chapter (#1934).
+                  caretStore.current = typed.selection();
                 }
               }
               handedOff = true;
-              onReopened(next);
+              // The editor changes in the task of the check, so no key goes to the Arriving Chapter after it (#1960).
+              flushSync(() => { onReopened(next); });
               return;
             }
           });
@@ -799,6 +889,12 @@ function ProjectEditorView({
         });
         if (quiet === undefined) {
           cancelled = true;
+        } else if (quiet.kind === "refused" && quiet.reason === "earlier_base"
+          && generation === switchGenerationRef.current) {
+          // A save found a later Revision. The tab catches up, and the next editor part runs the selection again.
+          waitingStore.current = { chapterId: goal(), contents };
+          handedOff = true;
+          catchUp();
         } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
@@ -871,11 +967,16 @@ function ProjectEditorView({
             setSwitchRecovery(`无法删除${noun}。`);
             return;
           }
+          // A deletion moves only the bases on its Chapter, so the editor part can stay and keep an earlier sentence.
+          setSwitchRecovery(undefined);
           const next = await reopen();
           if (generation !== switchGenerationRef.current) return;
           onReopened(next);
         });
-        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+        // A save found a later Revision: the tab catches up, and the author deletes again on the later Revision.
+        if (quiet.kind === "refused" && quiet.reason === "earlier_base") {
+          catchUp();
+        } else if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
           setSwitchRecovery(quiet.reason === "incomplete_semantic_intent" ? `无法删除${noun}：请先完成当前输入。`
             : quiet.reason === "journal_unavailable" ? `无法删除${noun}：本地编辑需要恢复。` : `无法删除${noun}。`);
         }
@@ -899,9 +1000,6 @@ function ProjectEditorView({
     baseUrl, fetchImpl, cryptoImpl, projectId: state.project.project.project_id, volumeId, expectedTreeRevision,
   }));
 
-  const writer = state.editor.kind === "editor-ready"
-    ? state.editor.session.writer
-    : state.editor.writer;
   const editorBlocks = handOver !== undefined ? handOver.blocks()
     : selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pendingParagraphs(pending)
@@ -935,7 +1033,6 @@ function ProjectEditorView({
         return;
       }
       refuseHandOver();
-      const checked = treeCheck();
       navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onCommandSent: () => {
@@ -957,7 +1054,7 @@ function ProjectEditorView({
           navigationEndedRef.current();
         },
         onOpened: (next, focus, notice) => {
-          setSwitchRecovery(undefined); onProposalOpened(checked(next), focus, notice);
+          setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
         }, onFailure: setSwitchRecovery, onLocator: openedProposal,
       });
     },
@@ -971,7 +1068,9 @@ function ProjectEditorView({
   let input = arrival === undefined || inputRef.current?.chapterId !== arrival ? undefined : inputRef.current;
   if (arrival !== undefined && arriving !== undefined && (input?.chapterId !== arrival
     || (input.revisionId !== arriving.revisionId && !input.hasInput()))) {
-    input = createArrivalInput(arrival, arriving);
+    // A newer Revision replaces the text of the Arriving Chapter. A focused editor keeps the focus and the caret.
+    input = createArrivalInput(arrival, arriving, input?.chapterId === arrival && input.focused() ? input.selection()
+      : undefined);
   }
   inputRef.current = input;
   useSyncExternalStore(input?.subscribe ?? noChanges, () => input?.version());
@@ -999,6 +1098,9 @@ function ProjectEditorView({
   const markedChapterId = arrival ?? selectedChapterId;
   useEffect(() => { onStatus({ selectedChapterId: markedChapterId, canSubmit }); }, [markedChapterId, canSubmit,
     onStatus]);
+  // The saved Chapter text: each applied save moves the Editor Session base, and not the Chapter read (#1944).
+  const savedRevision = state.editor.kind === "editor-ready"
+    ? state.editor.session.base_snapshot.materialized_revision : selectedChapter.chapter.current_revision;
   return (
     <>
       {switchWaiting !== undefined ? <p role="status">{CHAPTER_SWITCH_WAITING_SENTENCE}</p>
@@ -1011,7 +1113,8 @@ function ProjectEditorView({
         key={selectedChapter.chapter.chapter_id}
         arriving={arrival === undefined ? undefined
           : input === undefined ? { key: "earlier", blocks: editorBlocks }
-          : { key: `${arrival}:${input.revisionId}`, blocks: input.blocks(), editable: accepting, input }}
+          : { key: `${arrival}:${input.revisionId}`, blocks: input.blocks(), editable: accepting, input,
+            initialSelection: input.focusAt() }}
         scope={state.project.project_scope}
         chapterId={selectedChapter.chapter.chapter_id}
         authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
@@ -1024,14 +1127,20 @@ function ProjectEditorView({
           || selectedChapter.chapter.chapter_id !== currentChapterId
           || saveState === "saved"
           || (pending !== null
-            && pending.body === selectedChapter.chapter.current_revision.body
-            && JSON.stringify(pending.blocks)
-              === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
+            && pending.body === savedRevision.body
+            && JSON.stringify(pending.blocks) === JSON.stringify(savedRevision.blocks))}
         onDecisionEnd={copies.proposalsChanged}
-        onAccepted={async (settled) => {
-          // A decision with no settled response opens the Project with each check of the first open.
-          onReopened(await (settled ? reopen() : opening(() => openControlledProject({ baseUrl,
-            projectId: state.project.project.project_id, fetchImpl, cryptoImpl }))));
+        onAccepted={async (settled, accepted) => {
+          // An applied Acceptance whose response has the Editor Session state shows its Revision with no read of the
+          // Editor Session (ADR 0106 section 3), and with a list read only for a Project title that is not the title on
+          // the screen (#1967). A decision with no settled response opens the Project with each check of the first open.
+          const held = heldProject();
+          const shown = held?.projectId === state.project.project.project_id ? held
+            : { title: state.project.project.title, revision: state.revision };
+          const installed = accepted === undefined ? undefined : await acceptedProjectState(state, accepted,
+            { baseUrl, fetchImpl, shown });
+          onReopened(installed ?? await (settled ? reopen() : openControlledProject({ baseUrl,
+            projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
         }}
         onUndoCurrentChapter={(chapterId) => {
           // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
@@ -1040,7 +1149,7 @@ function ProjectEditorView({
         }}
         blocks={editorBlocks}
         arrival={handOver}
-        initialSelection={handOver?.selection()}
+        initialSelection={handOver?.selection() ?? caret}
         onSuggestionList={handOver === undefined ? undefined : decideHandOver}
         // A Selection Reference needs saved text, so none is available while the hand-over waits.
         referenceSource={handOver !== undefined ? undefined : {
@@ -1052,9 +1161,9 @@ function ProjectEditorView({
             || saveState === "saved",
           tree,
         }}
-        editable={!readOnly && !navigationCommand && !resultUnknown}
-        startSuggestionRead={selectedChapter.chapter.chapter_id === currentChapterId
-          ? () => copies.suggestionRead(currentChapterId) : undefined}
+        editable={!readOnly && !navigationCommand && !resultUnknown && !catchingUp}
+        // The display of each shown Chapter records the fact "no open suggestion", also of a read-only view (#1934).
+        startSuggestionRead={() => copies.suggestionRead(selectedChapter.chapter.chapter_id)}
         persistWorkspace={
           state.editor.kind === "editor-ready"
             && selectedChapter.chapter.chapter_id === currentChapterId
@@ -1074,8 +1183,10 @@ function ProjectEditorView({
         fetchImpl={fetchImpl}
         currentChapterId={currentChapterId}
         saveState={saveState}
-        treeRevision={tree?.tree_revision}
-        treeRead={treeRead}
+        treeRevision={treeOpen?.open === state ? tree?.tree_revision : undefined}
+        openTree={treeOpen?.open === state && treeOpen.first}
+        open={state}
+        reads={state.reads}
       />
       <small
         data-save-state={shownSaveState}
@@ -1090,7 +1201,8 @@ function ProjectEditorView({
         data-arrival-no-open-suggestion={arriving !== undefined ? String(arriving.noOpenSuggestion)
           : handOver === undefined ? "" : String(copies.get(currentChapterId)?.noOpenSuggestion === true)}
       >
-        {shownSaveState === "saved" ? "已保存"
+        {arrival !== undefined && !accepting && !hasArrivalInput ? "正在打开本章…"
+          : shownSaveState === "saved" ? "已保存"
           : shownSaveState === "saving" ? "保存中"
           : shownSaveState === "needs_attention" ? "需要处理"
           : "未保存"}
@@ -1122,23 +1234,6 @@ function ProjectEditorView({
           onLocalRecoveryContinued(next);
         }}
       /> : null}
-      {writer?.kind === "read_only"
-        ? (
-          <TakeOverWriterButton
-            state={state}
-            writer={writer}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            cryptoImpl={cryptoImpl}
-            inFlightRef={takeOverInFlightRef}
-            reopen={() => reopen()}
-            onReopened={onReopened}
-            onRefused={() => {
-              setSwitchRecovery("无法接管写作。");
-            }}
-          />
-        )
-        : null}
     </>
   );
 }
@@ -1508,8 +1603,9 @@ function Stage1View({
   const proposalLocatorStore = useRef(new Map<string, ProposalLocator[]>());
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
-    // The workspace stays through each command of one Project. Volume removal keeps the current Chapter, so chapter
-    // and writer keys stay put. The new editor base snapshot starts the editor part again after honor-deletion.
+    // The workspace stays through each command of one Project. Volume removal keeps the current Chapter, so the chapter
+    // key stays put. A deletion of the Chapter of the base moves the base, and the new base snapshot starts the editor
+    // part again.
     return (
       <ProjectReadyView
         key={current.project.project.project_id}
@@ -1517,11 +1613,6 @@ function Stage1View({
           current.project.project.open.kind === "current_chapter"
             ? current.project.project.open.current_chapter_id
             : current.project.project.project_id
-        }:${
-          current.editor.kind === "editor-ready"
-            && current.editor.session.writer.kind === "current_writer"
-            ? current.editor.session.writer.writer_generation
-            : current.editor.kind
         }:${
           current.editor.kind === "editor-ready"
             ? current.editor.session.base_snapshot.snapshot_id
@@ -1540,6 +1631,7 @@ function Stage1View({
         onReopened={take}
         onLocalRecoveryContinued={(next) => { take(next); setEditorGeneration((value) => value + 1); }}
         onRenamed={renamed}
+        heldProject={() => held.current}
         unsavedNotice={unsavedNotice}
       />
     );

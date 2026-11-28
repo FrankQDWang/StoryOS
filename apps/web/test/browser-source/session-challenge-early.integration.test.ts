@@ -25,11 +25,14 @@ const CHALLENGE = `POST ${P}/anti-forgery-challenges`;
 const CREATION = `POST ${P}/editor-sessions`;
 const SESSION_READ = `GET ${P}/editor-sessions/${SESSION}`;
 /** The exact requests of each kind of open. */
-const NEW_TAB = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION];
+const STATISTICS = `GET ${P}/manuscript/statistics`;
+/** The tree read and the statistics read that an open of a Chapter starts with the Chapter read (#1937). */
+const PROJECT_READS = [TREE, STATISTICS];
+const NEW_TAB = [PROTOCOL, PROJECT_READ, LIST, ...PROJECT_READS, CHAPTER_READ, CHALLENGE, CREATION];
 const EMPTY = [PROTOCOL, PROJECT_READ, LIST, TREE];
 const MISSING = [PROTOCOL, PROJECT_READ, LIST];
-const STORED = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, SESSION_READ];
-const FAILED_CHAPTER = [PROTOCOL, PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE];
+const STORED = [PROTOCOL, PROJECT_READ, LIST, ...PROJECT_READS, CHAPTER_READ, SESSION_READ];
+const FAILED_CHAPTER = [PROTOCOL, PROJECT_READ, LIST, ...PROJECT_READS, CHAPTER_READ, CHALLENGE];
 const REOPEN = [PROJECT_READ, LIST, CHAPTER_READ, CHALLENGE, CREATION];
 /** The class `shared` of the Server: 10 new Challenges in each fixed window of 60 s (`ChallengeRateClass`). */
 const SHARED_CAPACITY = 10;
@@ -50,7 +53,7 @@ type Entry = { open: number; name: string };
  * issue, and counts in the fixed window of the class `shared`: the 11th Challenge of a window gets `429
  * challenge_rate_limited`. A creation needs the nonce of an unused, unexpired Challenge with its idempotency key and
  * the digest of its request, else `422 challenge_invalid`. Each created Editor Session has its own base Snapshot, and
- * its response has the correlation identity of its request. Only the first created Editor Session holds the writer.
+ * its response has the correlation identity of its request.
  * `hold(names)` holds the next request of each given name until `releaseOnly`. `failNext(names)` answers the next request
  * of each given name with the 503 problem of an unavailable Project store.
  */
@@ -73,9 +76,7 @@ function fakeServer({ serves: defaultServes, open: initial = "current_chapter" }
     editor_session: { ...scenario.session.editor_session,
       editor_session_id: index === 0 ? SESSION : `018f0000-0000-7001-8000-0000000009${String(index).padStart(2, "0")}` },
     base_snapshot: { ...scenario.session.base_snapshot,
-      snapshot_id: index === 0 ? EDITOR_SNAPSHOT : `018f0000-0000-7001-8000-0000000008${String(index).padStart(2, "0")}` },
-    writer: index === 0 ? { kind: "current_writer", writer_generation: "1" }
-      : { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" } });
+      snapshot_id: index === 0 ? EDITOR_SNAPSHOT : `018f0000-0000-7001-8000-0000000008${String(index).padStart(2, "0")}` } });
   const refuse = (name: string, open: number): never => {
     log.unexpected.push(`${name} (open ${open}, ${state})`);
     throw new Error(`unexpected request: ${name}`);
@@ -106,14 +107,19 @@ function fakeServer({ serves: defaultServes, open: initial = "current_chapter" }
       return jsonResponse({ ...scenario.chapter, chapter: { chapter_id: CHAPTER_B, title: "Chapter B",
         current_revision: chapterRevision("018f0000-0000-7001-8000-000000000904", "") } });
     }
-    if (name === TREE && state === "empty") {
+    // The open does not use the answers of these reads. Only the view uses them.
+    if (name === STATISTICS && state === "current_chapter") {
+      return jsonResponse({ schema_id: "storyos.problem.v1", code: "service_unavailable", message: "Unavailable." },
+        503);
+    }
+    if (name === TREE) {
       return jsonResponse({ schema_id: "storyos.query.manuscript-tree.response.v1",
         correlation_id: "018f0000-0000-7001-8000-000000000914", project_scope: scope, tree_revision: "1",
         snapshot: { snapshot_id: scenario.session.base_snapshot.snapshot_id, project_scope: scope }, volumes: [] });
     }
     if (name === SESSION_READ && state === "current_chapter") {
       return jsonResponse({ ...created(0, "018f0000-0000-7001-8000-000000000915"),
-        schema_id: "storyos.query.editor-session.response.v1" });
+        schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === CHALLENGE && state === "current_chapter") {
       const body = JSON.parse(String(init?.body)) as { method: string; route_template: string; command_schema: string;
@@ -263,9 +269,8 @@ function countingCrypto() {
   return { cryptoImpl, digests };
 }
 
-/** The writer of the editor of an open, or the kind of the open when it has no ready editor. */
-const writerOf = (state: ControlledProjectState) => state.kind !== "project-ready" ? state.kind
-  : state.editor.kind === "editor-ready" ? state.editor.session.writer.kind : state.editor.kind;
+/** The kind of the editor of an open, or the kind of the open when it has no editor. */
+const editorOf = (state: ControlledProjectState) => state.kind !== "project-ready" ? state.kind : state.editor.kind;
 
 it.each([
   { order: "the Chapter read and then the Challenge", first: CHAPTER_READ, second: CHALLENGE },
@@ -284,9 +289,9 @@ it.each([
   expect(server.count(CREATION)).toBe(0);
   server.releaseOnly([second]);
 
-  expect({ writer: writerOf(await opening), challenges: server.count(CHALLENGE), creations: server.count(CREATION),
+  expect({ editor: editorOf(await opening), challenges: server.count(CHALLENGE), creations: server.count(CREATION),
     creationAfterAnswers: server.answeredBefore([CHAPTER_READ, CHALLENGE], CREATION),
-    unexpected: server.log.unexpected }).toEqual({ writer: "current_writer", challenges: 1, creations: 1,
+    unexpected: server.log.unexpected }).toEqual({ editor: "editor-ready", challenges: 1, creations: 1,
     creationAfterAnswers: true, unexpected: [] });
 });
 
@@ -308,10 +313,10 @@ it.each([
 
   const next = await open(server, 1, NEW_TAB);
 
-  // The Server refuses a creation with the nonce of another Challenge, so the next open is the writer only with its own.
-  expect({ failed: failed.kind, next: writerOf(next), challenges: [server.count(CHALLENGE, 0), server.count(CHALLENGE, 1)],
+  // The Server refuses a creation with the nonce of another Challenge, so the next open is ready only with its own.
+  expect({ failed: failed.kind, next: editorOf(next), challenges: [server.count(CHALLENGE, 0), server.count(CHALLENGE, 1)],
     failedCreations: server.count(CREATION, 0), creations: server.creations, unexpected: server.log.unexpected })
-    .toEqual({ failed: "project-blocked", next: "current_writer", challenges: [1, 1], failedCreations: 0, unexpected: [],
+    .toEqual({ failed: "project-blocked", next: "editor-ready", challenges: [1, 1], failedCreations: 0, unexpected: [],
     creations: [{ idempotencyKey: server.challenges[1]!.idempotencyKey, nonce: server.challenges[1]!.nonce }] });
 });
 
@@ -326,10 +331,10 @@ it("reopens with the Challenge request of the replacement open with its Chapter 
   expect(server.count(CREATION)).toBe(0);
   server.releaseOnly([CHAPTER_READ]);
 
-  expect({ writer: writerOf(await reopening),
+  expect({ editor: editorOf(await reopening),
     chapters: server.log.started.filter(({ name }) => name.includes("/chapters/")).map(({ name }) => name),
     challenges: server.count(CHALLENGE), creationAfterAnswers: server.answeredBefore([CHAPTER_READ], CREATION),
-    unexpected: server.log.unexpected }).toEqual({ writer: "current_writer", chapters: [CHAPTER_B_READ, CHAPTER_READ],
+    unexpected: server.log.unexpected }).toEqual({ editor: "editor-ready", chapters: [CHAPTER_B_READ, CHAPTER_READ],
     challenges: 1, creationAfterAnswers: true, unexpected: [] });
 });
 
@@ -347,9 +352,9 @@ it("reopens with the early open and no stored Editor Session, and requests its o
   expect(server.count(CHALLENGE)).toBe(0);
   server.releaseOnly([CHAPTER_READ]);
 
-  expect({ writer: writerOf(await reopening), challenges: server.count(CHALLENGE),
+  expect({ editor: editorOf(await reopening), challenges: server.count(CHALLENGE),
     challengeAfterChapter: server.answeredBefore([CHAPTER_READ], CHALLENGE), unexpected: server.log.unexpected })
-    .toEqual({ writer: "current_writer", challenges: 1, challengeAfterChapter: true, unexpected: [] });
+    .toEqual({ editor: "editor-ready", challenges: 1, challengeAfterChapter: true, unexpected: [] });
 });
 
 it.each([
@@ -370,9 +375,9 @@ it.each([
   expect(server.count(CREATION)).toBe(0);
   server.releaseOnly([CHAPTER_READ]);
 
-  expect({ empty: empty.kind, next: writerOf(await opening),
+  expect({ empty: empty.kind, next: editorOf(await opening),
     challenges: [server.count(CHALLENGE, 0), server.count(CHALLENGE, 1)], creations: server.count(CREATION),
-    unexpected: server.log.unexpected }).toEqual({ empty: "empty-project-ready", next: "current_writer",
+    unexpected: server.log.unexpected }).toEqual({ empty: "empty-project-ready", next: "editor-ready",
     challenges: [0, 1], creations: 1, unexpected: [] });
 });
 
@@ -382,20 +387,20 @@ it("opens a Project with the stored Editor Session of the tab with no Challenge"
 
   const state = await open(server);
 
-  expect({ writer: writerOf(state), challenges: server.count(CHALLENGE), unexpected: server.log.unexpected })
-    .toEqual({ writer: "current_writer", challenges: 0, unexpected: [] });
+  expect({ editor: editorOf(state), challenges: server.count(CHALLENGE), unexpected: server.log.unexpected })
+    .toEqual({ editor: "editor-ready", challenges: 0, unexpected: [] });
 });
 
-// On the Server, only the first created Editor Session holds the writer. A later one opens in the read-only recovery.
+// ADR 0107: each created Editor Session writes, so each open of a new tab is ready.
 it.each([
-  { kind: "a new tab", per: 1, first: "current_writer", later: "editor-read-only-recovery", serves: NEW_TAB },
+  { kind: "a new tab", per: 1, first: "editor-ready", later: "editor-ready", serves: NEW_TAB },
   { kind: "a failed Chapter read", per: 1, first: "project-blocked", later: "project-blocked",
     serves: FAILED_CHAPTER },
   { kind: "an Empty Project", per: 0, first: "empty-project-ready", later: "empty-project-ready", serves: EMPTY,
     open: "empty" as const },
   { kind: "a Project that is not there", per: 0, first: "project-blocked", later: "project-blocked", serves: MISSING,
     open: "missing" as const },
-  { kind: "a stored Editor Session", per: 0, first: "current_writer", later: "current_writer", serves: STORED },
+  { kind: "a stored Editor Session", per: 0, first: "editor-ready", later: "editor-ready", serves: STORED },
 ])("requests at most one Challenge for each open of $kind, so 10 opens in one window of 60 s get no refusal",
   async ({ kind, per, first, later, serves, open: projectOpen }) => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -411,7 +416,7 @@ it.each([
       const state = await open(server, index);
       // Wait for the Challenge response of this open, so that the count has it.
       if (kind === "a failed Chapter read") await expect.poll(() => server.consumed(CHALLENGE, index)).toBe(1);
-      outcomes.push(writerOf(state));
+      outcomes.push(editorOf(state));
     }
 
     expect({ counts: Array.from({ length: SHARED_CAPACITY }, (_, index) => server.count(CHALLENGE, index)), outcomes,

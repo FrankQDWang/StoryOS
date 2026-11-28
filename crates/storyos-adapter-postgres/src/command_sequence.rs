@@ -56,7 +56,7 @@ use skeleton::{
     ChallengeUse, FirstUse, consume_challenge, record_ids, record_result, replay_problem,
 };
 pub(crate) use structural::{
-    CurrentChapterChange, Structural, StructureIdentity, StructureWrite, WriterBase,
+    CurrentChapterChange, SessionBase, Structural, StructureIdentity, StructureWrite,
 };
 pub(crate) use surface::{
     AppliedReceipt, Classification, Classified, CommandSpec, CommandWrite, Conflict, NoEffect,
@@ -70,20 +70,16 @@ pub(crate) use zero_authority::{
 pub(crate) enum Admission {
     /// A command without an Editor Session.
     Project(ProjectActionClass),
-    /// A command of the current writer Editor Session. The insert requires its writer generation.
+    /// A command of an Editor Session.
     ExplicitEditorCommand(EditorAdmission),
-    /// A writer takeover. The insert requires the observed writer generation of another session.
-    WriterTakeover(TakeoverAdmission),
-    /// A direct editor action of the current writer, for example an Author Edit. The insert
-    /// requires the client writer generation, the expected Revision and head of the Chapter, and an
-    /// active Project.
+    /// A direct editor action of an Editor Session, for example an Author Edit. The insert requires
+    /// the expected Revision and head of the Chapter, and an active Project.
     DirectEditorAction(DirectEditorAdmission),
 }
 
 /// The Author Edit columns of a direct editor action Admission.
 pub(crate) struct DirectEditorAdmission {
     pub(crate) editor_session_id: String,
-    pub(crate) writer_generation: u64,
     pub(crate) chapter_object_id: String,
     pub(crate) expected_authoritative_revision_id: String,
     pub(crate) expected_proposal_head_revision_ids: Vec<String>,
@@ -100,12 +96,6 @@ pub(crate) enum ProjectActionClass {
     ExplicitProjectCommand,
     AgentRunStart,
     AgentRunControl,
-}
-
-pub(crate) struct TakeoverAdmission {
-    pub(crate) editor_session_id: String,
-    pub(crate) observed_writer_generation: u64,
-    pub(crate) editor_contract_revision: String,
 }
 
 pub(crate) struct EditorAdmission {

@@ -34,11 +34,20 @@ test("the protected Web client opens the authoritative current Chapter", async (
   const project = fixture<GetProjectResponse>("get-project.json");
   const listed = fixture<ListProjectsResponse>("list-projects.json");
   const chapter = fixture<GetChapterResponse>("get-chapter.json");
-  const requests: Array<{ path: string; options: RequestInit | undefined }> = [];
-  const responses: unknown[] = [profile, project, listed, chapter];
+  const requests: Array<{ request: string; options: RequestInit | undefined }> = [];
+  const projectPath = `/api/v1/projects/${project.project.project_id}`;
+  const chapterPath = `${projectPath}/chapters/${
+    project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "missing"}`;
+  // The tree read and the statistics read start with the Chapter read (#1937). The open does not use their answers.
+  const responses = new Map<string, unknown>([["GET /api/v1/protocol", profile], [`GET ${projectPath}`, project],
+    ["GET /api/v1/projects", listed], [`GET ${chapterPath}`, chapter],
+    [`GET ${projectPath}/manuscript/tree`, fixture<GetManuscriptTreeResponse>("get-manuscript-tree.json")],
+    [`GET ${projectPath}/manuscript/statistics`, fixture<unknown>("get-statistics.json")]]);
   const fetchImpl: typeof fetch = async (url, options) => {
-    requests.push({ path: new URL(requestUrl(url)).pathname, options });
-    return new Response(JSON.stringify(responses.shift()), {
+    const request = `${options?.method ?? "GET"} ${new URL(requestUrl(url)).pathname}`;
+    requests.push({ request, options });
+    if (!responses.has(request)) throw new Error(`unexpected request: ${request}`);
+    return new Response(JSON.stringify(responses.get(request)), {
       status: 200, headers: { "content-type": "application/json" },
     });
   };
@@ -53,17 +62,17 @@ test("the protected Web client opens the authoritative current Chapter", async (
     profile, project, chapter,
   });
   assert.equal(state.editor.kind, "editor-read-only-recovery");
-  assert.deepEqual(requests.map(({ path }) => path), [
-    "/api/v1/protocol",
-    `/api/v1/projects/${project.project.project_id}`,
-    "/api/v1/projects",
-    `/api/v1/projects/${project.project.project_id}/chapters/${
-      project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "missing"
-    }`,
+  assert.deepEqual(requests.map(({ request }) => request), [
+    "GET /api/v1/protocol",
+    `GET ${projectPath}`,
+    "GET /api/v1/projects",
+    `GET ${projectPath}/manuscript/tree`,
+    `GET ${projectPath}/manuscript/statistics`,
+    `GET ${chapterPath}`,
   ]);
   const projectRequest = requests.at(1);
   const listRequest = requests.at(2);
-  const chapterRequest = requests.at(3);
+  const chapterRequest = requests.at(5);
   assert.ok(projectRequest);
   assert.ok(listRequest);
   assert.ok(chapterRequest);

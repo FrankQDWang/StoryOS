@@ -40,7 +40,7 @@ import {
   trackDatabase,
 } from "./scenario.ts";
 
-const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v1";
+const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v2";
 const SET_CURRENT_CHAPTER_SCHEMA = "storyos.command.set-current-chapter.request.v1";
 // Chapter B and its head are the ones of the golden response of Set Current Chapter.
 const CHAPTER_B = "018f0000-0000-7001-8000-000000000803";
@@ -82,7 +82,7 @@ type Primitive = { kind: string; from: number; to: number; text?: string };
  */
 function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode: Mode) {
   const sessionId = scenario.session.editor_session.editor_session_id;
-  let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" };
   let body = session.base_snapshot.materialized_revision.body;
   let position = 0;
   let challenges = 0;
@@ -142,8 +142,11 @@ function writingServer(scenario: ReturnType<typeof createBrowserScenario>, mode:
         source_snapshot: { ...statisticsFixture.source_snapshot, project_scope: scope,
           project_activity_position: String(position) } });
     }
-    if (route === `GET ${project}/chapters/${current}/open-proposals`) {
-      return jsonResponse({ ...openProposalsFixture, project_scope: scope, chapter_id: current, proposals: [] });
+    // A switch to Chapter B reads its open suggestions before Chapter B is the Current Chapter (#1934).
+    const listed = [current, CHAPTER_B]
+      .find((chapterId) => route === `GET ${project}/chapters/${chapterId}/open-proposals`);
+    if (listed !== undefined) {
+      return jsonResponse({ ...openProposalsFixture, project_scope: scope, chapter_id: listed, proposals: [] });
     }
     if (route === `GET ${project}/assistance`) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     if (route === `GET ${project}/skills`) return jsonResponse({ ...skillsFixture, project_scope: scope, skills: [] });
