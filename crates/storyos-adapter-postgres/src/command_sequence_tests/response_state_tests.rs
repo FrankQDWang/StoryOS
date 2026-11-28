@@ -2,7 +2,7 @@
 //! that moves the base. The HTTP tests of the two commands prove that the state equals a read of
 //! the Editor Session after the command, and that a replay has no state.
 
-use storyos_application::{AuthorEditSettlement, AuthorEditSettlementEffect, EditorSession};
+use storyos_application::EditorSession;
 use storyos_core::TransitionOutcome;
 
 use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
@@ -13,22 +13,7 @@ use crate::shared_tests::command_sequence_support::{issued, stores, two_chapter_
 use crate::shared_tests::command_sequence_undo::{edit_in_chapter_of, session_chapter_head};
 use crate::shared_tests::create_volume_authority::{NamedEdit, named_edit_command};
 
-/// The Revision of the base Snapshot of the state, if the state is present.
-fn state_base(session: &Option<EditorSession>) -> Option<&str> {
-    session
-        .as_ref()
-        .map(|session| session.base_snapshot.authoritative_revision_id.as_str())
-}
-
-/// The Revision of an applied Author Edit. Panics on any other effect.
-fn edit_revision(settlement: &AuthorEditSettlement) -> &str {
-    match &settlement.effect {
-        AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => &ids.revision_id,
-        other => panic!("the Author Edit must apply, got {other:?}"),
-    }
-}
-
-/// An applied Author Edit gives the state on the new Revision. An edit with no effect gives none.
+/// An applied Author Edit gives the state. An edit with no effect gives none.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_author_edit_gives_the_editor_session_state_only_when_it_applies() {
@@ -55,28 +40,22 @@ async fn an_author_edit_gives_the_editor_session_state_only_when_it_applies() {
 
     assert_eq!(
         (
-            state_base(&first.editor_session),
-            state_base(&no_effect.editor_session)
+            first.editor_session.is_some(),
+            no_effect.editor_session.is_some()
         ),
-        (Some(edit_revision(&first)), None)
+        (true, false)
     );
 }
 
-/// The Editor Session state and the Revision of an applied Acceptance. Panics on any other
-/// outcome.
-fn session(
-    settlement: storyos_application::AcceptProposalSettlement,
-) -> (Option<EditorSession>, String) {
+/// The Editor Session state of an applied Acceptance. Panics on any other outcome.
+fn session(settlement: storyos_application::AcceptProposalSettlement) -> Option<EditorSession> {
     match settlement.outcome {
-        TransitionOutcome::Applied(applied) => (
-            applied.session.map(|session| *session),
-            applied.ids.revision_id,
-        ),
+        TransitionOutcome::Applied(applied) => applied.session.map(|session| *session),
         other => panic!("the Acceptance must apply, got {other:?}"),
     }
 }
 
-/// An applied Acceptance that moves the base gives the state on the new Revision. An Acceptance
+/// An applied Acceptance that moves the base gives the state. An Acceptance
 /// whose Editor Session keeps its base on another Chapter gives none.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -94,8 +73,7 @@ async fn an_acceptance_gives_the_editor_session_state_only_when_it_moves_the_bas
             .await;
         }
         let call = issued(&store, &scope, base + 9, &ACCEPT_PROPOSAL, input).await;
-        let (first, revision) = session(accept_proposal(&store, &call).await.unwrap());
-        let expected = on_target_chapter.then_some(revision.as_str());
-        assert_eq!(state_base(&first), expected, "{base:#x}");
+        let first = session(accept_proposal(&store, &call).await.unwrap());
+        assert_eq!(first.is_some(), on_target_chapter, "{base:#x}");
     }
 }

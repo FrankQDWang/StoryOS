@@ -45,6 +45,7 @@ async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<u
   const scenario = createBrowserScenario();
   const requests: string[] = [];
   let applied: ApplyAuthorEditResponse | undefined;
+  let outcomeRead: string | undefined;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const name = `${init?.method ?? "GET"} ${path}`;
@@ -57,9 +58,10 @@ async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<u
       const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
       applied = createAppliedAuthorEditResponse({ request, commandDigest: await digestApplyAuthorEdit(request as never),
         idempotencyKey: requestHeaders(init).get("idempotency-key")!, body: "Base!" });
+      outcomeRead = `${OUTCOME}${applied.receipt.idempotency_key}`;
       return jsonResponse(await respond(applied));
     }
-    if (outcome !== undefined && applied !== undefined && name.startsWith(OUTCOME)) {
+    if (outcome !== undefined && applied !== undefined && name === outcomeRead) {
       return jsonResponse({ schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
         correlation_id: "018f0000-0000-7001-8000-000000000081", project_scope: applied.project_scope,
         outcome: { outcome_kind: "committed", response: outcome(applied) } });
@@ -94,11 +96,12 @@ async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<u
           timer.done = true;
           timer.callback();
         }
-        return requests.some((name) => name.startsWith(OUTCOME));
+        return outcomeRead !== undefined && requests.includes(outcomeRead);
       }).toBe(true);
     }
     await writing.whenIdle();
-    return { requests, failures, session: test.workspace.session, projection: writing.snapshot().projection };
+    return { requests, failures, session: test.workspace.session, projection: writing.snapshot().projection,
+      outcomeRead };
   } finally {
     writing.close();
     await test.close();
@@ -135,6 +138,9 @@ it("does not settle a save from an outcome Query whose committed response has an
     editor_session_state: { editor_session: createBrowserScenario().session.editor_session, base_snapshot: base,
       author_undo_frontier_sequence: "1" } }));
 
-  expect({ save: saved.projection.save_state, base: saved.session.base_snapshot.snapshot_id === base.snapshot_id })
-    .toEqual({ save: "saving", base: false });
+  // Each request: the Challenge, the Author Edit, and then only the outcome Query of its key, which the client sends
+  // again after an outcome that it refuses.
+  expect({ steps: saved.requests.slice(0, 2), later: [...new Set(saved.requests.slice(2))],
+    save: saved.projection.save_state, base: saved.session.base_snapshot.snapshot_id === base.snapshot_id })
+    .toEqual({ steps: [CHALLENGE, AUTHOR_EDIT], later: [saved.outcomeRead], save: "saving", base: false });
 });

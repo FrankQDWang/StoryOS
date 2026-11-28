@@ -291,10 +291,17 @@ async fn a_failing_settle_step_rolls_back_every_row_and_a_later_settle_step_comp
         observed.push((
             after_failure,
             result_kind(&admin, &settled.ids.receipt_id).await,
+            settled.editor_session.is_none(),
         ));
     }
-    let expected =
-        RECORDS.map(|(kind, _rows)| (([0; 5], (1, 0, "in_progress".to_owned())), kind.to_owned()));
+    // The settlement of the outcome Query reads no Editor Session (ADR 0106 section 3).
+    let expected = RECORDS.map(|(kind, _rows)| {
+        (
+            ([0; 5], (1, 0, "in_progress".to_owned())),
+            kind.to_owned(),
+            true,
+        )
+    });
     assert_eq!(observed, expected);
 }
 

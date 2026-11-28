@@ -135,14 +135,14 @@ const CHALLENGE_ROUTES: Record<string, string> = {
  * `responseState`, an applied Acceptance gives the Editor Session state of this page in its response; with
  * `"other_session"`, the state of another Editor Session; with `"earlier_base"`, the base of this page before the
  * Acceptance; with `"earlier_snapshot"`, the new base with the Snapshot identity of the earlier base; with
- * `"other_chapter"`, a Project whose Current Chapter is Chapter B.
+ * `"other_chapter"`, a Project whose Current Chapter is Chapter B; with `"other_project"`, another Project.
  */
 function fakeServer({ reads, commands = [], proposals = false, acceptance = "refused", switchAfterAcceptance = false,
   assistant, unavailable = [], lost = [], rejection = "resolved", other = false, proposalResult = false,
   third = false, sessions = [SESSION], statistics = false, responseState = false }: {
   reads: string[]; commands?: string[]; proposals?: boolean;
   /** An applied Acceptance has the Editor Session state of this page in its response (ADR 0106 section 3). */
-  responseState?: boolean | "other_session" | "earlier_base" | "earlier_snapshot" | "other_chapter";
+  responseState?: boolean | "other_session" | "earlier_base" | "earlier_snapshot" | "other_chapter" | "other_project";
   acceptance?: "refused" | "applied" | "late"; switchAfterAcceptance?: boolean;
   /** The Editor Session of each creation, in order. A creation after the last one gets the last one. */
   sessions?: string[];
@@ -395,7 +395,8 @@ function fakeServer({ reads, commands = [], proposals = false, acceptance = "ref
           authoritative_commit_ids: applied ? [ACCEPTANCE_COMMIT] : [], condition_refs: [],
           result: applied ? "applied" : "refused", created_at: "2026-10-18T08:00:00.000Z" },
         project: responseState === "other_chapter"
-          ? { ...settled, open: { kind: "current_chapter", current_chapter_id: CHAPTER_B } } : settled,
+          ? { ...settled, open: { kind: "current_chapter", current_chapter_id: CHAPTER_B } }
+          : responseState === "other_project" ? { ...settled, project_id: LATER_SESSION } : settled,
         effect: applied ? { kind: "applied", author_action_sequence: "1", authoritative_commit_id: ACCEPTANCE_COMMIT,
           authoritative_revision: revisionA(), project_activity_position: state.snapshot.position,
           target_resolution: "exact_base" } : { kind: "refused", reason: "not_eligible" } });
@@ -1436,8 +1437,9 @@ it.each([["before", true], ["after", false]] as const)(
       server.release();
     }
     await expect.poll(server.inFlight).toEqual([]);
-    // Each request from the click: the editor shows the new base after two steps, in this order. The reads of the
-    // view start after them at the same time, and no read of the Project, the Chapter, or the Editor Session follows.
+    // Each request from the click: the Challenge and the command, in this order. The reads of the view start after
+    // them at the same time, and the editor is ready after the read of the decided Proposal of the input check (3
+    // steps). No read of the Project, the Chapter, or the Editor Session follows.
     const requests = server.log.started.slice(before);
     expect({ steps: requests.slice(0, 2), view: requests.slice(2).sort(), unexpected: server.log.unexpected,
       shown: shown() }).toEqual({ steps: [CHALLENGE, ACCEPTANCE], view: [...VIEW_READS].sort(), unexpected: [],
@@ -1447,7 +1449,7 @@ it.each([["before", true], ["after", false]] as const)(
 // Each check of the Editor Session state in an Acceptance response refuses it, and the page opens the Project again.
 it.each([["another Editor Session", "other_session"], ["the earlier base of the editor", "earlier_base"],
   ["the new base with the Snapshot identity of the earlier base", "earlier_snapshot"],
-  ["a Project whose Current Chapter is another Chapter", "other_chapter"]] as const)(
+  ["a Project whose Current Chapter is another Chapter", "other_chapter"], ["another Project", "other_project"]] as const)(
   "opens the Project again after an applied acceptance whose response has the state of %s", async (_name, served) => {
     const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ],
       commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied", responseState: served });

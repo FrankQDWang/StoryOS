@@ -67,14 +67,16 @@ impl PostgresProjectReader {
         acknowledged(settled, fault)
     }
 
-    /// Settles one admitted Author Edit through the settle step.
+    /// Settles one admitted Author Edit through the settle step. The outcome Query gives no Editor
+    /// Session state (ADR 0106 section 3), so this settlement reads no Editor Session.
     pub(crate) async fn complete_admitted_author_edit(
         &self,
         command: &ApplyAuthorEditCommand,
         fault: AuthorEditFault,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
         let envelope = author_edit_envelope(command);
-        let settled = settle_admitted_command(self, &envelope, &AuthorEdit::new(command, fault))
+        let edit = AuthorEdit::new(command, fault).without_session();
+        let settled = settle_admitted_command(self, &envelope, &edit)
             .await
             .map_err(|AuthorEditFailure(error)| error)?;
         acknowledged(settled, fault)

@@ -109,6 +109,8 @@ pub(crate) struct AuthorEdit<'a> {
     pub(crate) fault: AuthorEditFault,
     /// The identity of a Proposal Revision that the edit can append.
     proposal_revision_id: String,
+    /// The settlement has the Editor Session state after a base move (ADR 0106 section 3).
+    reports_session: bool,
 }
 
 impl<'a> AuthorEdit<'a> {
@@ -117,6 +119,15 @@ impl<'a> AuthorEdit<'a> {
             command,
             fault,
             proposal_revision_id: Uuid::now_v7().to_string(),
+            reports_session: true,
+        }
+    }
+
+    /// The same edit with no Editor Session state in its settlement, so it reads no Editor Session.
+    pub(crate) fn without_session(self) -> Self {
+        Self {
+            reports_session: false,
+            ..self
         }
     }
 
@@ -371,7 +382,7 @@ impl ProjectCommand for AuthorEdit<'_> {
                     disposition: crate::command_sequence::ActionDisposition::Forward,
                     editor_session_id: command.editor_session_id.as_ref().to_owned(),
                     session_base: RevisionBase::Required,
-                    reports_session: true,
+                    reports_session: self.reports_session,
                 }))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {
