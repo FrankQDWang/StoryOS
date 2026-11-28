@@ -169,6 +169,7 @@ pub(crate) async fn compensate_revision(
             disposition: ActionDisposition::Compensation { source_sequence },
             editor_session_id: command.editor_session_id.as_ref().to_owned(),
             session_base: RevisionBase::Required,
+            reports_session: false,
         },
     )
     .await?;

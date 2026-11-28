@@ -455,7 +455,10 @@ response, or unrelated Query. Every success and Problem response uses
 
 The result is the closed
 `Committed | Rejected | RequiresReconfirmation | StillUnknown` union.
-`Committed` contains the exact `ApplyAuthorEditResponse` v2. `Rejected` is
+The response form is `storyos.query.apply-author-edit-outcome.response.v2`.
+`Committed` contains the exact `ApplyAuthorEditResponse` v3 with no Editor
+Session state: the state is a read after the command, not a part of the
+acknowledgement (ADR 0106 section 3). `Rejected` is
 possible only when a lock-serialized read proves that the exact challenge is
 expired, unconsumed, and pending, with no Admission or Receipt.
 `RequiresReconfirmation` is the terminal no-Receipt settlement for an

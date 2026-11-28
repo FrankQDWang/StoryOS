@@ -371,6 +371,7 @@ impl ProjectCommand for AuthorEdit<'_> {
                     disposition: crate::command_sequence::ActionDisposition::Forward,
                     editor_session_id: command.editor_session_id.as_ref().to_owned(),
                     session_base: RevisionBase::Required,
+                    reports_session: true,
                 }))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {

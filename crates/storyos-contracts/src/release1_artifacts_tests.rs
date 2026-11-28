@@ -122,7 +122,7 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
 }
 
 #[test]
-fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
+fn author_edit_response_v3_keeps_activity_only_on_the_applied_variant() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();

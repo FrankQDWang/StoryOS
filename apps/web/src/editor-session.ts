@@ -451,11 +451,20 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
     // The open has the checks of a read of the Editor Session.
     const session = await validateSession(sessionWithState(editor.session, served), state.project.project_scope,
       chapter, profile, editor.cryptoImpl);
+    const checked = await journalMark(editor.database.transaction(["metadata", "intents"], "readonly"), editor);
     const earlier = await rebuildPendingProjection(editor);
-    if (earlier.save_state !== "saved" || earlier.unsettled_intent_count !== 0) return undefined;
+    if (checked.base !== editor.session.base_snapshot.snapshot_id || earlier.save_state !== "saved"
+      || earlier.unsettled_intent_count !== 0) return undefined;
     const workspace: EditorWorkspace = { database: editor.database, partition: editor.partition, session,
       cryptoImpl: editor.cryptoImpl, maxJsonStringUtf8Bytes: editor.maxJsonStringUtf8Bytes };
-    const transaction = workspace.database.transaction("metadata", "readwrite");
+    // The write compares the Journal with the checked Journal in its transaction, so a later base or later input
+    // of the editor stays.
+    const transaction = workspace.database.transaction(["metadata", "intents"], "readwrite");
+    const current = await journalMark(transaction, editor);
+    if (current.base !== checked.base || current.intents !== checked.intents) {
+      transaction.abort();
+      return undefined;
+    }
     transaction.objectStore("metadata").put({ key: `active_base:${workspace.partition.journal_partition_id}`,
       value: session.base_snapshot });
     await transactionResult(transaction);
@@ -465,6 +474,18 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
   } catch {
     return undefined;
   }
+}
+
+/** The active base Snapshot of the Journal of `editor` and the number of its intent records, in `transaction`. */
+async function journalMark(transaction: IDBTransaction, editor: EditorWorkspace)
+  : Promise<{ base: unknown; intents: number }> {
+  const partitionId = editor.partition.journal_partition_id;
+  const [stored, intents] = await Promise.all([
+    requestResult(transaction.objectStore("metadata").get(`active_base:${partitionId}`)),
+    requestResult(transaction.objectStore("intents").index("working_partition").count(partitionId)),
+  ]);
+  return { base: (stored as { value?: { snapshot_id?: unknown } } | undefined)?.value?.snapshot_id,
+    intents: intents as number };
 }
 
 /** Tells if the stored Editor Session has a base that is not the text of the Chapter read. */

@@ -322,6 +322,7 @@ impl ProjectCommand for AcceptProposal {
                 disposition: ActionDisposition::Forward,
                 editor_session_id: input.editor_session_id.as_ref().to_owned(),
                 session_base: RevisionBase::WhenOnPrior,
+                reports_session: true,
             },
             after_authority: None,
         })

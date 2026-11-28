@@ -1002,6 +1002,9 @@ ApplyAuthorEditOutcomeQueryObservation =
     exact_transport_retry_capsule_id
     local_response_payload_ref
     exact_response_payload_digest
+    // The Journal record keeps this schema id and the field name below. The
+    // nested response is the v2 or v3 response that the outcome Query (v1 or
+    // v2) gave, with no Editor Session state (ADR 0106 section 3).
     schema_id: storyos.query.apply-author-edit-outcome.response.v1
     query_correlation_id
     project_scope
@@ -1428,7 +1431,7 @@ Action Sequence, and Project Activity that an owning result actually creates.
 | outcome Query `StillUnknown { AdmissionCommitted }` | exact Command and Admission exist and reconciliation remains required; no Receipt or Activity is named | advance the strongest observation to the exact admitted identity; keep queue, capsule, and payload blocked; never invoke or replay; repeat only the protected GET |
 | outcome Query `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | enter the exact no-Receipt terminal settlement; show the closed reason; never invoke the old command |
 | outcome Query `Rejected { challenge_expired_unconsumed }` | positive proof that this identity created no Admission, Receipt, Activity, or authority | enter the exact query-rejected terminal reconciliation, settlement, and visible-author branch; do not fabricate a Problem or resend permission |
-| outcome Query `Committed` | exact nested `ApplyAuthorEditResponse` v2 | use the existing applied Receipt-plus-Activity or zero-authority Receipt-only settlement; exact-deduplicate any late POST acknowledgement |
+| outcome Query `Committed` | exact nested `ApplyAuthorEditResponse` v2 or v3, with no Editor Session state | use the existing applied Receipt-plus-Activity or zero-authority Receipt-only settlement; exact-deduplicate any late POST acknowledgement |
 | pre-admission Problem | exact safe `PreAdmissionProblemObservation`; no Admission or Receipt for the proven attempt | retain complete payload; either terminally show the typed refusal or, only when the exact Problem permits and the frozen request remains equal, enter `ProvenNoAdmission` before a fresh challenge |
 | unexpected HTTP `Accepted` for a Release-1 editor command | exact asynchronous operation reference and settlement query; no browser-visible Admission identity or terminal fact | enter `ProtocolIncompatibleAccepted`; preserve payload, pause the queue, and fail closed for protocol resync/compatible deployment without claiming query convergence |
 | HTTP `applyAuthorEdit` v2 `AuthoritativeApplied` | terminal `AppliedReceiptSettled`, exact typed Receipt, and applied-only Activity position | append `ApplyAuthorEditAppliedObservation`; wait for applied author-facing Activity/Snapshot convergence if not already observed |

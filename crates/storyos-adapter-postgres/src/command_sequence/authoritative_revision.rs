@@ -68,6 +68,9 @@ pub(crate) struct RevisionWrite<E> {
     /// The Editor Session whose base Snapshot moves to the new Revision.
     pub(crate) editor_session_id: String,
     pub(crate) session_base: RevisionBase,
+    /// The response of the command has the Editor Session state after a base move (ADR 0106 section 3). The
+    /// response of Author Undo has no state, so Undo reads no Editor Session.
+    pub(crate) reports_session: bool,
 }
 
 pub(crate) struct AuthoritativeRevision;
@@ -380,19 +383,6 @@ pub(crate) async fn write_revision<E>(
             }
         }
     }
-    let session = if base_updates == 1 {
-        crate::editor_session::session_after_command(client, scope, &write.editor_session_id)
-            .await
-            .map_err(|error| match error {
-                storyos_application::EditorSessionError::Unavailable(source) => {
-                    ProjectCommandError::Unavailable(source)
-                }
-                _ => ProjectCommandError::BindingConflict,
-            })?
-            .map(Box::new)
-    } else {
-        None
-    };
     crate::snapshot::persist_canonical_snapshot(
         client,
         scope,
@@ -411,6 +401,20 @@ pub(crate) async fn write_revision<E>(
     )
     .await
     .map_err(unavailable)?;
+    // The read comes after each write of the command, so it gives what a read after the commit gives.
+    let session = if write.reports_session && base_updates == 1 {
+        crate::editor_session::session_after_command(client, scope, &write.editor_session_id)
+            .await
+            .map_err(|error| match error {
+                storyos_application::EditorSessionError::Unavailable(source) => {
+                    ProjectCommandError::Unavailable(source)
+                }
+                _ => ProjectCommandError::BindingConflict,
+            })?
+            .map(Box::new)
+    } else {
+        None
+    };
     Ok(RevisionApplied {
         effect: write.effect,
         body: display_body_from_stored(&write.payload, &blocks),
