@@ -413,12 +413,13 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
         const base = stored.session.base_snapshot;
         if (keep) return { chapterId: base.chapter_id, editorSessionId: start.active };
-        // A tab with no text to send opens the Current Chapter that the other tab set. Open work that a catch-up cannot
-        // take, as a group with an unknown result, also goes back to its Chapter, so its recovery shows its text there
-        // (#1972). The recovery does not send that work again.
+        // A tab with no text to send opens the Current Chapter that the other tab set.
+        const back = { chapterId: base.chapter_id, editorSessionId: start.active };
         const text = await earlierBaseText(stored, base.chapter_id, shown);
-        return text !== undefined && paragraphsEqual(text.shown, text.base) ? undefined
-          : { chapterId: base.chapter_id, editorSessionId: start.active };
+        if (text !== undefined) return paragraphsEqual(text.shown, text.base) ? undefined : back;
+        // An Author Edit group that went out with no known result also goes back to its Chapter. Its recovery shows its
+        // text there and does not send it again (#1972). Other open work keeps the Chapter that the other tab set.
+        return await hasUnknownResultGroup(stored) ? back : undefined;
       } catch {
         // An unreadable Journal keeps the stored Session, so its recovery runs.
         return undefined;
@@ -586,6 +587,15 @@ async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
     && !revisedCandidate.has(record.local_intent_sequence))) return undefined;
   return { base: base.materialized_revision.blocks,
     shown: shown ?? (await rebuildPendingProjection(workspace)).blocks };
+}
+
+/** Tells if the Journal of the stored Editor Session has an Author Edit group that went out with no known result. */
+async function hasUnknownResultGroup(workspace: EditorWorkspace): Promise<boolean> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  for (const group of snapshot.groups) {
+    if (group.settlement.kind === "unsettled" && !await groupNeverSent(workspace, group)) return true;
+  }
+  return false;
 }
 
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
