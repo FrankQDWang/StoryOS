@@ -302,15 +302,29 @@ it("keeps the stored Editor Session with the base of its Journal at a load when 
 const submitted = (workspace: EditorReadyState, server: Awaited<ReturnType<typeof fakeServer>>) =>
   appendAuthorEdit(workspace, EDIT).then(() => submit(workspace, server));
 
-// Each case leaves work in the Journal of the stored Session that the catch-up cannot put on the current Chapter.
-it.each([
-  // The capsule and its transport attempt commit before the send, so the group can have gone out, and its result is
-  // unknown (#1964).
-  ["a group that went out with no result", undefined, async (workspace: EditorReadyState) => {
+// The capsule and its transport attempt commit before the send, so the group can have gone out, and its result is
+// unknown (#1964). The load opens the stored Session on its own base, as a tab that stayed open does, so the text of the
+// group is on the screen (#1972).
+it("keeps the stored Editor Session and its input on the base of the Session at a load when its Journal has a group "
+  + "that went out with no result", async () => {
+  const server = await prepare(undefined, false, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, EDIT);
     await commitProtectedTransportSend(workspace, await freezeOneIntentSubmission(workspace),
       { nonce: "a".repeat(64), expires_at: "2026-08-15T09:00:00.000Z" });
-  }],
+  });
+  const records = await journalRows("intents");
+
+  const state = await load(server);
+
+  expect({ kind: state.kind, stored: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests,
+    base: state.kind === "editor-ready" ? state.session.base_snapshot.materialized_revision.revision_id : undefined })
+    .toEqual({ kind: "editor-ready", stored: SESSION, requests: [SESSION_READ], base: REVISION });
+  if (state.kind === "editor-ready") state.database.close();
+  expect(await journalRows("intents")).toEqual(records);
+});
+
+// Each case leaves work in the Journal of the stored Session that the catch-up cannot put on the current Chapter.
+it.each([
   ["an Author Edit that conflicted for another reason", "proposal_head_present", submitted],
   ["Proposal candidate input that no group revised", undefined, async (workspace: EditorReadyState) => {
     await appendAuthorEdit(workspace, { kind: "candidate_selection", target: { proposal_id: PROPOSAL,

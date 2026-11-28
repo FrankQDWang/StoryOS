@@ -18,6 +18,18 @@ it("sets the Chapter current again at a new load and stores the text of a save w
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 
+it("settles a save whose response did not come back before the page closed at a new load, opens the Chapter that "
+  + "another page set current, and saves the next input on the applied Revision", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_outcome" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
+it("shows the text of a save whose response did not come back on its Chapter, not saved and with no command, at a new "
+  + "load whose outcome Query fails after another page set another Chapter current", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load_outcome_unavailable" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
 it("recovers one prose request through the production Web, Server, database, and Worker", async () => {
   await expect(verifyProductionHost({ scenario: "prose_request" }))
     .resolves.toEqual({ kind: "production_host_verified" });

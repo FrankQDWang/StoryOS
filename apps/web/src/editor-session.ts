@@ -22,7 +22,7 @@ import type {
   JournalPartition,
   ProjectReadyState,
 } from "./editor-types.ts";
-import { sessionWithState } from "./author-edit-submission.ts";
+import { queryLostOutcome, sessionWithState } from "./author-edit-submission.ts";
 import {
   JOURNAL_DATABASE_VERSION,
   JOURNAL_OBJECT_STORES,
@@ -37,7 +37,7 @@ import { paragraphsEqual } from "./manuscript-doc.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
-import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-session-lock.ts";
+import { holdsEditorSessionLock, lockEditorSession, releaseEarlierEditorSessions } from "./editor-session-lock.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
 import { groupNeverSent } from "./protected-transport-capsule.ts";
 import {
@@ -54,6 +54,9 @@ export { appendAuthorEdit, rebuildPendingProjection } from "./local-edit-journal
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
+// The longest wait of a load for the outcome Queries of its groups (#1972). A Query with no answer in this time stops,
+// and its group stays unknown, so the open goes on with no command of the Session.
+const LOAD_OUTCOME_WAIT_MS = 3_000;
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 
@@ -309,6 +312,14 @@ type EditorWorkspaceOptions = {
   earlyChallenge?: boolean;
 };
 
+/** The Chapter of the stored Editor Session that a load or a reopen opens instead of the Current Chapter. */
+export interface OtherChapter {
+  chapterId: string;
+  editorSessionId: string;
+  revisionId?: string;
+  withoutCommand?: true;
+}
+
 /**
  * The Editor Session of an open. The read of a stored Session needs only the Scope of the Project. `finish` creates a
  * Session when the tab has none, and validates the Session against the Chapter and `project`, by default the Project of
@@ -320,10 +331,13 @@ export interface EditorWorkspaceOpening {
   /**
    * The stored Editor Session and the Chapter of its base, when that Chapter is not `currentChapterId` and the Session
    * has text that can catch up on it, or `keep` tells that the tab keeps its Chapter: another tab set another Chapter
-   * current (ADR 0107, section 2).
+   * current (ADR 0107, section 2). For an Author Edit group that the Server did not apply, `revisionId` is the Revision
+   * of the Server base of the Session: the Chapter goes back only at that Revision, so Set Current Chapter does not
+   * move the base past the group. For a group with an unknown result, `withoutCommand` tells that the tab opens the
+   * Chapter with no Set Current Chapter (#1972).
    */
   otherChapter(currentChapterId: string, shown?: readonly ManuscriptParagraph[], keep?: boolean)
-    : Promise<{ chapterId: string; editorSessionId: string } | undefined>;
+    : Promise<OtherChapter | undefined>;
   /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
   abandon(): Promise<void>;
 }
@@ -360,20 +374,46 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       // A tab with no stored Editor Session opens a Session of the rows of an upgraded version 5 Journal.
       const choice = await claimVersion5Session(database, stored);
       claimed = choice.claimed;
+      // A Session whose lock this page did not hold has no editor in this page, so this open is a load of it.
+      let loaded = choice.active ? !holdsEditorSessionLock(choice.active) : false;
       // A Session that another page writes with is not this page's Session, so the open creates one.
       let active = choice.active && !await lockEditorSession(choice.active) ? null : choice.active;
       // A Session of version 5 rows whose text an earlier open copied to a later Session goes on in that Session (#1965).
       for (let target = active ? await sessionTransferTarget(database, active) : undefined; target !== undefined;
         target = active ? await sessionTransferTarget(database, active) : undefined) {
+        loaded = !holdsEditorSessionLock(target);
         active = await lockEditorSession(target) ? target : null;
         // The target has the text, so its text goes to local recovery when it does not open.
         claimed = active ? await listedVersion5Session(database, active) ?? claimed : claimed;
       }
       // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
-      const sessionValue: unknown = active
+      let sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
           editorSessionId: active, fetchImpl })
         : undefined;
+      // At a load, the open asks the outcome of each group that went out with no known result before the Chapter
+      // choice and before each command of the Session (#1972). A failed Query keeps the group unknown.
+      if (active && loaded) {
+        const stored = await storedWorkspace(database, sessionValue, scope, profile, cryptoImpl).catch(() => undefined);
+        const read = stored?.session;
+        const wait = new AbortController();
+        const timer = setTimeout(() => wait.abort(new Error("The outcome Query of the load did not answer")),
+          LOAD_OUTCOME_WAIT_MS);
+        try {
+          await settleLostGroups(stored, { baseUrl, fetchImpl: stoppedFetch(fetchImpl, wait.signal), cryptoImpl })
+            .catch(() => undefined);
+        } finally {
+          clearTimeout(timer);
+        }
+        // A settlement of an applied group reads the Editor Session again. That read is later than the read above,
+        // which can come before the Server applied the group.
+        if (stored !== undefined && stored.session !== read) sessionValue = stored.session;
+        // A group that stays unknown keeps the Journal base. The group can have moved the Server base, and that later
+        // base drops the records of the group, so the page shows them as saved and does not settle them.
+        else if (stored !== undefined && await lostGroupResult(stored).catch(() => undefined) === "unknown") {
+          sessionValue = stored.session;
+        }
+      }
       return { kind: "started", database, active, sessionValue, creation, ...(claimed ? { claimed } : {}) };
     } catch (error) {
       return { kind: "failed", database, error, ...(claimed ? { claimed } : {}) };
@@ -406,17 +446,22 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       const start = await started;
       if (start.kind !== "started" || !start.active) return undefined;
       try {
+        const server = (start.sessionValue as GetEditorSessionResponse).base_snapshot;
         // A command of this Editor Session that set another Chapter current moved its Server base there.
-        if ((start.sessionValue as GetEditorSessionResponse).base_snapshot.chapter_id === currentChapterId) {
-          return undefined;
-        }
+        if (server.chapter_id === currentChapterId) return undefined;
         const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
         const base = stored.session.base_snapshot;
         if (keep) return { chapterId: base.chapter_id, editorSessionId: start.active };
         // A tab with no text to send opens the Current Chapter that the other tab set.
+        const back = { chapterId: base.chapter_id, editorSessionId: start.active };
         const text = await earlierBaseText(stored, base.chapter_id, shown);
-        return text === undefined || paragraphsEqual(text.shown, text.base) ? undefined
-          : { chapterId: base.chapter_id, editorSessionId: start.active };
+        if (text !== undefined) return paragraphsEqual(text.shown, text.base) ? undefined : back;
+        // The text of a group that the Server did not apply goes back to its Chapter, with its recovery state. While
+        // the result of a group is not known, the Session sends no command, so the tab opens that Chapter with no Set
+        // Current Chapter (#1972). Other open work keeps the Chapter that the other tab set.
+        const result = await lostGroupResult(stored);
+        return result === "unknown" ? { ...back, withoutCommand: true }
+          : result === "not_applied" ? { ...back, revisionId: server.materialized_revision.revision_id } : undefined;
       } catch {
         // An unreadable Journal keeps the stored Session, so its recovery runs.
         return undefined;
@@ -516,6 +561,16 @@ function chapterAtLaterBase(chapter: GetChapterResponse, value: unknown): GetCha
     chapter: { ...chapter.chapter, current_revision: base.materialized_revision } };
 }
 
+/** The Chapter at the Server base of the Editor Session `value`, when that base is an earlier Revision of `chapter`. */
+function chapterAtSessionBase(chapter: GetChapterResponse, value: unknown): GetChapterResponse {
+  const base = (value as Partial<GetEditorSessionResponse> | undefined)?.base_snapshot;
+  if (base?.chapter_id !== chapter.chapter.chapter_id || base.materialized_revision === undefined
+    || !boundedU64(base.project_activity_position) || !boundedU64(chapter.project_activity_position)
+    || BigInt(base.project_activity_position) >= BigInt(chapter.project_activity_position)) return chapter;
+  return { ...chapter, project_activity_position: base.project_activity_position,
+    chapter: { ...chapter.chapter, current_revision: base.materialized_revision } };
+}
+
 /** The workspace of the stored Editor Session. A deletion moves its Server base (ADR 0107), so it has the Journal base. */
 async function storedWorkspace(database: IDBDatabase, value: unknown, scope: ProjectScope,
   profile: Release1ProtocolProfile, cryptoImpl: Crypto): Promise<EditorWorkspace> {
@@ -586,6 +641,47 @@ async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
     shown: shown ?? (await rebuildPendingProjection(workspace)).blocks };
 }
 
+/** A `fetch` that `signal` stops: its request ends, and its promise is refused. */
+function stoppedFetch(fetchImpl: typeof fetch, signal: AbortSignal): typeof fetch {
+  return (input, init) => new Promise<Response>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    fetchImpl(input, { ...init, signal }).then(resolve, reject);
+  });
+}
+
+/** Sends the outcome Query of each Author Edit group of the stored Editor Session that went out with no known result. */
+async function settleLostGroups(workspace: EditorWorkspace | undefined,
+  options: { baseUrl: string; fetchImpl: typeof fetch; cryptoImpl: Crypto }): Promise<void> {
+  if (workspace === undefined) return;
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  for (const group of snapshot.groups) {
+    if (group.settlement.kind === "unsettled" && !await groupNeverSent(workspace, group)) {
+      await queryLostOutcome(workspace, group, options);
+    }
+  }
+}
+
+/**
+ * The result of the Author Edit groups of the stored Editor Session that keeps its Chapter: "unknown" for a group that
+ * went out with no known result, "not_applied" for a group with no Admission or with a reconfirmation, else `undefined`.
+ */
+async function lostGroupResult(workspace: EditorWorkspace): Promise<"unknown" | "not_applied" | undefined> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  let result: "not_applied" | undefined;
+  for (const group of snapshot.groups) {
+    const kind = group.settlement.kind;
+    if (kind === "unsettled" && !await groupNeverSent(workspace, group)) return "unknown";
+    if (kind === "outcome_query_rejected_no_admission" || kind === "outcome_query_requires_reconfirmation") {
+      result = "not_applied";
+    }
+  }
+  return result;
+}
+
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   baseUrl, project, chapter, profile, fetchImpl, cryptoImpl, shown,
 }: {
@@ -635,6 +731,13 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
         }
         if (text !== undefined) {
           start = { ...start, active: null };
+        } else if (stored.session.base_snapshot.chapter_id === chapter.chapter.chapter_id
+          && await lostGroupResult(stored) !== undefined) {
+          // Another tab wrote a later Revision of the Chapter of a group with no known result or no Admission. The
+          // tab opens the Chapter at the base of its Session and shows the text of the group there, as a tab that
+          // stayed open does (ADR 0107, section 2). The group stays in its recovery, and no command moves the base
+          // (#1972).
+          chapter = chapterAtSessionBase(chapter, start.sessionValue);
         } else if (stored.session.base_snapshot.chapter_id !== chapter.chapter.chapter_id) {
           // Another tab set another Chapter current, and the text of this tab has no change to send, so `otherChapter`
           // opened that Chapter. Nothing is lost, and the open shows it in a new Editor Session.

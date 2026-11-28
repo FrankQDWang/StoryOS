@@ -21,7 +21,7 @@ import type {
   ProtocolBootState,
   StateDifference,
 } from "./editor-types.ts";
-import { startEditorWorkspace, type EditorWorkspaceOpening } from "./editor-session.ts";
+import { startEditorWorkspace, type EditorWorkspaceOpening, type OtherChapter } from "./editor-session.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import { startProjectReads, type ProjectReads } from "./project-reads.ts";
@@ -284,11 +284,21 @@ async function openProjectWorkspace(
     // (ADR 0107, section 2).
     const other = used === undefined ? await opening.otherChapter(open.current_chapter_id, shown, keepChapter)
       : undefined;
-    const back = other === undefined ? undefined : await setChapterBack(options, project, other,
-      discarded?.kind === "read" ? discarded.value : undefined).catch(() => undefined);
-    if (back !== undefined) {
+    const back = other === undefined || other.withoutCommand ? undefined : await setChapterBack(options, project,
+      other, discarded?.kind === "read" ? discarded.value : undefined).catch(() => undefined);
+    if (back !== undefined && back.later === undefined) {
       ({ project, revision } = back.read);
       reading = Promise.resolve({ kind: "read", value: back.chapter });
+    } else if (other?.withoutCommand || back?.later !== undefined) {
+      // The result of a group of the stored Session is not known, so the Session sends no command (#1972). Or another
+      // tab wrote a later Revision of the Chapter of a group with no Admission, and the command would move the base of
+      // the Session past the group. The tab opens the Chapter of the group as its Current Chapter, as a tab that did
+      // not see the Set Current Chapter of the other tab does (ADR 0107, section 2). The Project on the Server keeps
+      // the Current Chapter of the other tab.
+      project = { ...project, project: { ...project.project,
+        open: { kind: "current_chapter", current_chapter_id: other!.chapterId } } };
+      reading = back?.later !== undefined ? Promise.resolve({ kind: "read", value: back.later })
+        : settle(readCurrentChapter(queryOptions, projectId, other!.chapterId, ownerUserId));
     } else if (keepChapter && other !== undefined) {
       // The tab keeps its Chapter, so it does not open the Chapter that another tab set current.
       void opening.abandon();
@@ -315,11 +325,13 @@ const SET_CHAPTER_BACK_ATTEMPTS = 8;
  * when the reopen has one. A conflict (`wrong_target_head` or `stale_current_chapter`) is a command of another tab
  * after the reads, so the tab reads the Project and the Chapter again and sends again, at most
  * `SET_CHAPTER_BACK_ATTEMPTS` times. A Project read after an applied command that names another Chapter is one more
- * conflict. When another tab set the Chapter current again, the tab sends nothing more. It gives the Project and the
- * Chapter after the command, or `undefined` when the command had no effect at the end.
+ * conflict. When another tab set the Chapter current again, the tab sends nothing more. With `revisionId`, the tab sends
+ * the command only while the Chapter is at that Revision (#1972), and else it gives `later` with the read of the
+ * Chapter. It gives the Project and the Chapter after the command, or `undefined` when the command had no effect at the
+ * end.
  */
-async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse,
-  other: { chapterId: string; editorSessionId: string }, read: GetChapterResponse | undefined) {
+async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse, other: OtherChapter,
+  read: GetChapterResponse | undefined) {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
   const open = project.project.open;
@@ -329,6 +341,9 @@ async function setChapterBack(options: ProjectOpenOptions, project: GetProjectRe
   let current = open.current_chapter_id;
   let chapter = read?.chapter.chapter_id === other.chapterId ? read : await readChapter();
   for (let attempt = 1; ; attempt += 1) {
+    if (other.revisionId !== undefined && chapter.chapter.current_revision.revision_id !== other.revisionId) {
+      return { later: chapter };
+    }
     const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
       chapterId: other.chapterId, expectedCurrentChapterId: current,
       expectedTargetRevisionId: chapter.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });

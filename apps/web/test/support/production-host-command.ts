@@ -249,9 +249,18 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
  * With `held` "challenge" (#1964), the save of page 1 freezes its group, and page 1 leaves its document before the
  * Command Challenge answers, so the group never went to the Server. Then page 2 only selects Chapter B. The new load of
  * page 1 sets A current again with its stored Editor Session and sends the group.
+ *
+ * With `held` "response" (#1972), the Server applies the Author Edit of page 1, page 1 gets no response, and page 1
+ * leaves its document, so the group has an unknown result. Then page 2 only selects Chapter B. The new load of page 1
+ * asks the outcome first, settles the group, and opens Chapter B. Page 1 then selects Chapter A, which has the text, and
+ * types on it.
+ *
+ * With `held` "outcome_unavailable" (#1972), the same lost response comes first, and the outcome Query of the new load
+ * fails. The load sends no command and opens Chapter A with the text of the group, not saved. When the Query answers,
+ * the group settles, and a reload shows the text on the Server.
  */
 export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext,
-  held: "clock" | "challenge" = "clock"): Promise<void> {
+  held: "clock" | "challenge" | "response" | "outcome_unavailable" = "clock"): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
   const origin = new URL(configured).origin;
@@ -296,13 +305,18 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     // The pause moves the clock of page 1 only a little, so page 1 sees no time of the Server as late.
     if (held === "clock") await late.clock.pauseAt(Date.now() + 100);
     // The Command Challenge of the Author Edit of page 1 gets no response. The save freezes its group before it asks.
-    let challengeHeld = Promise.resolve();
+    // With "response", the Author Edit goes to the Server and its response does not come back to page 1.
+    let resolveHeld = () => {};
+    const requestHeld = new Promise<void>((resolve) => { resolveHeld = resolve; });
     if (held === "challenge") {
-      let resolveHeld = () => {};
-      challengeHeld = new Promise((resolve) => { resolveHeld = resolve; });
       await writer.route("**/anti-forgery-challenges", async (route) => {
         if (route.request().postData()?.includes("/manuscript/author-edits")) resolveHeld();
         else await route.continue();
+      });
+    } else if (held === "response" || held === "outcome_unavailable") {
+      await writer.route("**/manuscript/author-edits", async (route) => {
+        assert.equal((await route.fetch()).status(), 200);
+        resolveHeld();
       });
     }
     await writer.locator(MANUSCRIPT_EDITABLE).focus();
@@ -317,10 +331,10 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     // stay (ADR 0107, section 2).
     await writer.keyboard.insertText(" Unsent on page one.");
     await writer.locator('[data-save-state="saving"][data-unsettled-intent-count="1"]').waitFor();
-    if (held === "challenge") {
-      await challengeHeld;
-      // Page 1 leaves its document while its Command Challenge has no response. The tab keeps its sessionStorage, so its
-      // next load has its stored Editor Session.
+    if (held !== "clock") {
+      await requestHeld;
+      // Page 1 leaves its document while its request has no response. The tab keeps its sessionStorage, so its next
+      // load has its stored Editor Session.
       await writer.unrouteAll({ behavior: "ignoreErrors" });
       await writer.goto("about:blank");
     }
@@ -332,26 +346,61 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     await observer.locator("button[data-chapter-id]", { hasText: "Chapter B" }).click();
     assert.equal((await selected).status(), 200);
 
+    // The commands of page 1 after this point.
+    const commands: string[] = [];
+    writer.on("request", (request) => {
+      if (request.method() !== "GET") commands.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    if (held === "outcome_unavailable") {
+      await writer.route("**/manuscript/author-edit-outcomes/**", (route) => route.abort());
+    }
     if (held === "clock") await writer.reload();
     else assert.equal((await writer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
     if (held === "clock") await late.clock.resume();
     const afterLoad = `${held === "clock" ? "Later: " : ""}The first block.\nThe second block. Unsent on page one.`;
+    if (held === "outcome_unavailable") {
+      // The result is not known, so the load sends no command and opens Chapter A with the text of the group.
+      await writer.waitForFunction((expected) => {
+        const status = document.querySelector('[data-save-state="saving"][data-unsettled-intent-count="1"]');
+        const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
+          .map((block) => block.textContent ?? "").join("\n");
+        return status !== null && shown === expected;
+      }, afterLoad);
+      assert.equal(await writer.locator('[data-save-state="saved"]').count(), 0);
+      assert.deepEqual(commands, []);
+      await writer.unrouteAll({ behavior: "ignoreErrors" });
+    }
+    if (held === "response") {
+      // The text of the group is on the Server, so the load opens the Chapter that page 2 set current.
+      await writer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      assert.equal(await manuscriptBody(writer), "");
+      await writer.locator("button[data-chapter-id]", { hasText: "Chapter A" }).click();
+    }
     await writer.waitForFunction((expected) => {
       const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
       const shown = [...document.querySelectorAll("[data-manuscript-editor] > p, [data-manuscript-editor] > h1")]
         .map((block) => block.textContent ?? "").join("\n");
       return status !== null && status.getAttribute("data-editor-failure") === "" && shown === expected;
     }, afterLoad);
-    await typeAndSave(writer, "end", " Typed after the load.");
-    await writer.reload();
-    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
-    assert.equal(await manuscriptBody(writer), `${afterLoad} Typed after the load.`);
+    if (held === "outcome_unavailable") {
+      // The Project keeps Chapter B current, so the reload opens B. Chapter A has the text on the Server.
+      await writer.reload();
+      await writer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      await writer.locator("button[data-chapter-id]", { hasText: "Chapter A" }).click();
+      await writer.waitForFunction((expected) => [...document.querySelectorAll("[data-manuscript-editor] > p")]
+        .map((block) => block.textContent ?? "").join("\n") === expected, afterLoad);
+    } else {
+      await typeAndSave(writer, "end", " Typed after the load.");
+      await writer.reload();
+      await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+      assert.equal(await manuscriptBody(writer), `${afterLoad} Typed after the load.`);
+    }
     // Each applied Author Edit, the Volume, each Chapter, and each Set Current Chapter is one author action.
     const count = async (result: string) => Number(await queryPostgres(`SELECT count(*)::text
       FROM storyos.domain_receipts WHERE project_id = '${projectId}'::uuid AND command_kind = 'applyAuthorEdit'
       AND result_kind ${result}`));
     const [applied, conflicted] = [await count("= 'authoritative_applied'"), await count("<> 'authoritative_applied'")];
-    assert.ok(applied >= (held === "clock" ? 4 : 3));
+    assert.ok(applied >= (held === "clock" ? 4 : held === "outcome_unavailable" ? 2 : 3));
     await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
       createChapter: 2, setCurrentChapter: 2, applyAuthorEdit: applied + conflicted }, authorActions: applied + 5 });
     assert.deepEqual(errors, []);

@@ -505,6 +505,23 @@ async function settleAuthorEditResponse({
   workspace.session = canonical;
 }
 
+/**
+ * Sends the protected outcome Query of an Author Edit group that went out with no known result, and settles the group
+ * with the answer. After a load, the contract permits only this Query before each other command of the Editor Session
+ * (`web-editor-session-synchronization-and-recovery-semantics.md`, `DeliveryUnknown`). A group with no available
+ * capsule also becomes unresolved with no Query, so its save sends no fresh Command Challenge and no replay.
+ */
+export async function queryLostOutcome(workspace: EditorWorkspace, group: JournalSubmissionGroup, { baseUrl,
+  fetchImpl, cryptoImpl }: { baseUrl: string; fetchImpl: typeof fetch; cryptoImpl: Crypto }): Promise<void> {
+  const unresolved = group.reconciliation?.kind === "outcome_query_unresolved";
+  if (!unresolved && !await readAvailableCommandProof(workspace, group)) {
+    await markOutcomeQueryUnresolved(workspace, group);
+    return;
+  }
+  await reconcileLostAcknowledgement({ workspace, group: unresolved ? group : await markOutcomeQueryUnresolved(workspace,
+    group), baseUrl, fetchImpl, cryptoImpl, settleFromCommandResponse: settleAuthorEditResponse });
+}
+
 export async function submitOnePendingAuthorEdit({
   workspace, baseUrl, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
 }: {
