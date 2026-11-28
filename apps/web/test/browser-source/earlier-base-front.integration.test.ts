@@ -69,20 +69,23 @@ function gate() {
 /**
  * A fake Server of one Project. The Chapter starts at the base Revision, and `writeInOtherTab` gives it a later
  * Revision of another tab. An Author Edit on an earlier Revision gets `stale_authoritative_head`. With `applies`, an
- * Author Edit on the current Revision applies and gives that Revision; without it, it gets no response, so the test sees
- * that it went out. The first creation gives the Editor Session on the base, the second one a new Editor Session on the
+ * Author Edit on the current Revision of this tab (the base, or a Revision of `applies`) applies and gives the next
+ * Revision of `applies`; else it gets no response, so the test sees that it went out. With `readHeadAtRequest`, a
+ * Chapter read gives the head at its request, before its gate. The first creation gives the Editor Session on the base, the second one a new Editor Session on the
  * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
  * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them.
  * Each Set Current Chapter first runs the next action of `beforeSwitch`, and each Project read the next action of
  * `beforeProjectRead`. It records each request and
  * the body of each Author Edit, and it records and throws on each request that it does not serve.
  */
-function fakeServer(applies?: Revision) {
+function fakeServer(applies?: Revision | Revision[]) {
+  const own = applies === undefined ? [] : Array.isArray(applies) ? [...applies] : [applies];
+  const chain = new Set([REVISION, ...own.map((applied) => applied.revision_id)]);
   const requests: string[] = [];
   const unexpected: string[] = [];
   const switches: unknown[] = [];
   const edits: Record<string, unknown>[] = [];
-  const hooks: { beforeSwitch: (() => void)[]; beforeProjectRead: (() => void)[] } =
+  const hooks: { beforeSwitch: (() => void)[]; beforeProjectRead: (() => void)[]; readHeadAtRequest?: boolean } =
     { beforeSwitch: [], beforeProjectRead: [] };
   const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void> } = {};
   // The head of the Chapter and the base of the stored Editor Session, with their activity positions.
@@ -155,9 +158,11 @@ function fakeServer(applies?: Revision) {
         base_snapshot_id: installed.snapshot_id, project_activity_position: installed.project_activity_position });
     }
     if (route === CHAPTER_READ) {
+      const atRequest = hooks.readHeadAtRequest === true ? { head: world.head, position: world.position } : undefined;
       await gates.chapter;
-      return jsonResponse({ ...scenario.chapter, project_activity_position: String(world.position),
-        chapter: { ...scenario.chapter.chapter, current_revision: world.head } });
+      const { head, position } = atRequest ?? world;
+      return jsonResponse({ ...scenario.chapter, project_activity_position: String(position),
+        chapter: { ...scenario.chapter.chapter, current_revision: head } });
     }
     if (route === `POST ${project}/anti-forgery-challenges`) {
       return jsonResponse({ nonce: "a".repeat(64), expires_at: new Date(Date.now() + 60_000).toISOString(),
@@ -206,15 +211,15 @@ function fakeServer(applies?: Revision) {
       const request = requireRequestBody(init);
       edits.push(request);
       const expected = request.expected_authoritative_revision_id;
-      if (expected === world.head.revision_id && (applies === undefined || expected !== REVISION)) {
-        return new Promise<Response>(() => {});
-      }
-      const applied = applies !== undefined && expected === world.head.revision_id;
+      const next = chain.has(expected as string) ? own[0] : undefined;
+      if (expected === world.head.revision_id && next === undefined) return new Promise<Response>(() => {});
+      const applied = next !== undefined && expected === world.head.revision_id;
       if (applied) {
         // The Server applies the edit before it answers, so a read gives the applied Revision.
-        world.head = applies;
+        own.shift();
+        world.head = next;
         world.position += 1;
-        world.stored = applies;
+        world.stored = next;
         world.storedPosition = world.position;
       }
       // The answer has the state at the time when the Server classified the edit.
@@ -222,9 +227,9 @@ function fakeServer(applies?: Revision) {
       await gates.edit;
       const answer = createAppliedAuthorEditResponse({ request, commandDigest: await digestApplyAuthorEdit(request as never),
         idempotencyKey: requestHeaders(init).get("idempotency-key")!, priorRevisionId: expected as string,
-        ...applies === undefined ? {} : { authoritativeRevisionId: applies.revision_id },
+        ...next === undefined ? {} : { authoritativeRevisionId: next.revision_id },
         projectActivityPosition: String(position) });
-      if (applied) return jsonResponse({ ...answer, effect: { ...answer.effect, authoritative_revision: applies } });
+      if (applied) return jsonResponse({ ...answer, effect: { ...answer.effect, authoritative_revision: next } });
       return jsonResponse({ ...answer, effect: { kind: "conflicted", reason: "stale_authoritative_head",
         current_authoritative_revision_id: head }, receipt: { ...answer.receipt, result: "conflicted",
         prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [], authoritative_revision_ids: [],
@@ -527,6 +532,82 @@ it("checks again after input during the quiet step of the front check, and catch
   }, timers);
 });
 
+it("checks again after input during each of five quiet steps of the front check, and catches up", async () => {
+  const chars = ["一", "二", "三", "四", "五", "六"];
+  const typed = (end: number) => `渡口。${chars.slice(0, end).join("")}`;
+  const server = fakeServer(chars.map((_, index) =>
+    revision(`018f0000-0000-7001-8000-000000000a7${index}`, "雨夜。", typed(index + 1))));
+  const { timers } = manualTimers();
+  await withView(server, async (root) => {
+    await type(root, chars[0]!);
+    await expect.poll(() => unsettled(root)).toBe("1");
+    let held = gate();
+    server.gates.edit = held.opened;
+    server.requests.length = 0;
+    document.dispatchEvent(new Event("visibilitychange"));
+    // Each quiet step sends the last character, and the next character comes while that save waits for its response.
+    for (let index = 1; index < chars.length; index += 1) {
+      await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(index);
+      const next = gate();
+      server.gates.edit = next.opened;
+      await type(root, chars[index]!);
+      held.open();
+      held = next;
+    }
+    await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(chars.length);
+    server.writeInOtherTab(revision(LATER_REVISION, "雨夜，风起。", typed(chars.length)));
+    held.open();
+
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: `雨夜，风起。\n${typed(chars.length)}`,
+      editable: true, save: "saved", failure: "", stored: NEW_SESSION });
+    expect({ chapterReads: count(server, CHAPTER_READ), unexpected: server.unexpected })
+      .toEqual({ chapterReads: 1, unexpected: [] });
+  }, timers);
+});
+
+it("ends the front check when the tab goes to the background during its quiet step, and checks again at the next "
+  + "return to the front", async () => {
+  const server = fakeServer([revision(APPLIED_REVISION, "雨夜。", "渡口。无"),
+    revision("018f0000-0000-7001-8000-000000000a76", "雨夜。", "渡口。无人"),
+    revision("018f0000-0000-7001-8000-000000000a77", "雨夜。", "渡口。无人了")]);
+  const edit = gate();
+  const { timers, fire } = manualTimers();
+  const visibility = vi.spyOn(document, "visibilityState", "get");
+  try {
+    await withView(server, async (root) => {
+      await type(root, "无");
+      await expect.poll(() => unsettled(root)).toBe("1");
+      server.gates.edit = edit.opened;
+      server.requests.length = 0;
+      document.dispatchEvent(new Event("visibilitychange"));
+      await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(1);
+      await type(root, "人");
+      visibility.mockReturnValue("hidden");
+      edit.open();
+      // In the background, the idle timer sends each save, and the front check reads nothing.
+      const saved = (edits: number) => {
+        fire();
+        return count(server, AUTHOR_EDIT) === edits && unsettled(root) === "0";
+      };
+      await expect.poll(() => saved(2)).toBe(true);
+      await type(root, "了");
+      await expect.poll(() => saved(3)).toBe(true);
+      expect(count(server, CHAPTER_READ)).toBe(0);
+
+      visibility.mockReturnValue("visible");
+      server.writeInOtherTab(revision(LATER_REVISION, "雨夜，风起。", "渡口。无人了"));
+      document.dispatchEvent(new Event("visibilitychange"));
+
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。无人了",
+        editable: true, save: "saved", failure: "", stored: NEW_SESSION });
+      expect({ chapterReads: count(server, CHAPTER_READ), unexpected: server.unexpected })
+        .toEqual({ chapterReads: 1, unexpected: [] });
+    }, timers);
+  } finally {
+    visibility.mockRestore();
+  }
+});
+
 it("reads the Chapter when an IME composition that is open when the tab comes to the front ends", async () => {
   const server = fakeServer();
   await withView(server, async (root) => {
@@ -641,6 +722,37 @@ it("keeps a keystroke behind a save that applies when the save answers before th
     expect({ ...shown(root), chapterReads: count(server, CHAPTER_READ), reopens: count(server, PROJECT_READ),
       unexpected: server.unexpected }).toEqual({ text: "雨夜。\n渡口。无人", editable: true, save: "saving",
       failure: "", stored: SESSION, chapterReads: 1, reopens: 0, unexpected: [] });
+  }, timers);
+});
+
+it("starts no catch-up when the front read gives a Revision earlier than the Revision that a save installed during "
+  + "the read", async () => {
+  const server = fakeServer(revision(APPLIED_REVISION, "雨夜。", "渡口。无"));
+  const chapter = gate();
+  const { timers, fire } = manualTimers();
+  await withView(server, async (root) => {
+    // The read takes the base Revision at its request, and its response comes after the save installed a later one.
+    server.hooks.readHeadAtRequest = true;
+    server.gates.chapter = chapter.opened;
+    server.requests.length = 0;
+    document.dispatchEvent(new Event("visibilitychange"));
+    await expect.poll(() => server.requests.includes(CHAPTER_READ)).toBe(true);
+    await type(root, "无");
+    await expect.poll(() => unsettled(root)).toBe("1");
+    fire();
+    await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id"))
+      .toBe(APPLIED_REVISION);
+
+    chapter.open();
+    // A later front check reads again only when the first check ended with no catch-up.
+    await expect.poll(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      return count(server, CHAPTER_READ);
+    }).toBe(2);
+
+    expect({ ...shown(root), reopens: count(server, PROJECT_READ), creations: count(server, CREATION),
+      unexpected: server.unexpected }).toEqual({ text: "雨夜。\n渡口。无", editable: true, save: "saved", failure: "",
+      stored: SESSION, reopens: 0, creations: 0, unexpected: [] });
   }, timers);
 });
 

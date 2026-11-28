@@ -127,8 +127,6 @@ interface ProjectEditorViewProps extends ProjectReadyViewProps {
 type WaitingSelection = { chapterId: string; contents: boolean };
 
 const noChanges = () => () => {};
-// Each attempt of a front check after input waits for the save of that input, so a few attempts are sufficient.
-const FRONT_CHECK_ATTEMPTS = 4;
 
 /** Resolves when no IME composition is open in the Arrival Input `typed`, after the capture of its end. */
 function compositionEnded(typed: ArrivalInput): Promise<void> {
@@ -534,22 +532,27 @@ function ProjectEditorView({
         || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
         || catchingUpRef.current) return;
       // Input during the quiet step refuses it, so the check waits for the end of that input and its save, and runs
-      // again. Input after each attempt has its own save, which finds a later Revision too. The check compares the read
-      // with the Revision of the editor when the read ends, so a save that applied during the read starts no catch-up.
+      // again, with no limit: each wait is for the editor, not a timer. A tab that went to the background ends the
+      // check, and its next return to the front starts a new one. A Revision that the tab installed during the read is
+      // at least as late as the read, so that read starts no catch-up.
       const check = async () => {
-        for (let attempt = 1; attempt <= FRONT_CHECK_ATTEMPTS; attempt += 1) {
+        for (;;) {
           await writing.whenComposed();
-          const quiet = await writing.runAfterQuiesce("settled", () => readCurrentChapter({ baseUrl, fetchImpl } as
-            StoryOSQueryOptions, state.project.project.project_id, currentChapterId,
-          state.project.project_scope.owner_user_id));
+          if (document.visibilityState !== "visible") return undefined;
+          let installed: string | undefined;
+          const quiet = await writing.runAfterQuiesce("settled", () => {
+            installed = writing.snapshot().projection.authoritative_revision_id;
+            return readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions, state.project.project.project_id,
+              currentChapterId, state.project.project_scope.owner_user_id);
+          });
           if (quiet.kind === "ran") {
-            return quiet.result.chapter.current_revision.revision_id
-              === writing.snapshot().projection.authoritative_revision_id ? undefined : quiet.result;
+            const editor = writing.snapshot().projection.authoritative_revision_id;
+            return editor !== installed || quiet.result.chapter.current_revision.revision_id === editor
+              ? undefined : quiet.result;
           }
           if (quiet.reason !== "incomplete_semantic_intent" || catchingUpRef.current) return undefined;
           await writing.whenIdle();
         }
-        return undefined;
       };
       const read = check().catch(() => undefined);
       frontReadRef.current = read;
