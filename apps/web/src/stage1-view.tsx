@@ -1131,9 +1131,9 @@ function ProjectEditorView({
             && JSON.stringify(pending.blocks) === JSON.stringify(savedRevision.blocks))}
         onDecisionEnd={copies.proposalsChanged}
         onAccepted={async (settled, accepted) => {
-          // An applied Acceptance whose response has the Editor Session state shows its Revision with no read
-          // (ADR 0106 section 3), and with a list read only for a Project title that is not the title on the screen
-          // (#1967). A decision with no settled response opens the Project with each check of the first open.
+          // An applied Acceptance whose response has the Editor Session state shows its Revision with no read of the
+          // Editor Session (ADR 0106 section 3), and with a list read only for a Project title that is not the title on
+          // the screen (#1967). A decision with no settled response opens the Project with each check of the first open.
           const held = heldProject();
           const shown = held?.projectId === state.project.project.project_id ? held
             : { title: state.project.project.title, revision: state.revision };
