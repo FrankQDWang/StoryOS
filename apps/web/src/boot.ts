@@ -145,6 +145,19 @@ export async function openControlledProject(options: ProjectOpenOptions): Promis
   return await openProjectWorkspace(options, boot.profile, read.value.project, read.value.revision);
 }
 
+/**
+ * The result of a reopen that keeps its Chapter when Set Current Chapter of that Chapter has no effect: the tab stays on
+ * its Chapter with its text, opens nothing, and tries again at its next return to the front (ADR 0107, section 2).
+ */
+export type ChapterKeptState = { kind: "chapter-kept" };
+
+type ReopenOptions = Omit<ProjectOpenOptions, "projectId"> & {
+  opened: Pick<ProjectReadyState, "profile" | "project">;
+  chapterId?: string | undefined;
+  shown?: readonly ManuscriptParagraph[] | undefined;
+  chapter?: GetChapterResponse | undefined;
+};
+
 /** The Chapter read and the Editor Session read that a reopen starts with the Project read (#1898). */
 type EarlyChapterOpen = {
   chapterId: string;
@@ -161,13 +174,14 @@ type EarlyChapterOpen = {
  * workspace ends after the Chapter read of the Chapter of the Project read, and only that open writes to the Journal.
  * `shown` is the text of an editor whose base is earlier than the Server. The open puts it on the current Chapter
  * (ADR 0107, section 2). `chapter` is a read of the Chapter `chapterId` that the reopen uses instead of a new read.
+ * Only a reopen with `chapter` keeps its Chapter, so only that reopen can give `ChapterKeptState`.
  */
-export async function reopenControlledProject(options: Omit<ProjectOpenOptions, "projectId"> & {
-  opened: Pick<ProjectReadyState, "profile" | "project">;
-  chapterId?: string | undefined;
-  shown?: readonly ManuscriptParagraph[] | undefined;
-  chapter?: GetChapterResponse | undefined;
-}): Promise<ControlledProjectState> {
+export async function reopenControlledProject(options: ReopenOptions & { chapter?: undefined }):
+  Promise<ControlledProjectState>;
+export async function reopenControlledProject(options: ReopenOptions):
+  Promise<ControlledProjectState | ChapterKeptState>;
+export async function reopenControlledProject(options: ReopenOptions):
+  Promise<ControlledProjectState | ChapterKeptState> {
   const { baseUrl, opened, fetchImpl = globalThis.fetch, signal, indexedDBImpl = globalThis.indexedDB,
     cryptoImpl = globalThis.crypto } = options;
   const scope = opened.project.project_scope;
@@ -200,8 +214,15 @@ export async function reopenControlledProject(options: Omit<ProjectOpenOptions, 
 
 /**
  * Reads the Chapter and the Editor Session of a Project at the same time, or the tree of an empty Project. It uses the
- * early reads of a reopen only when they are of the Current Chapter of `project`.
+ * early reads of a reopen only when they are of the Current Chapter of `project`. Only an open that keeps its Chapter
+ * can give `ChapterKeptState`.
  */
+async function openProjectWorkspace(options: ProjectOpenOptions, profile: Release1ProtocolProfile,
+  project: GetProjectResponse, revision: string): Promise<ControlledProjectState>;
+async function openProjectWorkspace(options: ProjectOpenOptions, profile: Release1ProtocolProfile,
+  project: GetProjectResponse, revision: string, early: EarlyChapterOpen | undefined,
+  shown: readonly ManuscriptParagraph[] | undefined, keepChapter: boolean):
+  Promise<ControlledProjectState | ChapterKeptState>;
 async function openProjectWorkspace(
   options: ProjectOpenOptions,
   profile: Release1ProtocolProfile,
@@ -210,7 +231,7 @@ async function openProjectWorkspace(
   early?: EarlyChapterOpen,
   shown?: readonly ManuscriptParagraph[],
   keepChapter = false,
-): Promise<ControlledProjectState> {
+): Promise<ControlledProjectState | ChapterKeptState> {
   const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
     indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
   const queryOptions = { baseUrl, fetchImpl, signal } as StoryOSQueryOptions;
@@ -259,6 +280,10 @@ async function openProjectWorkspace(
     if (back !== undefined) {
       ({ project, revision } = back.read);
       reading = Promise.resolve({ kind: "read", value: back.chapter });
+    } else if (keepChapter && other !== undefined) {
+      // The tab keeps its Chapter, so it does not open the Chapter that another tab set current.
+      void opening.abandon();
+      return { kind: "chapter-kept" };
     }
     const chapter = await (reading ?? readCurrent());
     if (chapter.kind === "failed") {
@@ -279,8 +304,9 @@ const SET_CHAPTER_BACK_ATTEMPTS = 8;
  * Sets the Chapter of the stored Editor Session current again, with that Session. `read` is a read of that Chapter,
  * when the reopen has one. A conflict (`wrong_target_head` or `stale_current_chapter`) is a command of another tab
  * after the reads, so the tab reads the Project and the Chapter again and sends again, at most
- * `SET_CHAPTER_BACK_ATTEMPTS` times. When another tab set the Chapter current again, the tab sends nothing more. It
- * gives the Project and the Chapter after the command, or `undefined` when the command had no effect.
+ * `SET_CHAPTER_BACK_ATTEMPTS` times. A Project read after an applied command that names another Chapter is one more
+ * conflict. When another tab set the Chapter current again, the tab sends nothing more. It gives the Project and the
+ * Chapter after the command, or `undefined` when the command had no effect at the end.
  */
 async function setChapterBack(options: ProjectOpenOptions, project: GetProjectResponse,
   other: { chapterId: string; editorSessionId: string }, read: GetChapterResponse | undefined) {
@@ -296,19 +322,19 @@ async function setChapterBack(options: ProjectOpenOptions, project: GetProjectRe
     const switched = await setOwnedCurrentChapter({ baseUrl, fetchImpl, cryptoImpl, projectId,
       chapterId: other.chapterId, expectedCurrentChapterId: current,
       expectedTargetRevisionId: chapter.chapter.current_revision.revision_id, editorSessionId: other.editorSessionId });
-    if (switched.effect.kind === "authoritative_applied") break;
-    if (switched.effect.kind !== "conflicted" || attempt === SET_CHAPTER_BACK_ATTEMPTS) return undefined;
+    const applied = switched.effect.kind === "authoritative_applied";
+    if (!applied && (switched.effect.kind !== "conflicted" || attempt === SET_CHAPTER_BACK_ATTEMPTS)) return undefined;
     const now = await readSessionProject(queryOptions, projectId, "together");
     const reopened = now?.project.project.open;
     if (reopened?.kind !== "current_chapter") return undefined;
+    if (reopened.current_chapter_id === other.chapterId) {
+      return { read: now!, chapter: applied ? chapter : await readChapter() };
+    }
+    // Another tab set another Chapter current after the command applied: that is one more conflict.
+    if (attempt === SET_CHAPTER_BACK_ATTEMPTS) return undefined;
     current = reopened.current_chapter_id;
     chapter = await readChapter();
-    if (current === other.chapterId) return { read: now!, chapter };
   }
-  const after = await readSessionProject(queryOptions, projectId, "together");
-  const reopened = after?.project.project.open;
-  return reopened?.kind === "current_chapter" && reopened.current_chapter_id === other.chapterId
-    ? { read: after!, chapter } : undefined;
 }
 
 /** Reads the Chapter `chapterId` of the Project, and refuses a read of another Project Scope or Chapter. */

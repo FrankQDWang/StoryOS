@@ -73,7 +73,8 @@ function gate() {
  * that it went out. The first creation gives the Editor Session on the base, the second one a new Editor Session on the
  * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
  * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them.
- * Each Set Current Chapter first runs the next action of `beforeSwitch`. It records each request and
+ * Each Set Current Chapter first runs the next action of `beforeSwitch`, and each Project read the next action of
+ * `beforeProjectRead`. It records each request and
  * the body of each Author Edit, and it records and throws on each request that it does not serve.
  */
 function fakeServer(applies?: Revision) {
@@ -81,7 +82,8 @@ function fakeServer(applies?: Revision) {
   const unexpected: string[] = [];
   const switches: unknown[] = [];
   const edits: Record<string, unknown>[] = [];
-  const hooks: { beforeSwitch: (() => void)[] } = { beforeSwitch: [] };
+  const hooks: { beforeSwitch: (() => void)[]; beforeProjectRead: (() => void)[] } =
+    { beforeSwitch: [], beforeProjectRead: [] };
   const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void> } = {};
   // The head of the Chapter and the base of the stored Editor Session, with their activity positions.
   const world = { head: BASE, position: 0, stored: BASE, storedPosition: 0, current: CHAPTER };
@@ -114,6 +116,7 @@ function fakeServer(applies?: Revision) {
     }
     if (route === PROJECT_READ) {
       await gates.project;
+      hooks.beforeProjectRead.shift()?.();
       return jsonResponse({ ...scenario.project, project: { ...scenario.project.project,
         open: { kind: "current_chapter", current_chapter_id: world.current } } });
     }
@@ -371,28 +374,79 @@ it("keeps its Chapter and shows the later Revision when the tab with no input co
 
 it("reads again and sets its Chapter current when other tabs save it and set another Chapter current after each read",
   async () => {
+    const server = fakeServer();
+    await withView(server, async (root) => {
+      server.writeInOtherTab();
+      server.setCurrentInOtherTab(CHAPTER_B);
+      server.hooks.beforeSwitch.push(() => { server.writeInOtherTab(LATEST); },
+        () => { server.setCurrentInOtherTab(CHAPTER_C); });
+      server.requests.length = 0;
+
+      document.dispatchEvent(new Event("visibilitychange"));
+
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风停。\n渡口。", editable: true,
+        save: "saved", failure: "", stored: NEW_SESSION });
+      const switched = { chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, editor_session_id: SESSION };
+      // The first command gets `wrong_target_head`, the second one `stale_current_chapter`, and the third one applies.
+      expect({ chapterReads: count(server, CHAPTER_READ), otherReads: count(server, CHAPTER_B_READ),
+        switches: server.switches, unexpected: server.unexpected }).toEqual({ chapterReads: 3, otherReads: 0,
+        switches: [{ ...switched, expected_target_revision_id: LATER_REVISION },
+          { ...switched, expected_target_revision_id: LATEST.revision_id },
+          { ...switched, expected_current_chapter_id: CHAPTER_C, expected_target_revision_id: LATEST.revision_id }],
+        unexpected: [] });
+    });
+  });
+
+it("keeps its Chapter, reads no other Chapter, and sends nothing more when each Set Current Chapter of the front "
+  + "conflicts, and tries again at the next return to the front", async () => {
   const server = fakeServer();
   await withView(server, async (root) => {
     server.writeInOtherTab();
     server.setCurrentInOtherTab(CHAPTER_B);
-    server.hooks.beforeSwitch.push(() => { server.writeInOtherTab(LATEST); },
-      () => { server.setCurrentInOtherTab(CHAPTER_C); });
+    // Before each of 8 commands, another tab saves Chapter A again, so each command gets `wrong_target_head`.
+    for (let index = 0; index < 8; index += 1) {
+      server.hooks.beforeSwitch.push(() => { server.writeInOtherTab(index % 2 === 0 ? LATEST : LATER); });
+    }
+    server.requests.length = 0;
+    document.dispatchEvent(new Event("visibilitychange"));
+    await expect.poll(() => server.switches.length, { timeout: 10_000 }).toBe(8);
+    const atLimit = server.requests.length;
+
+    // A return to the front starts a new check only after the reopen ended, so the ninth command proves that end.
+    await expect.poll(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      return server.switches.length;
+    }, { timeout: 10_000 }).toBe(9);
+    const afterLimit = server.requests.slice(atLimit);
+
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。", editable: true,
+      save: "saved", failure: "", stored: NEW_SESSION });
+    expect({ otherReads: count(server, CHAPTER_B_READ), nextRequests: afterLimit.slice(0, 2),
+      unexpected: server.unexpected }).toEqual({ otherReads: 0,
+      nextRequests: [CHAPTER_READ, PROJECT_READ], unexpected: [] });
+  });
+});
+
+it("sets its Chapter current again when another tab sets another Chapter current after Set Current Chapter of the "
+  + "front applied", async () => {
+  const server = fakeServer();
+  await withView(server, async (root) => {
+    server.writeInOtherTab();
+    server.setCurrentInOtherTab(CHAPTER_B);
+    // The first Project read is of the reopen. The second one comes after the command applied.
+    server.hooks.beforeProjectRead.push(() => {}, () => { server.setCurrentInOtherTab(CHAPTER_C); });
     server.requests.length = 0;
 
     document.dispatchEvent(new Event("visibilitychange"));
 
-    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风停。\n渡口。", editable: true,
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。", editable: true,
       save: "saved", failure: "", stored: NEW_SESSION });
-    const switched = { chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, editor_session_id: SESSION };
-    // The first command gets `wrong_target_head`, the second one `stale_current_chapter`, and the third one applies.
-    expect({ chapterReads: count(server, CHAPTER_READ), otherReads: count(server, CHAPTER_B_READ),
-      switches: server.switches, unexpected: server.unexpected }).toEqual({ chapterReads: 3, otherReads: 0,
-      switches: [{ ...switched, expected_target_revision_id: LATER_REVISION },
-        { ...switched, expected_target_revision_id: LATEST.revision_id },
-        { ...switched, expected_current_chapter_id: CHAPTER_C, expected_target_revision_id: LATEST.revision_id }],
-      unexpected: [] });
+    const switched = { chapter_id: CHAPTER, expected_target_revision_id: LATER_REVISION, editor_session_id: SESSION };
+    expect({ otherReads: count(server, CHAPTER_B_READ), switches: server.switches, unexpected: server.unexpected })
+      .toEqual({ otherReads: 0, switches: [{ ...switched, expected_current_chapter_id: CHAPTER_B },
+        { ...switched, expected_current_chapter_id: CHAPTER_C }], unexpected: [] });
   });
-  });
+});
 
 it("puts the unsent input on the later Revision when the save at the front finds it", async () => {
   const server = fakeServer();

@@ -477,18 +477,25 @@ function ProjectEditorView({
   // A reopen after a settled command of this page reads the Project, the list of Projects, the Chapter `chapterId` (by
   // default the Current Chapter of the page), and the Editor Session at the same time. It does not read the protocol
   // profile again.
-  const reopen = (chapterId?: string, shown?: readonly ManuscriptParagraph[], chapter?: GetChapterResponse) =>
-    reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened: { profile: state.profile, project: state.project },
-      chapterId, shown, chapter });
+  const opened = { profile: state.profile, project: state.project };
+  const reopen = (chapterId?: string) => reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened, chapterId });
 
   // The tab found a later Revision: it opens again on it with its text, and shows no sentence (ADR 0107, section 2).
   // One catch-up runs for each editor part. It waits for an open IME composition, ends input, and makes the editor
   // read-only. It lets the captured input enter the Journal and the submission in flight settle, and closes the
   // controller before the reopen. The close abandons an Author Undo, so the Undo is not sent after the reopen. The
-  // reopen uses `chapter`, or else the read of a front check in flight.
+  // reopen uses `chapter`, or else the read of a front check in flight. When the reopen keeps the Chapter and opens
+  // nothing, the editor stays read-only with its text, and the next return to the front reads the Chapter and opens
+  // again (`keptRef`).
   const catchingUpRef = useRef(false);
   const [catchingUp, setCatchingUp] = useState(false);
   const frontReadRef = useRef<Promise<GetChapterResponse | undefined>>(undefined);
+  const keptRef = useRef<readonly ManuscriptParagraph[]>(undefined);
+  const reopenWith = async (shown: readonly ManuscriptParagraph[], read: GetChapterResponse | undefined) => {
+    const next = await reopenControlledProject({ baseUrl, fetchImpl, cryptoImpl, opened, shown, chapter: read });
+    if (next.kind === "chapter-kept") keptRef.current = shown;
+    else onReopened(next);
+  };
   const catchUp = (chapter?: GetChapterResponse) => {
     if (catchingUpRef.current || writing === undefined) return;
     catchingUpRef.current = true;
@@ -502,7 +509,7 @@ function ProjectEditorView({
       const read = chapter ?? await front;
       const shown = writing.snapshot().projection.blocks;
       writing.close();
-      onReopened(await reopen(undefined, shown, read));
+      await reopenWith(shown, read);
     })();
   };
   // A structural command in flight catches up when its quiet step refuses with `earlier_base`.
@@ -515,6 +522,14 @@ function ProjectEditorView({
   useEffect(() => {
     if (writing === undefined) return undefined;
     const front = () => {
+      const kept = keptRef.current;
+      if (document.visibilityState === "visible" && kept !== undefined) {
+        keptRef.current = undefined;
+        void readCurrentChapter({ baseUrl, fetchImpl } as StoryOSQueryOptions, state.project.project.project_id,
+          currentChapterId, state.project.project_scope.owner_user_id).then((read) => reopenWith(kept, read),
+          () => { keptRef.current = kept; });
+        return;
+      }
       if (document.visibilityState !== "visible" || structureInFlightRef.current || handOverRef.current !== undefined
         || selectedChapterIdRef.current !== currentChapterId || frontReadRef.current !== undefined
         || catchingUpRef.current) return;
