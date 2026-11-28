@@ -40,8 +40,8 @@ import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-sessio
 import { recoveryPrefix } from "./local-recovery-record.ts";
 import { groupNeverSent } from "./protected-transport-capsule.ts";
 import {
-  claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, removeVersion5Session,
-  retainVersion5PartitionText, upgradeVersion5Journal, type Version5Session,
+  claimVersion5Session, freezeUnsentVersion5Groups, recordSessionTransfer, releaseVersion5Session,
+  retainVersion5PartitionText, sessionTransferTarget, upgradeVersion5Journal, type Version5Session,
 } from "./journal-version-5-upgrade.ts";
 
 export {
@@ -359,7 +359,12 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       const choice = await claimVersion5Session(database, stored);
       claimed = choice.claimed;
       // A Session that another page writes with is not this page's Session, so the open creates one.
-      const active = choice.active && !await lockEditorSession(choice.active) ? null : choice.active;
+      let active = choice.active && !await lockEditorSession(choice.active) ? null : choice.active;
+      // A Session whose text an earlier open copied to a later Session goes on in that later Session (#1965).
+      for (let target = active ? await sessionTransferTarget(database, active) : undefined; target !== undefined;
+        target = active ? await sessionTransferTarget(database, active) : undefined) {
+        active = await lockEditorSession(target) ? target : null;
+      }
       // A stored Session read changes nothing on the Server, so it runs with the Chapter read.
       const sessionValue: unknown = active
         ? await getEditorSession({ baseUrl, projectId: scope.project_id,
@@ -390,10 +395,7 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         return opened;
       }
       // The tab stops the use of a stored Session that did not open, so the next open creates a Session.
-      const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
-      if (globalThis.sessionStorage?.getItem(activeSessionKey) === claimed.editor_session_id) {
-        globalThis.sessionStorage.removeItem(activeSessionKey);
-      }
+      globalThis.sessionStorage?.removeItem(`active_session:${scope.owner_user_id}:${scope.project_id}`);
       return startEditorWorkspace(options).finish(chapter, read, shown);
     },
     otherChapter: async (currentChapterId, shown, keep = false) => {
@@ -700,10 +702,11 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
       await appendAuthorEdit(workspace, { ...edit, inputOrigin: "selection_replacement", undoGroupId, createdAt },
         cryptoImpl);
     }
-    // The new Session has the text of the stored Session. While this tab has the lock of the stored Session, no other
-    // tab claims it as a Session of version 5 rows, so a new tab does not copy the same text again (#1965).
-    if (stored !== undefined && catchUp.length > 0) {
-      await removeVersion5Session(database, stored.partition.editor_session_id);
+    // The new Session replaces the stored Session and has its text. The record comes while this tab has the lock of
+    // the stored Session, so no other tab copies the same text again (#1965).
+    const replaced = stored?.partition.editor_session_id;
+    if (replaced !== undefined && replaced !== session.editor_session.editor_session_id) {
+      await recordSessionTransfer(database, replaced, session.editor_session.editor_session_id);
     }
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
     releaseEarlierEditorSessions(session.editor_session.editor_session_id);

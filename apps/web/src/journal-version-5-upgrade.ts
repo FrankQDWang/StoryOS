@@ -2,7 +2,7 @@ import { digestApplyAuthorEdit } from "../../../generated/typescript/storyos-pub
 import type { GetEditorSessionResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace, JournalPartition, JournalSubmissionGroup } from "./editor-types.ts";
 import { uuidV7 } from "./client-identity.ts";
-import { lockEditorSession } from "./editor-session-lock.ts";
+import { lockEditorSession, releaseEditorSession } from "./editor-session-lock.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import {
   candidateTextsFromJournal, hasCurrentSubmissionShape, journalHasOpenWork, readJournalSnapshot,
@@ -23,6 +23,7 @@ const V2_AUTHOR_EDIT = "storyos.command.apply-author-edit.request.v2";
 const UNSENT_KEY = "version_5_unsent_groups";
 const KEPT_KEY = "version_5_kept_partitions";
 const SESSIONS_KEY = "version_5_sessions";
+const TRANSFER_PREFIX = "transferred_session:";
 const WRITER_FIELDS = ["writer_generation", "partition_disposition", "resulting_writer_generation"];
 const PARTITION_FIELDS = ["journal_partition_id", "working_set_partition_id"];
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -179,24 +180,62 @@ export interface Version5Session { editor_session_id: string; journal_partition_
  * of the version 5 rows opens it when no other open tab has it, else the tab opens a new Session. A tab with no stored
  * Session, as a new tab or a browser that started again, opens the first Session of the version 5 rows that no other
  * open tab has. `claimed` is the Session of the version 5 rows that the tab opens, stored or not, so that its text goes
- * to local recovery when it does not open.
+ * to local recovery when it does not open. Another tab can transfer a Session between the read of the Sessions and the
+ * lock (`recordSessionTransfer`), so the check reads the Sessions again after the lock.
  */
 export async function claimVersion5Session(database: IDBDatabase, stored: string | null | undefined):
   Promise<{ active: string | null | undefined; claimed?: Version5Session }> {
-  const marker = await requestResult(database.transaction("metadata", "readonly").objectStore("metadata")
-    .get(SESSIONS_KEY)) as { value: Version5Session[] } | undefined;
-  const sessions = marker?.value ?? [];
+  const listed = async (editorSessionId: string) => (await version5Sessions(database))
+    .find((item) => item.editor_session_id === editorSessionId);
+  const sessions = await version5Sessions(database);
   if (stored) {
-    const session = sessions.find((item) => item.editor_session_id === stored);
-    if (session === undefined) return { active: stored };
-    return await lockEditorSession(session.editor_session_id) ? { active: stored, claimed: session } : { active: null };
+    if (!sessions.some((item) => item.editor_session_id === stored)) return { active: stored };
+    if (!await lockEditorSession(stored)) return { active: null };
+    const session = await listed(stored);
+    return session === undefined ? { active: stored } : { active: stored, claimed: session };
   }
-  for (const session of sessions) {
-    if (await lockEditorSession(session.editor_session_id)) {
-      return { active: session.editor_session_id, claimed: session };
-    }
+  for (const { editor_session_id: editorSessionId } of sessions) {
+    if (!await lockEditorSession(editorSessionId)) continue;
+    const session = await listed(editorSessionId);
+    if (session !== undefined) return { active: editorSessionId, claimed: session };
+    releaseEditorSession(editorSessionId);
   }
   return { active: stored };
+}
+
+async function version5Sessions(database: IDBDatabase): Promise<Version5Session[]> {
+  const marker = await requestResult(database.transaction("metadata", "readonly").objectStore("metadata")
+    .get(SESSIONS_KEY)) as { value: Version5Session[] } | undefined;
+  return marker?.value ?? [];
+}
+
+/**
+ * Records that the open of the new Editor Session `to` replaced the stored Session `from`, after the new Session got the
+ * text of `from` (ADR 0107, section 2). In the same transaction it removes `from` from the Sessions of the version 5
+ * rows. The tab calls it before it ends the lock of `from`, so no other tab claims `from` and copies the same text
+ * again (#1965). A later open of `from`, as after a stop before the tab stored `to`, or in a duplicated tab, goes on in
+ * `to` (`sessionTransferTarget`).
+ */
+export async function recordSessionTransfer(database: IDBDatabase, from: string, to: string): Promise<void> {
+  const transaction = database.transaction("metadata", "readwrite");
+  const metadata = transaction.objectStore("metadata");
+  metadata.put({ key: `${TRANSFER_PREFIX}${from}`, value: { editor_session_id: to } });
+  const marker = await requestResult(metadata.get(SESSIONS_KEY)) as { value: Version5Session[] } | undefined;
+  if (marker?.value.some((item) => item.editor_session_id === from)) {
+    const rest = marker.value.filter((item) => item.editor_session_id !== from);
+    if (rest.length === 0) metadata.delete(SESSIONS_KEY);
+    else metadata.put({ key: SESSIONS_KEY, value: rest });
+  }
+  await transactionResult(transaction);
+}
+
+/** The Editor Session that got the text of the Session `editorSessionId` (`recordSessionTransfer`), if one did. */
+export async function sessionTransferTarget(database: IDBDatabase, editorSessionId: string)
+  : Promise<string | undefined> {
+  const row = await requestResult(database.transaction("metadata", "readonly").objectStore("metadata")
+    .get(`${TRANSFER_PREFIX}${editorSessionId}`)) as { value?: { editor_session_id?: unknown } } | undefined;
+  const target = row?.value?.editor_session_id;
+  return typeof target === "string" ? target : undefined;
 }
 
 /**
@@ -209,12 +248,8 @@ export async function releaseVersion5Session(database: IDBDatabase, session: Ver
   await removeVersion5Session(database, session.editor_session_id);
 }
 
-/**
- * Removes the Editor Session `editorSessionId` from the Sessions of the version 5 rows, so that no tab claims it. A
- * catch-up that copied the text of that Session to a new Session calls it before it ends the lock of the Session, so a
- * new tab does not copy the same text again.
- */
-export async function removeVersion5Session(database: IDBDatabase, editorSessionId: string): Promise<void> {
+/** Removes the Editor Session `editorSessionId` from the Sessions of the version 5 rows, so that no tab claims it. */
+async function removeVersion5Session(database: IDBDatabase, editorSessionId: string): Promise<void> {
   const transaction = database.transaction("metadata", "readwrite");
   const metadata = transaction.objectStore("metadata");
   const marker = await requestResult(metadata.get(SESSIONS_KEY)) as { value: Version5Session[] } | undefined;
