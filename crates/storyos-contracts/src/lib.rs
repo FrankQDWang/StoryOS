@@ -128,9 +128,10 @@ pub use release1_author_edit::{
 };
 pub use release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
-    ApplyAuthorEditUnknownObservation, GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD,
-    GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH, GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
-    GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
+    ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD, GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeResponse,
+    ReconciliationRequired,
 };
 pub use release1_create_chapter::{
     CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_METHOD, CREATE_CHAPTER_PATH,

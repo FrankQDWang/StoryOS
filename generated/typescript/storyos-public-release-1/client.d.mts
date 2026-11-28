@@ -637,7 +637,9 @@ export type ApplyAuthorEditReconfirmationReason = "admission_expired" | "binding
 
 export type ApplyAuthorEditUnknownObservation = { "observation_kind": "challenge_issued", expires_at: string, } | { "observation_kind": "admission_committed", command_id: string, author_command_admission_id: string, reconciliation_required: true, };
 
-export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: ApplyAuthorEditResponse, } | { "outcome_kind": "rejected", reason: ApplyAuthorEditRejectionReason, } | { "outcome_kind": "requires_reconfirmation", command_id: string, author_command_admission_id: string, reconfirmation_reason: ApplyAuthorEditReconfirmationReason, } | { "outcome_kind": "still_unknown", observation: ApplyAuthorEditUnknownObservation, };
+export type CommittedApplyAuthorEdit = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
+
+export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: CommittedApplyAuthorEdit, } | { "outcome_kind": "rejected", reason: ApplyAuthorEditRejectionReason, } | { "outcome_kind": "requires_reconfirmation", command_id: string, author_command_admission_id: string, reconfirmation_reason: ApplyAuthorEditReconfirmationReason, } | { "outcome_kind": "still_unknown", observation: ApplyAuthorEditUnknownObservation, };
 
 export type GetApplyAuthorEditOutcomeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, outcome: ApplyAuthorEditOutcome, };
 

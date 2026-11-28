@@ -14,7 +14,7 @@ use crate::release1_author_edit::{
 };
 use crate::release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
-    ApplyAuthorEditUnknownObservation, GET_APPLY_AUTHOR_EDIT_OUTCOME,
+    ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit, GET_APPLY_AUTHOR_EDIT_OUTCOME,
     GetApplyAuthorEditOutcomeRequest, GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
@@ -334,7 +334,7 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME_ROW: OperationRow = OperationRow 
     schemas: SchemaSources::get(
         SchemaSource::typed("apply-author-edit-outcome-response", raw_schema::<GetApplyAuthorEditOutcomeResponse>, "StoryOS Apply Author Edit Outcome Response", GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE),
     ),
-    typescript: &[GetApplyAuthorEditOutcomeRequest::decl, ApplyAuthorEditRejectionReason::decl, ApplyAuthorEditReconfirmationReason::decl, ApplyAuthorEditUnknownObservation::decl, ApplyAuthorEditOutcome::decl, GetApplyAuthorEditOutcomeResponse::decl],
+    typescript: &[GetApplyAuthorEditOutcomeRequest::decl, ApplyAuthorEditRejectionReason::decl, ApplyAuthorEditReconfirmationReason::decl, ApplyAuthorEditUnknownObservation::decl, CommittedApplyAuthorEdit::decl, ApplyAuthorEditOutcome::decl, GetApplyAuthorEditOutcomeResponse::decl],
     fixture: Fixture::Json(r#"{
       "correlation_id": "018f0000-0000-7001-8000-000000000081",
       "outcome": {
@@ -473,9 +473,7 @@ const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE: &[Patch] = &[
             "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/author_action_sequence",
             "/$defs/ApplyAuthorEditEffect/oneOf/0/properties/project_activity_position",
             "/$defs/ApplyAuthorEditEffect/oneOf/1/properties/author_action_sequence",
-            "/$defs/ApplyAuthorEditResponse/properties/local_intent_sequence",
-            "/$defs/EditorBaseSnapshot/properties/project_activity_position",
-            "/$defs/EditorSessionBinding/properties/client_session_generation",
+            "/$defs/CommittedApplyAuthorEdit/properties/local_intent_sequence",
         ],
     ),
     Patch(

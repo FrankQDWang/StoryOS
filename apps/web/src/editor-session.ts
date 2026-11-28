@@ -423,9 +423,10 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
 /**
  * The open of the Project after an applied Acceptance whose response has the Editor Session state of the editor of
  * `state`, with no read (ADR 0106 section 3). The open writes the new base as the active base of the Journal of the
- * editor and keeps that Journal. It gives `undefined` when the response does not fit the editor: another Editor
- * Session, another Chapter, a base that is not on the Revision of the response, or a Journal whose active base is not
- * the base of the editor. The page then opens the Project again, as after a response with no state.
+ * editor and keeps that Journal. It gives `undefined` when the response does not fit the editor: another Current
+ * Chapter, another Editor Session, the Snapshot identity of the earlier base, a base that is not on the Revision of the
+ * response, or a Journal whose active base is not the base of the editor. The display checked the Project scope of the
+ * response. The page then opens the Project again, as after a response with no state.
  */
 export async function acceptedProjectState(state: ProjectReadyState, accepted: AcceptProposalResponse)
   : Promise<ProjectReadyState | undefined> {
@@ -435,8 +436,9 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
   const open = accepted.project.open;
   if (editor.kind !== "editor-ready" || served === undefined || effect.kind !== "applied"
     || open.kind !== "current_chapter" || open.current_chapter_id !== state.chapter.chapter.chapter_id
-    || accepted.project.project_id !== state.project.project.project_id
-    || JSON.stringify(served.editor_session) !== JSON.stringify(editor.session.editor_session)) {
+    || JSON.stringify(served.editor_session) !== JSON.stringify(editor.session.editor_session)
+    // A new base has a new Snapshot identity (ADR 0060).
+    || served.base_snapshot.snapshot_id === editor.session.base_snapshot.snapshot_id) {
     return undefined;
   }
   const chapter: GetChapterResponse = { ...state.chapter, project_activity_position: effect.project_activity_position,

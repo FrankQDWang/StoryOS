@@ -14,6 +14,7 @@ const SAVED_SNAPSHOT = "018f0000-0000-7001-8000-000000000038";
 const CHALLENGE = "POST /api/v1/projects/018f0000-0000-7001-8000-000000000002/anti-forgery-challenges";
 const AUTHOR_EDIT = "POST /api/v1/projects/018f0000-0000-7001-8000-000000000002/manuscript/author-edits";
 const SESSION_READ = `GET /api/v1/projects/018f0000-0000-7001-8000-000000000002/editor-sessions/${SESSION}`;
+const OUTCOME = "GET /api/v1/projects/018f0000-0000-7001-8000-000000000002/manuscript/author-edit-outcomes/";
 
 async function bodyDigest(body: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body)));
@@ -38,10 +39,12 @@ async function savedBase() {
  * Saves one edit against a Server that answers each Author Edit with `respond`. The Server serves the Challenge and
  * the Author Edit, and the read of the Editor Session only when `read` is true. It records each request, in order.
  */
-async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<unknown>, read: boolean) {
+async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<unknown>, read: boolean,
+  outcome?: (applied: ApplyAuthorEditResponse) => unknown) {
   const test = await openJournalAppendTestWorkspace();
   const scenario = createBrowserScenario();
   const requests: string[] = [];
+  let applied: ApplyAuthorEditResponse | undefined;
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const name = `${init?.method ?? "GET"} ${path}`;
@@ -52,9 +55,14 @@ async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<u
     }
     if (name === AUTHOR_EDIT) {
       const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return jsonResponse(await respond(createAppliedAuthorEditResponse({ request,
-        commandDigest: await digestApplyAuthorEdit(request as never),
-        idempotencyKey: requestHeaders(init).get("idempotency-key")!, body: "Base!" })));
+      applied = createAppliedAuthorEditResponse({ request, commandDigest: await digestApplyAuthorEdit(request as never),
+        idempotencyKey: requestHeaders(init).get("idempotency-key")!, body: "Base!" });
+      return jsonResponse(await respond(applied));
+    }
+    if (outcome !== undefined && applied !== undefined && name.startsWith(OUTCOME)) {
+      return jsonResponse({ schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
+        correlation_id: "018f0000-0000-7001-8000-000000000081", project_scope: applied.project_scope,
+        outcome: { outcome_kind: "committed", response: outcome(applied) } });
     }
     if (read && name === SESSION_READ) {
       return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2",
@@ -76,8 +84,19 @@ async function saveOnce(respond: (applied: ApplyAuthorEditResponse) => Promise<u
       timer.done = true;
       timer.callback();
     }
-    await expect.poll(() => ({ save: writing.snapshot().projection.save_state, failures }))
-      .toEqual({ save: "saved", failures: [] });
+    if (outcome === undefined) {
+      await expect.poll(() => ({ save: writing.snapshot().projection.save_state, failures }))
+        .toEqual({ save: "saved", failures: [] });
+    } else {
+      // The response is lost, and a later step of the writing sends the outcome Query.
+      await expect.poll(() => {
+        for (const timer of timers.filter((item) => !item.done)) {
+          timer.done = true;
+          timer.callback();
+        }
+        return requests.some((name) => name.startsWith(OUTCOME));
+      }).toBe(true);
+    }
     await writing.whenIdle();
     return { requests, failures, session: test.workspace.session, projection: writing.snapshot().projection };
   } finally {
@@ -106,4 +125,16 @@ it("reads the Editor Session after a save whose response has no Editor Session s
     chapter: saved.session.base_snapshot.chapter_id, frontier: saved.session.author_undo_frontier_sequence })
     .toEqual({ requests: [CHALLENGE, AUTHOR_EDIT, SESSION_READ], failures: [], base: SAVED_SNAPSHOT,
       chapter: CHAPTER, frontier: "1" });
+});
+
+// The outcome Query gives the first acknowledgement, and the state is not a part of it (ADR 0106 section 3).
+it("does not settle a save from an outcome Query whose committed response has an Editor Session state", async () => {
+  const base = await savedBase();
+  const saved = await saveOnce(async () => { throw new TypeError("Failed to fetch"); }, false, (applied) => ({
+    ...applied, schema_id: "storyos.command.apply-author-edit.response.v3",
+    editor_session_state: { editor_session: createBrowserScenario().session.editor_session, base_snapshot: base,
+      author_undo_frontier_sequence: "1" } }));
+
+  expect({ save: saved.projection.save_state, base: saved.session.base_snapshot.snapshot_id === base.snapshot_id })
+    .toEqual({ save: "saving", base: false });
 });

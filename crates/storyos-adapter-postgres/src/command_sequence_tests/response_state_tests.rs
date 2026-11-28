@@ -1,5 +1,6 @@
-//! Which run of a command gives the Editor Session state (ADR 0106 section 3). The HTTP tests of
-//! the two commands prove that the state equals a read of the Editor Session after the command.
+//! Which applied run of a command gives the Editor Session state (ADR 0106 section 3): the run
+//! that moves the base. The HTTP tests of the two commands prove that the state equals a read of
+//! the Editor Session after the command, and that a replay has no state.
 
 use storyos_application::{AuthorEditSettlement, AuthorEditSettlementEffect, EditorSession};
 use storyos_core::TransitionOutcome;
@@ -8,9 +9,7 @@ use crate::shared_tests::author_edit::AUTHOR_EDIT_TEST_LOCK;
 use crate::shared_tests::command_sequence_acceptance::{
     ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal,
 };
-use crate::shared_tests::command_sequence_support::{
-    issued, stores, two_chapter_writer, with_new_request_ids,
-};
+use crate::shared_tests::command_sequence_support::{issued, stores, two_chapter_writer};
 use crate::shared_tests::command_sequence_undo::{edit_in_chapter_of, session_chapter_head};
 use crate::shared_tests::create_volume_authority::{NamedEdit, named_edit_command};
 
@@ -29,11 +28,10 @@ fn edit_revision(settlement: &AuthorEditSettlement) -> &str {
     }
 }
 
-/// The first run of an applied Author Edit gives the state on the new Revision. A replay and an
-/// edit with no effect give none.
+/// An applied Author Edit gives the state on the new Revision. An edit with no effect gives none.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn only_the_first_run_of_an_applied_author_edit_gives_the_editor_session_state() {
+async fn an_author_edit_gives_the_editor_session_state_only_when_it_applies() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     let (scope, chapter_a, _chapter_b, _revision_b, editor_session_id) =
@@ -51,10 +49,6 @@ async fn only_the_first_run_of_an_applied_author_edit_gives_the_editor_session_s
     let command = named_edit_command(&store, &scope, edit("d309", &head, 1, "x")).await;
 
     let first = store.apply_author_edit(&command).await.unwrap();
-    let replay = store
-        .apply_author_edit(&with_new_request_ids_of(&command))
-        .await
-        .unwrap();
     let moved_head = session_chapter_head(&admin, &editor_session_id).await;
     let unchanged = named_edit_command(&store, &scope, edit("d30a", &moved_head, 2, "")).await;
     let no_effect = store.apply_author_edit(&unchanged).await.unwrap();
@@ -62,10 +56,9 @@ async fn only_the_first_run_of_an_applied_author_edit_gives_the_editor_session_s
     assert_eq!(
         (
             state_base(&first.editor_session),
-            state_base(&replay.editor_session),
             state_base(&no_effect.editor_session)
         ),
-        (Some(edit_revision(&first)), None, None)
+        (Some(edit_revision(&first)), None)
     );
 }
 
@@ -83,24 +76,11 @@ fn session(
     }
 }
 
-/// The Author Edit command with new request identities, as an exact retry sends it.
-fn with_new_request_ids_of(
-    command: &storyos_application::ApplyAuthorEditCommand,
-) -> storyos_application::ApplyAuthorEditCommand {
-    let mut retry = command.clone();
-    retry.ids = storyos_application::AuthorCommandAdmissionIds {
-        command_id: uuid::Uuid::now_v7().to_string(),
-        author_command_admission_id: uuid::Uuid::now_v7().to_string(),
-        receipt_id: uuid::Uuid::now_v7().to_string(),
-    };
-    retry
-}
-
-/// The first run of an applied Acceptance that moves the base gives the state on the new Revision.
-/// A replay, and an Acceptance whose Editor Session keeps its base on another Chapter, give none.
+/// An applied Acceptance that moves the base gives the state on the new Revision. An Acceptance
+/// whose Editor Session keeps its base on another Chapter gives none.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn only_the_first_run_of_an_acceptance_that_moves_the_base_gives_the_editor_session_state() {
+async fn an_acceptance_gives_the_editor_session_state_only_when_it_moves_the_base() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let (store, admin) = stores().await;
     for (base, on_target_chapter) in [(0xd320, true), (0xd340, false)] {
@@ -115,16 +95,7 @@ async fn only_the_first_run_of_an_acceptance_that_moves_the_base_gives_the_edito
         }
         let call = issued(&store, &scope, base + 9, &ACCEPT_PROPOSAL, input).await;
         let (first, revision) = session(accept_proposal(&store, &call).await.unwrap());
-        let (replay, _) = session(
-            accept_proposal(&store, &with_new_request_ids(&call))
-                .await
-                .unwrap(),
-        );
         let expected = on_target_chapter.then_some(revision.as_str());
-        assert_eq!(
-            (state_base(&first), state_base(&replay)),
-            (expected, None),
-            "{base:#x}"
-        );
+        assert_eq!(state_base(&first), expected, "{base:#x}");
     }
 }

@@ -319,7 +319,8 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
   }
   const { outcome } = candidate;
   if (outcome.outcome_kind === "committed" && APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS
-    .includes(outcome.response?.schema_id as string)) {
+    .includes(outcome.response?.schema_id as string)
+    && !Object.hasOwn(outcome.response as object, "editor_session_state")) {
     return { kind: "committed", response: outcome.response };
   }
   if (outcome.outcome_kind === "rejected"

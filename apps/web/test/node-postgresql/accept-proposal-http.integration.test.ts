@@ -66,7 +66,6 @@ test("acceptProposal applies, replays, and refuses", async () => {
   const { editor_session_state: state, ...firstRun } = accepted.response;
   const { schema_id: _schema, correlation_id: _correlation, project_scope: _scope, ...read } = await getEditorSession({
     baseUrl: story.baseUrl, projectId: story.projectId, editorSessionId, fetchImpl: story.fetchImpl });
-  assert.equal(state?.base_snapshot.authoritative_head_revision_id, effect.authoritative_revision.revision_id);
   assert.deepEqual(state, read);
   assert.deepEqual((await accepted.command.send()).response, firstRun);
   const inspected = await inspect();
