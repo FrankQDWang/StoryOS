@@ -54,6 +54,9 @@ export { appendAuthorEdit, rebuildPendingProjection } from "./local-edit-journal
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
+// The longest wait of a load for the outcome Queries of its groups (#1972). A Query with no answer in this time stops,
+// and its group stays unknown, so the open goes on with no command of the Session.
+const LOAD_OUTCOME_WAIT_MS = 3_000;
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 
@@ -393,7 +396,15 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       if (active && loaded) {
         const stored = await storedWorkspace(database, sessionValue, scope, profile, cryptoImpl).catch(() => undefined);
         const read = stored?.session;
-        await settleLostGroups(stored, { baseUrl, fetchImpl, cryptoImpl }).catch(() => undefined);
+        const wait = new AbortController();
+        const timer = setTimeout(() => wait.abort(new Error("The outcome Query of the load did not answer")),
+          LOAD_OUTCOME_WAIT_MS);
+        try {
+          await settleLostGroups(stored, { baseUrl, fetchImpl: stoppedFetch(fetchImpl, wait.signal), cryptoImpl })
+            .catch(() => undefined);
+        } finally {
+          clearTimeout(timer);
+        }
         // A settlement of an applied group reads the Editor Session again. That read is later than the read above,
         // which can come before the Server applied the group.
         if (stored !== undefined && stored.session !== read) sessionValue = stored.session;
@@ -545,6 +556,16 @@ function chapterAtLaterBase(chapter: GetChapterResponse, value: unknown): GetCha
     chapter: { ...chapter.chapter, current_revision: base.materialized_revision } };
 }
 
+/** The Chapter at the Server base of the Editor Session `value`, when that base is an earlier Revision of `chapter`. */
+function chapterAtSessionBase(chapter: GetChapterResponse, value: unknown): GetChapterResponse {
+  const base = (value as Partial<GetEditorSessionResponse> | undefined)?.base_snapshot;
+  if (base?.chapter_id !== chapter.chapter.chapter_id || base.materialized_revision === undefined
+    || !boundedU64(base.project_activity_position) || !boundedU64(chapter.project_activity_position)
+    || BigInt(base.project_activity_position) >= BigInt(chapter.project_activity_position)) return chapter;
+  return { ...chapter, project_activity_position: base.project_activity_position,
+    chapter: { ...chapter.chapter, current_revision: base.materialized_revision } };
+}
+
 /** The workspace of the stored Editor Session. A deletion moves its Server base (ADR 0107), so it has the Journal base. */
 async function storedWorkspace(database: IDBDatabase, value: unknown, scope: ProjectScope,
   profile: Release1ProtocolProfile, cryptoImpl: Crypto): Promise<EditorWorkspace> {
@@ -613,6 +634,18 @@ async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
     && !revisedCandidate.has(record.local_intent_sequence))) return undefined;
   return { base: base.materialized_revision.blocks,
     shown: shown ?? (await rebuildPendingProjection(workspace)).blocks };
+}
+
+/** A `fetch` that `signal` stops: its request ends, and its promise is refused. */
+function stoppedFetch(fetchImpl: typeof fetch, signal: AbortSignal): typeof fetch {
+  return (input, init) => new Promise<Response>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    fetchImpl(input, { ...init, signal }).then(resolve, reject);
+  });
 }
 
 /** Sends the outcome Query of each Author Edit group of the stored Editor Session that went out with no known result. */
@@ -693,6 +726,13 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
         }
         if (text !== undefined) {
           start = { ...start, active: null };
+        } else if (stored.session.base_snapshot.chapter_id === chapter.chapter.chapter_id
+          && await lostGroupResult(stored) !== undefined) {
+          // Another tab wrote a later Revision of the Chapter of a group with no known result or no Admission. The
+          // tab opens the Chapter at the base of its Session and shows the text of the group there, as a tab that
+          // stayed open does (ADR 0107, section 2). The group stays in its recovery, and no command moves the base
+          // (#1972).
+          chapter = chapterAtSessionBase(chapter, start.sessionValue);
         } else if (stored.session.base_snapshot.chapter_id !== chapter.chapter.chapter_id) {
           // Another tab set another Chapter current, and the text of this tab has no change to send, so `otherChapter`
           // opened that Chapter. Nothing is lost, and the open shows it in a new Editor Session.

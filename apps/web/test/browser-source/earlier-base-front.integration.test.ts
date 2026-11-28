@@ -20,8 +20,8 @@ import { focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEdita
   from "../support/manuscript-surface.ts";
 import {
   CHAPTER, OWNER, PROJECT, REVISION, SESSION, closeTrackedDatabases, createAppliedAuthorEditResponse,
-  createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse, requestHeaders, requireRequestBody,
-  trackDatabase,
+  createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse, requestHeaders, requestResult,
+  requireRequestBody, trackDatabase,
 } from "./scenario.ts";
 
 const LATER_REVISION = "018f0000-0000-7001-8000-000000000a61";
@@ -996,15 +996,15 @@ const LOAD_READS = ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects"
   `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`,
   `${PROJECT_READ}/editor-sessions/${SESSION}`, `${PROJECT_READ}/activity`];
 
-for (const outcome of ["still_unknown", "unavailable"] as const) {
+for (const outcome of ["still_unknown", "unavailable", undefined] as const) {
   // While the result is not known, the Session sends no command, so the load opens Chapter A with no Set Current
-  // Chapter, and the Current Chapter of the Project stays B.
+  // Chapter, and the Current Chapter of the Project stays B. A Query with no answer stops after a time limit.
   it(`opens the Chapter of a group with an unknown result at a load with no command when the outcome Query gives `
-    + `${outcome === "still_unknown" ? "no result" : "no answer"} and another tab set another Chapter current`,
-  async () => {
+    + `${{ still_unknown: "no result", unavailable: "an error", none: "no answer in time" }[outcome ?? "none"]} and `
+    + "another tab set another Chapter current", async () => {
     const server = fakeServer();
     await closeDuringSaveAndSetB(server, "edit");
-    server.hooks.outcome = outcome;
+    if (outcome !== undefined) server.hooks.outcome = outcome;
     const before = server.requests.length;
     const query = `${OUTCOME}${server.keys[0]}`;
 
@@ -1049,6 +1049,56 @@ it("opens the Chapter of a group with an unknown result with no command when ano
     requests: [...LOAD_READS, query, CHAPTER_READ, `${CHAPTER_READ}/open-proposals`].sort(), switches: [],
     unexpected: [] });
 });
+
+/** The requests of the page after the request `before` that are commands: a POST or a PUT. */
+const commandsAfter = (server: ReturnType<typeof fakeServer>, before: number) =>
+  server.requests.slice(before).filter((request) => request.startsWith("POST ") || request.startsWith("PUT "));
+
+// #1972: another tab also wrote a later Revision of Chapter A. A Set Current Chapter would move the base of the Session
+// past the group, so the load opens A at the base of its Session, as a tab that stayed open does, with no command.
+it("opens the Chapter of a group with an unknown result at the base of its Session with no command when another tab "
+  + "wrote a later Revision of that Chapter and set another Chapter current", async () => {
+  const server = fakeServer();
+  await closeDuringSaveAndSetB(server, "edit");
+  server.hooks.outcome = "still_unknown";
+  server.writeInOtherTab();
+  const before = server.requests.length;
+
+  await withReload(server, heldTimers, async (root) => {
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+      save: "saving", failure: "", stored: SESSION });
+  });
+  expect({ commands: commandsAfter(server, before), switches: server.switches, unexpected: server.unexpected })
+    .toEqual({ commands: [], switches: [], unexpected: [] });
+});
+
+// #1972: the capsule of a group that went out is not available, so no outcome Query can go out. The contract then
+// blocks a fresh Command Challenge and a replay, so the save after the load sends no command for the group.
+it("sends no Command Challenge and no Author Edit after a load for a group that went out with no available capsule",
+  async () => {
+    const server = fakeServer();
+    await closeDuringSaveAndSetB(server, "edit");
+    const journal = await requestResult(indexedDB.open(scenario.journalName));
+    const clear = journal.transaction("transport_capsules", "readwrite");
+    clear.objectStore("transport_capsules").clear();
+    await new Promise((resolve) => { clear.oncomplete = resolve; });
+    journal.close();
+    const before = server.requests.length;
+
+    const { timers, fire } = manualTimers();
+    await withReload(server, timers, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+        save: "saving", failure: "", stored: SESSION });
+      await type(root, "。");
+      await expect.poll(() => unsettled(root)).toBe("2");
+      fire();
+      // The save of the group ends with no request. Before the fix, it sent a Challenge and the Author Edit again.
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    });
+    expect({ commands: commandsAfter(server, before), queries: server.requests.slice(before)
+      .filter((request) => request.startsWith(OUTCOME)), switches: server.switches, unexpected: server.unexpected })
+      .toEqual({ commands: [], queries: [], switches: [], unexpected: [] });
+  });
 
 // #1972: a group with no Admission never applied. The load sets its Chapter current again, as for the text of #1953,
 // and shows its text in the recovery state of today. It does not send the group again.
@@ -1164,9 +1214,10 @@ it("opens the Chapter that another tab set current at a load when the group of t
 
 // #1972: a Set Current Chapter moves the Server base of the Session to the head of the Chapter. On a later Revision of
 // another tab, the records of the group would not bind that base, and a later load would show them as saved. So the
-// load keeps the Chapter that the other tab set, as before, and each load shows the same recovery state.
-it("keeps the Chapter that another tab set at each load, with no Set Current Chapter, when another tab also wrote a "
-  + "later Revision of the Chapter of a group with no Admission", async () => {
+// load opens the Chapter of the group at the base of its Session with no command, and each load shows the same
+// recovery state.
+it("shows the text of a group with no Admission on its Chapter at each load, with no Set Current Chapter, when another "
+  + "tab also wrote a later Revision of that Chapter and set another Chapter current", async () => {
   const server = fakeServer();
   await closeDuringSaveAndSetB(server, "edit");
   server.hooks.outcome = "rejected";
@@ -1174,14 +1225,12 @@ it("keeps the Chapter that another tab set at each load, with no Set Current Cha
   const before = server.requests.length;
   for (let reload = 0; reload < 2; reload += 1) {
     await withReload(server, heldTimers, async (root) => {
-      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "乙章。", editable: false,
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
         save: "needs_attention", failure: "", stored: SESSION });
     });
     releaseEditorSession(SESSION);
   }
-  const load = ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
-    `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`, CHAPTER_B_READ,
-    `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, `${CHAPTER_B_READ}/open-proposals`];
+  const load = [...LOAD_READS, CHAPTER_B_READ, CHAPTER_READ, `${CHAPTER_READ}/open-proposals`];
   // Only the first load asks the outcome: the answer settles the group.
   expect({ requests: server.requests.slice(before).sort(), switches: server.switches, unexpected: server.unexpected })
     .toEqual({ requests: [...load, ...load, `${OUTCOME}${server.keys[0]}`].sort(), switches: [], unexpected: [] });

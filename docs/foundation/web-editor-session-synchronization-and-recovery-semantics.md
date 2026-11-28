@@ -236,8 +236,11 @@ A load asks the outcome of each group that went out with no known result
 before the Chapter choice and before each command of the stored Editor Session
 (#1972), as the `DeliveryUnknown` row of section 6.1 permits. A load is an open in
 a page that did not hold the lock of the Session; a reopen in a page with an
-editor of the Session leaves the Query to the save of that editor. The answer
-decides the Chapter:
+editor of the Session leaves the Query to the save of that editor. A load waits
+at most 3 seconds for these Queries. A Query with no answer in that time stops,
+and its group stays unknown. A group with no available capsule gets no Query and
+becomes `OutcomeQueryUnresolved { NoOutcomeObserved }`, so its save sends no
+fresh Command Challenge and no replay. The answer decides the Chapter:
 
 - `Committed`: the group settles, and its text is on the Server. The rules above
   choose the Chapter.
@@ -247,11 +250,16 @@ decides the Chapter:
   does not send the group again. It sends Set Current Chapter only while the
   Chapter is at the Revision of the Server base of the Session, so the command
   does not move that base past the group. When another tab wrote a later
-  Revision of the Chapter, the load opens the Chapter that the other tab set.
+  Revision of the Chapter, the load sends no command and opens the Chapter of
+  the group as in the next item.
 - `StillUnknown`, or no answer: the Session sends no command until the result is
   known. The load opens the Chapter of the group as its Current Chapter, as a tab
   that did not see the Set Current Chapter of the other tab does, and shows the
   text. The Project keeps the Current Chapter of the other tab.
+
+When another tab wrote a later Revision of the Chapter of such a group, the
+load opens that Chapter at the Server base of the stored Session, as a tab that
+stayed open does, and shows the text of the group there in its recovery state.
 
 The Admissions, Receipts, and Activity of a writer takeover from before ADR
 0107 stay in the store, and the Activity stream replays them. The migration
