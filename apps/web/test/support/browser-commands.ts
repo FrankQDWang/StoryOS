@@ -18,7 +18,7 @@ import {
 import { settleOnce } from "./acceptance";
 import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionRunEvidence } from "./production-run-evidence-command";
-import { verifyProductionHostJourney } from "./production-host-command";
+import { verifyProductionChapterSwitchLoad, verifyProductionHostJourney } from "./production-host-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
 import { verifyProductionCapturedMemory } from "./production-captured-memory.ts";
 
@@ -207,6 +207,8 @@ export const storyOSBrowserCommands = {
         await verifyProductionAuthorVoiceJourney(context.context);
       } else if (request.scenario === "stage11_journey") {
         await verifyProductionStage11Journey(context.context);
+      } else if (request.scenario === "chapter_switch_load") {
+        await verifyProductionChapterSwitchLoad(context.context);
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {

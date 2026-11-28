@@ -7,6 +7,11 @@ it("opens, edits, and reloads through the real production host, and a second pag
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 
+it("sets the Chapter of unsent text current again at a new load after another page selected another Chapter", async () => {
+  await expect(verifyProductionHost({ scenario: "chapter_switch_load" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
+
 it("recovers one prose request through the production Web, Server, database, and Worker", async () => {
   await expect(verifyProductionHost({ scenario: "prose_request" }))
     .resolves.toEqual({ kind: "production_host_verified" });

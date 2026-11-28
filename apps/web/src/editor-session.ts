@@ -29,6 +29,7 @@ import {
   validateJournalSnapshot,
 } from "./local-edit-journal.ts";
 import { blocksOnCurrent, stepsOnCurrent, type EarlierBaseText } from "./earlier-base-catch-up.ts";
+import { paragraphsEqual } from "./manuscript-doc.ts";
 import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
@@ -310,6 +311,13 @@ type EditorWorkspaceOptions = {
 export interface EditorWorkspaceOpening {
   finish(chapter: GetChapterResponse, project?: GetProjectResponse, shown?: readonly ManuscriptParagraph[])
     : Promise<OpenedEditorWorkspace>;
+  /**
+   * The stored Editor Session and the Chapter of its base, when that Chapter is not `currentChapterId` and the Session
+   * has text that can catch up on it, or `keep` tells that the tab keeps its Chapter: another tab set another Chapter
+   * current (ADR 0107, section 2).
+   */
+  otherChapter(currentChapterId: string, shown?: readonly ManuscriptParagraph[], keep?: boolean)
+    : Promise<{ chapterId: string; editorSessionId: string } | undefined>;
   /** Closes the Journal when the open stops before `finish`. The promise ends after the Session read ended. */
   abandon(): Promise<void>;
 }
@@ -378,6 +386,26 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
         return opened;
       }
       return startEditorWorkspace(options).finish(chapter, read, shown);
+    },
+    otherChapter: async (currentChapterId, shown, keep = false) => {
+      const start = await started;
+      if (start.kind !== "started" || !start.active) return undefined;
+      try {
+        // A command of this Editor Session that set another Chapter current moved its Server base there.
+        if ((start.sessionValue as GetEditorSessionResponse).base_snapshot.chapter_id === currentChapterId) {
+          return undefined;
+        }
+        const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
+        const base = stored.session.base_snapshot;
+        if (keep) return { chapterId: base.chapter_id, editorSessionId: start.active };
+        // A tab with no text to send opens the Current Chapter that the other tab set.
+        const text = await earlierBaseText(stored, base.chapter_id, shown);
+        return text === undefined || paragraphsEqual(text.shown, text.base) ? undefined
+          : { chapterId: base.chapter_id, editorSessionId: start.active };
+      } catch {
+        // An unreadable Journal keeps the stored Session, so its recovery runs.
+        return undefined;
+      }
     },
     abandon: () => started.then((start) => { start.database?.close(); }),
   };
@@ -453,12 +481,12 @@ async function partitionHasOpenWork(workspace: EditorWorkspace): Promise<boolean
  * The text of the stored Editor Session that a catch-up can put on the current Chapter (ADR 0107, section 2), or
  * `undefined` when its open work is not only Author Edit text of the Chapter. A group that went out with no known
  * result, input in a Proposal candidate, and decision work keep the stored Session, because the catch-up cannot know
- * if they applied. `shown` is the text that the live tab shows, with its input that is not in the Journal.
+ * if they applied. `shown` is the text that a live tab shows, with its input that is not in the Journal.
  */
-async function earlierBaseText(workspace: EditorWorkspace, chapter: GetChapterResponse,
-  shown: readonly ManuscriptParagraph[]): Promise<EarlierBaseText | undefined> {
+async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
+  shown: readonly ManuscriptParagraph[] | undefined): Promise<EarlierBaseText | undefined> {
   const base = workspace.session.base_snapshot;
-  if (base.chapter_id !== chapter.chapter.chapter_id || await partitionHasDecisionWork(workspace)) return undefined;
+  if (base.chapter_id !== chapterId || await partitionHasDecisionWork(workspace)) return undefined;
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const revisedCandidate = new Set(snapshot.groups.flatMap((group) => group.settlement.kind
     === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised"
@@ -470,7 +498,8 @@ async function earlierBaseText(workspace: EditorWorkspace, chapter: GetChapterRe
       && settlement.effect.reason === "stale_authoritative_head");
   if (!snapshot.groups.every(known) || snapshot.records.some((record) => record.proposal_target !== undefined
     && !revisedCandidate.has(record.local_intent_sequence))) return undefined;
-  return { base: base.materialized_revision.blocks, shown };
+  return { base: base.materialized_revision.blocks,
+    shown: shown ?? (await rebuildPendingProjection(workspace)).blocks };
 }
 
 async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
@@ -490,21 +519,44 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
   let text: EarlierBaseText | undefined;
   const mintId = () => uuidV7(cryptoImpl);
   // ADR 0107: another Editor Session can write, so the stored Session can have an earlier base than the Chapter read.
-  // When its Journal partition has no open work, the load opens a new Editor Session, as a new tab does. When a live
-  // tab gives `shown` and its open work is Author Edit text that has an Author Edit form on the Chapter, the new Editor
-  // Session gets that text. A load with open work keeps the stored Session until #1953.
-  if (start.kind === "started" && start.active && baseIsNotChapter(start.sessionValue, chapter)) {
+  // When its Journal partition has no open work, the load opens a new Editor Session, as a new tab does. When its open
+  // work is Author Edit text that has an Author Edit form on the Chapter, the new Editor Session gets that text. A
+  // Set Current Chapter of a catch-up that stopped before the copy moved the Server base to the current Revision of
+  // the same Chapter, and the records still bind the earlier base (#1953). When the text of those records can catch
+  // up, the check uses the base of the Journal. Else a command of this Session moved its base, as a Chapter switch or
+  // an Author Edit with a lost response does, and the check uses the Server base (ADR 0105).
+  const stored = start.kind === "started" && start.active
+    ? await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl).catch(() => undefined)
+    : undefined;
+  const server = start.kind === "started" ? (start.sessionValue as GetEditorSessionResponse | null)?.base_snapshot
+    : undefined;
+  const journal = stored?.session.base_snapshot;
+  const journalBound = stored !== undefined && journal!.snapshot_id !== server?.snapshot_id
+    && journal!.chapter_id === server?.chapter_id && await partitionHasOpenWork(stored).catch(() => false)
+    && await earlierBaseText(stored, journal!.chapter_id, shown).catch(() => undefined) !== undefined;
+  if (start.kind === "started" && start.active
+    && baseIsNotChapter(journalBound ? stored!.session : start.sessionValue, chapter)) {
+    // When the text does not fit in one Author Edit, the stored Session stays with the base of its Journal, so the
+    // records keep their base and the recovery shows them.
+    if (journalBound) start = { ...start, sessionValue: stored!.session };
     try {
-      const stored = await storedWorkspace(start.database, start.sessionValue, scope, profile, cryptoImpl);
+      if (stored === undefined) throw new Error("The Journal of the stored Editor Session is not readable");
       if (!await partitionHasOpenWork(stored)) {
         start = { ...start, active: null };
-      } else if (shown !== undefined) {
-        text = await earlierBaseText(stored, chapter, shown);
+      } else {
+        text = await earlierBaseText(stored, chapter.chapter.chapter_id, shown);
         const current = chapter.chapter.current_revision.blocks;
         if (text !== undefined && stepsOnCurrent(current, blocksOnCurrent(text, current, mintId)) === undefined) {
           text = undefined;
         }
-        if (text !== undefined) start = { ...start, active: null };
+        if (text !== undefined) {
+          start = { ...start, active: null };
+        } else if (stored.session.base_snapshot.chapter_id !== chapter.chapter.chapter_id) {
+          // Another tab set another Chapter current, and the text of this tab has no change to send, so `otherChapter`
+          // opened that Chapter. Nothing is lost, and the open shows it in a new Editor Session.
+          const own = await earlierBaseText(stored, stored.session.base_snapshot.chapter_id, shown);
+          if (own !== undefined && paragraphsEqual(own.shown, own.base)) start = { ...start, active: null };
+        }
       }
     } catch {
       // An unreadable Journal keeps the stored Session, so its recovery runs.
