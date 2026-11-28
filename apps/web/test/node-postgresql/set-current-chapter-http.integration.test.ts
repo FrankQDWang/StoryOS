@@ -4,8 +4,8 @@ import { test } from "vitest";
 
 import { activityStream, getChapter, getEditorSession, getManuscriptTree, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { UUID_V7, assertForeignRefused, createStory, deleteChapterInput, problemOf, serverForFile,
-} from "../support/http-harness.ts";
+import { UUID_V7, appliedVolume, assertForeignRefused, createStory, createVolumeInput, deleteChapterInput,
+  deleteVolumeInput, problemOf, serverForFile } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
 
 // The Profile Probe of the ChapterSelection settlement profile (ADR 0075).
@@ -111,7 +111,7 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   const [chapterAId = "", chapterBId = "", chapterCId = ""] = story.chapterIds;
   const session = await story.openEditorSession();
   assert.equal(session.base_snapshot.chapter_id, chapterAId);
-  // A second Editor Session of the Project (ADR 0107). A deletion that changes the Current Chapter moves each base.
+  // A second Editor Session of the Project (ADR 0107). A deletion of the Chapter of a base moves that base.
   const other = await story.openEditorSession();
 
   const removedB = (await story.send("deleteChapter", deleteChapterInput(story, chapterBId, "5"))).response;
@@ -167,3 +167,44 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   const foreign = await problemOf(story.as("session-b").send("deleteChapter", deleteChapterInput(story, chapterAId, "8")));
   assert.equal(foreign.status, 404);
 });
+
+test("a deletion keeps the base of each Editor Session whose Chapter stays, and its next Author Edit applies",
+  async () => {
+    const story = await createStory(server, { title: "Delete Keep Novel",
+      chapters: ["Chapter A", "Chapter B", "Chapter C"] });
+    const { baseUrl, projectId, fetchImpl } = story;
+    const [chapterA = "", chapterB = "", chapterC = ""] = story.chapterIds;
+    const onA = await story.openEditorSession();
+    const onB = await story.openEditorSession();
+    const revisionB = (await getChapter({ baseUrl, projectId, chapterId: chapterB, fetchImpl }))
+      .chapter.current_revision.revision_id;
+    // The second tab makes B current and deletes C. The first tab stays on A (ADR 0107).
+    const selected = await story.send("setCurrentChapter", select(story, onB.editor_session.editor_session_id,
+      { chapterId: chapterB, expectedCurrentChapterId: chapterA, expectedTargetRevisionId: revisionB }));
+    assert.equal(selected.response.effect.kind, "authoritative_applied");
+    const base = async (opened: typeof onA) => (await getEditorSession({ baseUrl, projectId,
+      editorSessionId: opened.editor_session.editor_session_id, fetchImpl })).base_snapshot;
+    const before = [await base(onA), await base(onB)];
+    const removed = await story.send("deleteChapter", deleteChapterInput(story, chapterC, await story.treeRevision()));
+    assert.equal(removed.response.effect.kind, "authoritative_applied");
+    assert.deepEqual([await base(onA), await base(onB)], before);
+    // A Volume deletion applies only to a Volume with no active Chapter, so it moves no base.
+    const volume = appliedVolume((await story.send("createVolume",
+      createVolumeInput(story, "Volume Empty", await story.treeRevision()))).response);
+    const removedVolume = await story.send("deleteVolume",
+      deleteVolumeInput(story, volume.volume_id, await story.treeRevision()));
+    assert.equal(removedVolume.response.effect.kind, "authoritative_applied");
+    assert.deepEqual([await base(onA), await base(onB)], before);
+
+    const edit = await story.send("applyAuthorEdit", { request: {
+      command_schema: "storyos.command.apply-author-edit.request.v2", ...story.binding(),
+      editor_session_id: onA.editor_session.editor_session_id, chapter_id: chapterA,
+      expected_authoritative_revision_id: onA.base_snapshot.authoritative_head_revision_id,
+      expected_proposal_head_revision_ids: [], target_refs: onA.base_snapshot.target_refs,
+      observed_ownership_partition: "authoritative", editor_contract_revision: "storyos.editor-contract.release-1.v3",
+      undo_group_id: story.key(), completed_intent_record_id: story.key(), local_intent_sequence: "1",
+      author_edit_units: [{ normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: "甲" }],
+        selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0 } }],
+    } });
+    assert.equal(edit.response.effect.kind, "authoritative_applied");
+  });

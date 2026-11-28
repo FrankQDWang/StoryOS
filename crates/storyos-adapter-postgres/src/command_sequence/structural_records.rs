@@ -7,7 +7,7 @@ use super::records::insert_applied_activity;
 use super::{ActionDisposition, PersistFacts, PersistInput, insert_author_action, unavailable};
 use crate::structural_authority_settlement::{
     StructureCommitBinding, StructureTransitionSequences, persist_structure_commit,
-    update_each_session_base, update_session_base,
+    update_session_base, update_session_bases_on_chapter,
 };
 
 /// The settlement facts that `Structural` and `ChapterSelection` read: the locked Project facts
@@ -31,8 +31,10 @@ impl PersistInput for StructuralInput {
 /// The Editor Session base Snapshots that move to the new canonical Snapshot.
 pub(super) enum SessionBaseRebind<'a> {
     Keep,
-    /// The base of each Editor Session of the Project moves to the current head of the Chapter.
-    EachSession {
+    /// The base of each Editor Session on the removed Chapter moves to the current head of the
+    /// Chapter.
+    SessionsOnRemovedChapter {
+        removed_chapter_id: &'a str,
         chapter_id: &'a str,
     },
     /// The base of the Editor Session moves to the Chapter Revision. A missing session base is a
@@ -146,7 +148,10 @@ pub(super) async fn persist_structural_records(
     .map_err(unavailable)?;
     match records.session_base {
         SessionBaseRebind::Keep => {}
-        SessionBaseRebind::EachSession { chapter_id } => {
+        SessionBaseRebind::SessionsOnRemovedChapter {
+            removed_chapter_id,
+            chapter_id,
+        } => {
             let head = client
                 .query_opt(
                     "SELECT head.current_revision_id::text
@@ -164,9 +169,10 @@ pub(super) async fn persist_structural_records(
                 .map_err(unavailable)?
                 .map(|row| row.get::<_, String>(/*idx*/ 0))
                 .ok_or_else(|| unavailable("the Current Chapter has no authoritative head"))?;
-            update_each_session_base(
+            update_session_bases_on_chapter(
                 client,
                 scope,
+                removed_chapter_id,
                 chapter_id,
                 &head,
                 records.project_activity_position,
