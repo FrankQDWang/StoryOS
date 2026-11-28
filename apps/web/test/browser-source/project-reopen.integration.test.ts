@@ -20,9 +20,7 @@ import { openControlledProject } from "../../src/boot.ts";
 import { POINTER_STAY_MS } from "../../src/chapter-copies.ts";
 import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
-import { applyTrustedInput } from "../support/browser-command-client.ts";
 import { beginTreeAction } from "../support/inline-chapter-creation.ts";
-import { focusManuscriptEnd, manuscriptEditor } from "../support/manuscript-surface.ts";
 import {
   BLOCK, CHAPTER, EDITOR_SNAPSHOT, OWNER, PROJECT, REVISION, SESSION, chapterRevision, closeTrackedDatabases,
   createBrowserScenario, deleteJournal, emptyActivityStream, jsonResponse, requestResult, trackDatabase,
@@ -1458,34 +1456,32 @@ it.each([["another Editor Session", "other_session"], ["the earlier base of the 
       .toEqual({ open: [LIST, PROJECT_READ].sort(), unexpected: [] });
   });
 
-it("opens the Project again after an applied acceptance whose response has the state, when input is not saved",
-  async () => {
-    const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ],
-      commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied", responseState: true });
-    // No timer of the writing fires, so the input stays local.
-    const workspace = await openWorkspace(server, "", { setTimeoutImpl: () => 0, clearTimeoutImpl: () => {} });
-    const accept = () => workspace.root.querySelector<HTMLButtonElement>(
-      `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
-    await expect.poll(() => accept()?.disabled).toBe(false);
-    const editor = manuscriptEditor(workspace.root, window);
-    editor.focus();
-    focusManuscriptEnd(editor, window);
-    await applyTrustedInput({ operation: "insert_text", text: "!" });
-    await expect.poll(() => workspace.root.querySelector("[data-save-state]")
-      ?.getAttribute("data-unsettled-intent-count")).toBe("1");
-    const before = server.log.started.length;
+it("opens the Project again after an applied acceptance whose response has the state, when the Journal has another "
+  + "base", async () => {
+  const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ],
+    commands: [SESSION_CREATE, ACCEPTANCE], proposals: true, acceptance: "applied", responseState: true });
+  const workspace = await openWorkspace(server);
+  const accept = () => workspace.root.querySelector<HTMLButtonElement>(
+    `.block-proposal[data-proposal-id="${PROPOSAL.proposal_id}"] button[data-proposal-accept]`);
+  await expect.poll(() => accept()?.disabled).toBe(false);
+  const before = server.log.started.length;
+  server.hold([ACCEPTANCE]);
 
-    accept()!.click();
+  accept()!.click();
+  await expect.poll(() => server.held()).toBe(1);
+  // While the Acceptance runs, the active base of the Journal changes to a base that the editor did not check.
+  const database = await requestResult(indexedDB.open(server.scenario.journalName));
+  const metadata = database.transaction("metadata", "readwrite").objectStore("metadata");
+  const [stored] = (await requestResult(metadata.getAll()) as { key: string; value: { snapshot_id: string } }[])
+    .filter(({ key }) => key.startsWith("active_base:"));
+  await requestResult(metadata.put({ ...stored!, value: { ...stored!.value, snapshot_id: LATER_SESSION } }));
+  database.close();
+  server.release();
 
-    await expect.poll(server.inFlight).toEqual([]);
-    // The Acceptance record of the Journal does not settle while the input waits, so the page opens the Project with
-    // each check of the first open.
-    await expect.poll(() => openReads(server.log.started.slice(before)).sort())
-      .toEqual([PROTOCOL, LIST, PROJECT_READ].sort());
-    // After the open, the recovery can send the save of the input. This fake does not serve it.
-    expect(server.log.unexpected.filter((name) => name !== `${CHALLENGE} for POST /api/v1/projects/{project_id}/manuscript/author-edits`))
-      .toEqual([]);
-  });
+  await expect.poll(server.inFlight).toEqual([]);
+  await expect.poll(() => openReads(server.log.started.slice(before)).sort()).toEqual([LIST, PROJECT_READ].sort());
+  expect(server.log.unexpected).toEqual([]);
+});
 
 it("opens the Project one time after an applied acceptance whose response was lost", async () => {
   const server = fakeServer({ reads: [...OPEN_READS, PROPOSAL_READ, SESSION_READ], commands: [SESSION_CREATE, ACCEPTANCE],

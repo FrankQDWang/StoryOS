@@ -424,8 +424,8 @@ export async function openEditorWorkspace(options: EditorWorkspaceOptions & {
  * The open of the Project after an applied Acceptance whose response has the Editor Session state of the editor of
  * `state`, with no read (ADR 0106 section 3). The open writes the new base as the active base of the Journal of the
  * editor and keeps that Journal. It gives `undefined` when the response does not fit the editor: another Editor
- * Session, another Chapter, a base that is not later, or input that is not saved. The page then opens the Project
- * again, as after a response with no state.
+ * Session, another Chapter, a base that is not later, or a Journal whose active base is not the base of the editor.
+ * The page then opens the Project again, as after a response with no state.
  */
 export async function acceptedProjectState(state: ProjectReadyState, accepted: AcceptProposalResponse)
   : Promise<ProjectReadyState | undefined> {
@@ -451,22 +451,19 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
     // The open has the checks of a read of the Editor Session.
     const session = await validateSession(sessionWithState(editor.session, served), state.project.project_scope,
       chapter, profile, editor.cryptoImpl);
-    const checked = await journalMark(editor.database.transaction(["metadata", "intents"], "readonly"), editor);
-    const earlier = await rebuildPendingProjection(editor);
-    if (checked.base !== editor.session.base_snapshot.snapshot_id || earlier.save_state !== "saved"
-      || earlier.unsettled_intent_count !== 0) return undefined;
     const workspace: EditorWorkspace = { database: editor.database, partition: editor.partition, session,
       cryptoImpl: editor.cryptoImpl, maxJsonStringUtf8Bytes: editor.maxJsonStringUtf8Bytes };
-    // The write compares the Journal with the checked Journal in its transaction, so a later base or later input
-    // of the editor stays.
-    const transaction = workspace.database.transaction(["metadata", "intents"], "readwrite");
-    const current = await journalMark(transaction, editor);
-    if (current.base !== checked.base || current.intents !== checked.intents) {
+    // The Acceptance starts only with saved input, and the editor takes no input while it runs. The write compares
+    // the active base of the Journal in its transaction, so a later base of the Journal stays.
+    const transaction = workspace.database.transaction("metadata", "readwrite");
+    const key = `active_base:${workspace.partition.journal_partition_id}`;
+    const stored = await requestResult(transaction.objectStore("metadata").get(key)) as
+      { value?: { snapshot_id?: unknown } } | undefined;
+    if (stored?.value?.snapshot_id !== editor.session.base_snapshot.snapshot_id) {
       transaction.abort();
       return undefined;
     }
-    transaction.objectStore("metadata").put({ key: `active_base:${workspace.partition.journal_partition_id}`,
-      value: session.base_snapshot });
+    transaction.objectStore("metadata").put({ key, value: session.base_snapshot });
     await transactionResult(transaction);
     const { reads: _earlierReads, ...rest } = state;
     return { ...rest, project: { ...state.project, project: accepted.project }, chapter,
@@ -474,18 +471,6 @@ export async function acceptedProjectState(state: ProjectReadyState, accepted: A
   } catch {
     return undefined;
   }
-}
-
-/** The active base Snapshot of the Journal of `editor` and the number of its intent records, in `transaction`. */
-async function journalMark(transaction: IDBTransaction, editor: EditorWorkspace)
-  : Promise<{ base: unknown; intents: number }> {
-  const partitionId = editor.partition.journal_partition_id;
-  const [stored, intents] = await Promise.all([
-    requestResult(transaction.objectStore("metadata").get(`active_base:${partitionId}`)),
-    requestResult(transaction.objectStore("intents").index("working_partition").count(partitionId)),
-  ]);
-  return { base: (stored as { value?: { snapshot_id?: unknown } } | undefined)?.value?.snapshot_id,
-    intents: intents as number };
 }
 
 /** Tells if the stored Editor Session has a base that is not the text of the Chapter read. */
