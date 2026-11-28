@@ -18,8 +18,8 @@ it("sets the Chapter current again at a new load and stores the text of a save w
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 
-it("sets the Chapter current again at a new load and shows the text of a save whose response did not come back "
-  + "before the page closed", async () => {
+it("settles a save whose response did not come back before the page closed at a new load, opens the Chapter that "
+  + "another page set current, and saves the next input on the applied Revision", async () => {
   await expect(verifyProductionHost({ scenario: "chapter_switch_load_outcome" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 });

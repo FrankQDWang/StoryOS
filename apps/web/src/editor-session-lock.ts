@@ -33,6 +33,11 @@ export async function lockEditorSession(editorSessionId: string): Promise<boolea
   });
 }
 
+/** Tells if this page holds the lock of the Editor Session `editorSessionId`: an editor of this page has it open. */
+export function holdsEditorSessionLock(editorSessionId: string): boolean {
+  return heldSessions.has(editorSessionId);
+}
+
 /** Ends the lock of each Editor Session of this page other than `editorSessionId`, after `sessionStorage` names it. */
 export function releaseEarlierEditorSessions(editorSessionId: string): void {
   for (const [held, release] of heldSessions) {

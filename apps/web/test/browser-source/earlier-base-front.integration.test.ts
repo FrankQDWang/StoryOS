@@ -13,6 +13,7 @@ import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { loadStoryOSWebState } from "../../src/app.ts";
 import type { ChallengeAdmissionTimers } from "../../src/challenge-admission-wait.ts";
+import { releaseEditorSession } from "../../src/editor-session-lock.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
 import { focusManuscriptEnd, manuscriptBody, manuscriptEditor, manuscriptIsEditable }
@@ -70,6 +71,9 @@ function gate() {
   return { opened, open: () => { open(); } };
 }
 
+/** The answer of the fake Server to an outcome Query. */
+type Outcome = "committed" | "rejected" | "still_unknown" | "unavailable";
+
 /**
  * A fake Server of one Project. The Chapter starts at the base Revision, and `writeInOtherTab` gives it a later
  * Revision of another tab. An Author Edit on an earlier Revision gets `stale_authoritative_head`. With `applies`, an
@@ -80,9 +84,11 @@ function gate() {
  * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
  * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them.
  * Each Set Current Chapter first runs the next action of `beforeSwitch`, and each Project read the next action of
- *  `beforeProjectRead`. With `conflict`, an Author Edit on the current Revision gets that conflict. The outcome Query of an
- * Author Edit that went out gets no response, so its result stays unknown. It records each request, and the body and
- * the idempotency key of each Author Edit. It records and throws on each request that it does not serve.
+ *  `beforeProjectRead`. With `conflict`, an Author Edit on the current Revision gets that conflict. With `lostResponse`,
+ * an Author Edit that applies gets no response. The outcome Query of an Author Edit that went out gets the answer of
+ * `outcome`: the applied response, no Admission, a result that is still unknown, or a 503; with no `outcome`, it gets
+ * no response. It records each request, and the body and the idempotency key of each Author Edit. It records and throws
+ * on each request that it does not serve.
  */
 function fakeServer(applies?: Revision | Revision[]) {
   const own = applies === undefined ? [] : Array.isArray(applies) ? [...applies] : [applies];
@@ -93,7 +99,10 @@ function fakeServer(applies?: Revision | Revision[]) {
   const edits: Record<string, unknown>[] = [];
   const keys: string[] = [];
   const hooks: { beforeSwitch: (() => void)[]; beforeProjectRead: (() => void)[]; readHeadAtRequest?: boolean;
-    conflict?: "ownership_changed" } = { beforeSwitch: [], beforeProjectRead: [] };
+    conflict?: "ownership_changed"; lostResponse?: boolean; outcome?: Outcome } =
+    { beforeSwitch: [], beforeProjectRead: [] };
+  // The response of the applied Author Edit that did not come back, for the outcome Query.
+  let lost: unknown;
   const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void>;
     challenge?: Promise<void> } = {};
   // The head of the Chapter and the base of the stored Editor Session, with their activity positions.
@@ -246,6 +255,10 @@ function fakeServer(applies?: Revision | Revision[]) {
         idempotencyKey: requestHeaders(init).get("idempotency-key")!, priorRevisionId: expected as string,
         ...next === undefined ? {} : { authoritativeRevisionId: next.revision_id },
         projectActivityPosition: String(position) }), schema_id: "storyos.command.apply-author-edit.response.v3" };
+      if (applied && hooks.lostResponse === true) {
+        lost = { ...answer, effect: { ...answer.effect, authoritative_revision: next } };
+        return new Promise<Response>(() => {});
+      }
       if (applied) {
         // The first run of an applied edit gives the Editor Session state that a read right after it gives.
         const { schema_id: _schema, correlation_id: _correlation, project_scope: _scope, ...state } =
@@ -258,7 +271,20 @@ function fakeServer(applies?: Revision | Revision[]) {
         prior_heads: [head], resulting_heads: [head], proposal_revision_ids: [], authoritative_revision_ids: [],
         authoritative_commit_ids: [], author_action_sequence: null } });
     }
-    if (keys.some((key) => route === `${OUTCOME}${key}`)) return new Promise<Response>(() => {});
+    if (keys.some((key) => route === `${OUTCOME}${key}`)) {
+      if (hooks.outcome === undefined) return new Promise<Response>(() => {});
+      if (hooks.outcome === "unavailable") return jsonResponse({}, 503);
+      const answers: Record<Exclude<Outcome, "unavailable">, unknown> = {
+        committed: { outcome_kind: "committed", response: lost },
+        rejected: { outcome_kind: "rejected", reason: "challenge_expired_unconsumed" },
+        still_unknown: { outcome_kind: "still_unknown", observation: { observation_kind: "admission_committed",
+          command_id: "018f0000-0000-7001-8000-000000000a71", reconciliation_required: true,
+          author_command_admission_id: "018f0000-0000-7001-8000-000000000a72" } },
+      };
+      return jsonResponse({ schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
+        correlation_id: "018f0000-0000-7001-8000-000000000a73", project_scope: scenario.project.project_scope,
+        outcome: answers[hooks.outcome] });
+    }
     unexpected.push(route);
     throw new Error(`unexpected request: ${route}`);
   };
@@ -897,6 +923,8 @@ async function closeDuringSave(server: ReturnType<typeof fakeServer>, held: "cha
       .toBe(held === "challenge" ? challenges + 1 : 1);
   }, timers);
   delete server.gates.challenge;
+  // The page closed, so the browser ended its lock of the Editor Session.
+  releaseEditorSession(SESSION);
 }
 
 /** Runs `closeDuringSave`, and then another tab sets Chapter B current. */
@@ -962,59 +990,52 @@ it("puts the text of the group that never went to the Server on the later Revisi
     requests: 1, editors: [[NEW_SESSION, LATER_REVISION]], switches: 1, unexpected: [] });
 });
 
-// #1972: the load goes back to the Chapter of the unknown result, as for the text that never went to the Server (#1953),
-// and shows the recovery of today there: the text, and an outcome Query of the group. The page does not send the
-// group again.
-it("sets its Chapter current again at a load and shows the text of a group with an unknown result in the recovery "
-  + "state when the page closed during its save and another tab set another Chapter current", async () => {
-  const server = fakeServer();
-  await closeDuringSaveAndSetB(server, "edit");
-  const before = server.requests.length;
-  const outcome = `${OUTCOME}${server.keys[0]}`;
+// #1972: after a load, the contract permits only the protected outcome Query of a group with an unknown result before
+// each command of its Editor Session. The load sends that Query before the Chapter choice.
+const LOAD_READS = ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
+  `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`,
+  `${PROJECT_READ}/editor-sessions/${SESSION}`, `${PROJECT_READ}/activity`];
 
-  const { timers, fire } = manualTimers();
-  await withReload(server, timers, async (root) => {
-    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
-      save: "saving", failure: "", stored: SESSION });
-    // The timer of the save runs. The save asks the outcome of the group and sends no Author Edit.
-    fire();
-    await expect.poll(() => server.requests.includes(outcome)).toBe(true);
-    expect(shown(root)).toEqual({ text: "雨夜。\n渡口。无人", editable: true, save: "saving", failure: "",
-      stored: SESSION });
+for (const outcome of ["still_unknown", "unavailable"] as const) {
+  // While the result is not known, the Session sends no command, so the load opens Chapter A with no Set Current
+  // Chapter, and the Current Chapter of the Project stays B.
+  it(`opens the Chapter of a group with an unknown result at a load with no command when the outcome Query gives `
+    + `${outcome === "still_unknown" ? "no result" : "no answer"} and another tab set another Chapter current`,
+  async () => {
+    const server = fakeServer();
+    await closeDuringSaveAndSetB(server, "edit");
+    server.hooks.outcome = outcome;
+    const before = server.requests.length;
+    const query = `${OUTCOME}${server.keys[0]}`;
+
+    await withReload(server, heldTimers, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+        save: "saving", failure: "", stored: SESSION });
+    });
+    const requests = server.requests.slice(before);
+    // The outcome Query comes before the read of Chapter A, which the Chapter choice reads.
+    expect(requests.indexOf(query) < requests.indexOf(CHAPTER_READ)).toBe(true);
+    expect({ requests: [...requests].sort(), switches: server.switches, unexpected: server.unexpected }).toEqual({
+      requests: [...LOAD_READS, query, CHAPTER_B_READ, CHAPTER_READ, `${CHAPTER_READ}/open-proposals`].sort(),
+      switches: [], unexpected: [] });
   });
-  const requests = server.requests.slice(before);
-  const at = (request: string) => requests.indexOf(request);
-  // The Set Current Chapter of the load comes before the open of Chapter A and its outcome Query.
-  expect(at(CHALLENGE) < at(SWITCH) && at(SWITCH) < at(`${CHAPTER_READ}/open-proposals`) && at(SWITCH) < at(outcome))
-    .toBe(true);
-  expect({ requests: [...requests].sort(), keys: server.keys.length, switches: server.switches,
-    unexpected: server.unexpected }).toEqual({
-    requests: ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
-      `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`,
-      CHAPTER_B_READ, `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, CHALLENGE,
-      SWITCH, PROJECT_READ, "GET /api/v1/projects",
-      `${CHAPTER_READ}/open-proposals`, `${PROJECT_READ}/activity`, outcome].sort(),
-    keys: 1, switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B,
-      expected_target_revision_id: REVISION, editor_session_id: SESSION }], unexpected: [] });
-});
+}
 
 // #1972, the other order: another tab sets Chapter B current after the Project read of the load named Chapter A. The
-// load opens Chapter A, so it sets no Chapter current, and shows the same recovery.
-it("shows the text of a group with an unknown result in the recovery state when another tab sets another Chapter "
+// load opens Chapter A, and it sends no command.
+it("opens the Chapter of a group with an unknown result with no command when another tab sets another Chapter "
   + "current after the Project read of the load", async () => {
   const server = fakeServer();
   await closeDuringSave(server, "edit");
+  server.hooks.outcome = "still_unknown";
   const before = server.requests.length;
-  const outcome = `${OUTCOME}${server.keys[0]}`;
+  const query = `${OUTCOME}${server.keys[0]}`;
   const chapter = gate();
   server.gates.chapter = chapter.opened;
 
-  const { timers, fire } = manualTimers();
-  await withReload(server, timers, async (root) => {
+  await withReload(server, heldTimers, async (root) => {
     await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人",
       editable: true, save: "saving", failure: "", stored: SESSION });
-    fire();
-    await expect.poll(() => server.requests.includes(outcome)).toBe(true);
   }, async () => {
     const loading = load(server);
     await expect.poll(() => server.requests.slice(before).includes(CHAPTER_READ)).toBe(true);
@@ -1023,17 +1044,98 @@ it("shows the text of a group with an unknown result in the recovery state when 
     chapter.open();
     return loading;
   });
-  expect({ requests: server.requests.slice(before).sort(), keys: server.keys.length, switches: server.switches,
+  expect({ requests: server.requests.slice(before).sort(), switches: server.switches,
     unexpected: server.unexpected }).toEqual({
-    requests: ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
-      `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`,
-      `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, `${CHAPTER_READ}/open-proposals`,
-      `${PROJECT_READ}/activity`, outcome].sort(),
-    keys: 1, switches: [], unexpected: [] });
+    requests: [...LOAD_READS, query, CHAPTER_READ, `${CHAPTER_READ}/open-proposals`].sort(), switches: [],
+    unexpected: [] });
 });
 
-// #1972 covers only a group with an unknown result. A group with a known conflict keeps the Chapter that the other tab
-// set, as before.
+// #1972: a group with no Admission never applied. The load sets its Chapter current again, as for the text of #1953,
+// and shows its text in the recovery state of today. It does not send the group again.
+it("sets its Chapter current again at a load and shows the text of a group with no Admission in the recovery state "
+  + "when another tab set another Chapter current", async () => {
+  const server = fakeServer();
+  await closeDuringSaveAndSetB(server, "edit");
+  server.hooks.outcome = "rejected";
+  const before = server.requests.length;
+  const query = `${OUTCOME}${server.keys[0]}`;
+
+  await withReload(server, heldTimers, async (root) => {
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+      save: "needs_attention", failure: "", stored: SESSION });
+  });
+  const requests = server.requests.slice(before);
+  expect(requests.indexOf(query) < requests.indexOf(CHALLENGE) && requests.indexOf(CHALLENGE) < requests.indexOf(SWITCH))
+    .toBe(true);
+  expect({ requests: [...requests].sort(), edits: count(server, AUTHOR_EDIT), switches: server.switches,
+    unexpected: server.unexpected }).toEqual({
+    requests: [...LOAD_READS, query, CHAPTER_B_READ, CHAPTER_READ, CHALLENGE, SWITCH, PROJECT_READ,
+      "GET /api/v1/projects", `${CHAPTER_READ}/open-proposals`].sort(),
+    edits: 1, switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B,
+      expected_target_revision_id: REVISION, editor_session_id: SESSION }], unexpected: [] });
+});
+
+/** Types "无人" in Chapter A, and the Server applies its save, but the response does not come back. The page closes. */
+async function closeAfterLostResponse(server: ReturnType<typeof fakeServer>) {
+  server.hooks.lostResponse = true;
+  await closeDuringSave(server, "edit");
+  delete server.hooks.lostResponse;
+  server.hooks.outcome = "committed";
+}
+
+// #1972: the Server applied the group, so its text is on the Server. The load settles the group and then opens the
+// Chapter that the other tab set, by the rules of today. It sends no command on the Session of the group.
+it("settles an applied group with a lost response at a load and opens the Chapter that another tab set current",
+  async () => {
+    const server = fakeServer(revision(APPLIED_REVISION, "雨夜。", "渡口。无人"));
+    await closeAfterLostResponse(server);
+    server.setCurrentInOtherTab(CHAPTER_B);
+    const before = server.requests.length;
+    const query = `${OUTCOME}${server.keys[0]}`;
+
+    await withReload(server, heldTimers, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "乙章。", editable: true,
+        save: "saved", failure: "", stored: NEW_SESSION });
+    });
+    const requests = server.requests.slice(before);
+    expect(requests.indexOf(query) < requests.indexOf(CREATION)).toBe(true);
+    expect({ requests: [...requests].sort(), edits: count(server, AUTHOR_EDIT), switches: server.switches,
+      unexpected: server.unexpected }).toEqual({
+      // The settlement reads the Editor Session of the group again for its base.
+      requests: [...LOAD_READS, `${PROJECT_READ}/editor-sessions/${SESSION}`, query, CHAPTER_B_READ, CHALLENGE,
+        CREATION, `${CHAPTER_B_READ}/open-proposals`].sort(),
+      edits: 1, switches: [], unexpected: [] });
+  });
+
+// #1972: the same load step with no Chapter switch. Before it, the load showed the text as saved, sent no outcome
+// Query, and the next input failed with "Author Edit acknowledgement does not converge".
+it("settles an applied group with a lost response at a load, so the next input saves on the applied Revision",
+  async () => {
+    const NEXT = revision("018f0000-0000-7001-8000-000000000a74", "雨夜。", "渡口。无人。");
+    const server = fakeServer([revision(APPLIED_REVISION, "雨夜。", "渡口。无人"), NEXT]);
+    await closeAfterLostResponse(server);
+    const query = `${OUTCOME}${server.keys[0]}`;
+
+    const { timers, fire } = manualTimers();
+    await withReload(server, timers, async (root) => {
+      await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+        save: "saved", failure: "", stored: SESSION });
+      await type(root, "。");
+      await expect.poll(() => unsettled(root)).toBe("1");
+      fire();
+      await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id"))
+        .toBe(NEXT.revision_id);
+      expect(shown(root)).toEqual({ text: "雨夜。\n渡口。无人。", editable: true, save: "saved", failure: "",
+        stored: SESSION });
+    });
+    expect({ queries: server.requests.filter((request) => request.startsWith(OUTCOME)),
+      editors: server.edits.map((edit) => [edit.editor_session_id, edit.expected_authoritative_revision_id]),
+      switches: server.switches, unexpected: server.unexpected }).toEqual({ queries: [query],
+      editors: [[SESSION, REVISION], [SESSION, APPLIED_REVISION]], switches: [], unexpected: [] });
+  });
+
+// #1972 covers only a group with no known result or no Admission. A group with a known conflict keeps the Chapter that
+// the other tab set, as before.
 it("opens the Chapter that another tab set current at a load when the group of the tab has a known conflict",
   async () => {
     const server = fakeServer();
@@ -1045,6 +1147,7 @@ it("opens the Chapter that another tab set current at a load when the group of t
       fire();
       await expect.poll(() => shown(root).save).toBe("needs_attention");
     }, timers);
+    releaseEditorSession(SESSION);
     server.setCurrentInOtherTab(CHAPTER_B);
     const before = server.requests.length;
 
@@ -1063,9 +1166,10 @@ it("opens the Chapter that another tab set current at a load when the group of t
 // another tab, the records of the group would not bind that base, and a later load would show them as saved. So the
 // load keeps the Chapter that the other tab set, as before, and each load shows the same recovery state.
 it("keeps the Chapter that another tab set at each load, with no Set Current Chapter, when another tab also wrote a "
-  + "later Revision of the Chapter of a group with an unknown result", async () => {
+  + "later Revision of the Chapter of a group with no Admission", async () => {
   const server = fakeServer();
   await closeDuringSaveAndSetB(server, "edit");
+  server.hooks.outcome = "rejected";
   server.writeInOtherTab();
   const before = server.requests.length;
   for (let reload = 0; reload < 2; reload += 1) {
@@ -1073,10 +1177,12 @@ it("keeps the Chapter that another tab set at each load, with no Set Current Cha
       await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "乙章。", editable: false,
         save: "needs_attention", failure: "", stored: SESSION });
     });
+    releaseEditorSession(SESSION);
   }
   const load = ["GET /api/v1/protocol", PROJECT_READ, "GET /api/v1/projects", `${PROJECT_READ}/manuscript/tree`,
     `${PROJECT_READ}/manuscript/statistics`, `${PROJECT_READ}/assistance`, `${PROJECT_READ}/skills`, CHAPTER_B_READ,
     `${PROJECT_READ}/editor-sessions/${SESSION}`, CHAPTER_READ, `${CHAPTER_B_READ}/open-proposals`];
+  // Only the first load asks the outcome: the answer settles the group.
   expect({ requests: server.requests.slice(before).sort(), switches: server.switches, unexpected: server.unexpected })
-    .toEqual({ requests: [...load, ...load].sort(), switches: [], unexpected: [] });
+    .toEqual({ requests: [...load, ...load, `${OUTCOME}${server.keys[0]}`].sort(), switches: [], unexpected: [] });
 });

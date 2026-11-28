@@ -202,7 +202,7 @@ opens nothing, its editor stays read-only with its text, and it sends no other
 request. Its next return to the front reads its Chapter one time and opens
 again. A reopen that finds another Current Chapter reads that Chapter
 only when it does not set its own Chapter current again. With no such text and
-no group with an unknown result (see below), a
+no group that keeps its Chapter (see below), a
 load or a reopen opens the Chapter that the other tab set current, in a new
 Editor Session when the records of the stored Session have no net change. A tab
 that comes to the front keeps
@@ -232,15 +232,26 @@ also does not run when the edits have no Author Edit form, or are more than one
 Author Edit can have (240 units, or 240 normalized primitives in a unit). Such
 work keeps the stored Editor Session and its recovery state.
 
-A group that went out with no known result also goes back to its Chapter
-(#1972). When another tab set another Chapter current, a load or a reopen sets
-the Chapter of the group current again with the stored Editor Session, and shows
-the recovery state of the group there. The recovery does not send the group
-again. The tab sends Set Current Chapter only while the Chapter is at the
-Revision of the Server base of the stored Session, so the command does not move
-that base past the group. When another tab wrote a later Revision of the
-Chapter, the tab opens the Chapter that the other tab set, as for the other work
-of the list above.
+A load asks the outcome of each group that went out with no known result
+before the Chapter choice and before each command of the stored Editor Session
+(#1972), as the `DeliveryUnknown` row of section 6.1 permits. A load is an open in
+a page that did not hold the lock of the Session; a reopen in a page with an
+editor of the Session leaves the Query to the save of that editor. The answer
+decides the Chapter:
+
+- `Committed`: the group settles, and its text is on the Server. The rules above
+  choose the Chapter.
+- `Rejected`, or a reconfirmation: the group did not apply. When another tab set
+  another Chapter current, the load sets the Chapter of the group current again
+  with the stored Session, and shows its text in its recovery state. The load
+  does not send the group again. It sends Set Current Chapter only while the
+  Chapter is at the Revision of the Server base of the Session, so the command
+  does not move that base past the group. When another tab wrote a later
+  Revision of the Chapter, the load opens the Chapter that the other tab set.
+- `StillUnknown`, or no answer: the Session sends no command until the result is
+  known. The load opens the Chapter of the group as its Current Chapter, as a tab
+  that did not see the Set Current Chapter of the other tab does, and shows the
+  text. The Project keeps the Current Chapter of the other tab.
 
 The Admissions, Receipts, and Activity of a writer takeover from before ADR
 0107 stay in the store, and the Activity stream replays them. The migration

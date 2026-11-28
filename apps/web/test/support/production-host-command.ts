@@ -252,7 +252,8 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
  *
  * With `held` "response" (#1972), the Server applies the Author Edit of page 1, page 1 gets no response, and page 1
  * leaves its document, so the group has an unknown result. Then page 2 only selects Chapter B. The new load of page 1
- * sets A current again with its stored Editor Session and shows the text of the group, and the next load keeps it.
+ * asks the outcome first, settles the group, and opens Chapter B. Page 1 then selects Chapter A, which has the text, and
+ * types on it.
  */
 export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserContext,
   held: "clock" | "challenge" | "response" = "clock"): Promise<void> {
@@ -344,6 +345,12 @@ export async function verifyProductionChapterSwitchLoad(sharedContext: BrowserCo
     if (held === "clock") await writer.reload();
     else assert.equal((await writer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
     if (held === "clock") await late.clock.resume();
+    if (held === "response") {
+      // The text of the group is on the Server, so the load opens the Chapter that page 2 set current.
+      await writer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      assert.equal(await manuscriptBody(writer), "");
+      await writer.locator("button[data-chapter-id]", { hasText: "Chapter A" }).click();
+    }
     const afterLoad = `${held === "clock" ? "Later: " : ""}The first block.\nThe second block. Unsent on page one.`;
     await writer.waitForFunction((expected) => {
       const status = document.querySelector('[data-save-state="saved"][data-unsettled-intent-count="0"]');
