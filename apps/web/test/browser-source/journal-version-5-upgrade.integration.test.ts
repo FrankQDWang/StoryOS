@@ -12,9 +12,10 @@ import identifierFixture from "../../../../fixtures/local-edit-journal/version-5
 import inFlightFixture from "../../../../fixtures/local-edit-journal/version-5-in-flight-group.json";
 import sentFixture from "../../../../fixtures/local-edit-journal/version-5-sent-group.json";
 import unsentFixture from "../../../../fixtures/local-edit-journal/version-5-unsent-group.json";
+import type { GetChapterResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
-  OWNER, PROJECT, SESSION, closeTrackedDatabases, createBrowserScenario, deleteJournal, jsonResponse, requestHeaders,
-  requestResult, requireEditorReady, requireRequestBody, trackDatabase,
+  BLOCK, OWNER, PROJECT, SESSION, closeTrackedDatabases, createBrowserScenario, deleteJournal,
+  jsonResponse, requestHeaders, requestResult, requireEditorReady, requireRequestBody, trackDatabase,
 } from "./scenario.ts";
 
 // The Journals of these tests are rows that the released client of `main` `54525595` wrote at version 5 (ADR 0099
@@ -30,6 +31,8 @@ const OUTCOME = `GET /api/v1/projects/${PROJECT}/manuscript/author-edit-outcomes
 const V2 = "storyos.command.apply-author-edit.request.v2";
 const NEW_SESSION = "018f0000-0000-7001-8000-0000000000e1";
 const OTHER_SESSION = "018f0000-0000-7001-8000-0000000000e2";
+const LATER_REVISION = "018f0000-0000-7001-8000-0000000000e3";
+const LATER_BLOCK = "018f0000-0000-7001-8000-0000000000e4";
 
 const databases = new Set<IDBDatabase>();
 const scenario = createBrowserScenario();
@@ -62,9 +65,12 @@ function rows(fixture: Fixture, store: string) {
  * A fake Server that serves only the `allowed` requests of a test and throws on each other request. It serves the read
  * and the creation of an Editor Session, a Challenge, an Author Edit, and an outcome Query, and records each request.
  * It holds the Author Edit response. It holds the outcome Query response, or it answers that the Server rejected the
- * command (`rejected`). A `missing` Session read answers 404.
+ * command (`rejected`). A `missing` Session read answers 404. With `later`, each creation gives a new Editor Session, first
+ * `NEW_SESSION` and then `OTHER_SESSION`, on the Revision of `later`, as after a save of another tab.
  */
-function fakeServer(allowed: readonly string[], answers: { outcome?: "rejected"; session?: "missing" } = {}) {
+function fakeServer(allowed: readonly string[],
+  answers: { outcome?: "rejected"; session?: "missing"; later?: GetChapterResponse } = {}) {
+  let creations = 0;
   const requests: string[] = [];
   const nonces: (string | null)[] = [];
   const challenges: Record<string, unknown>[] = [];
@@ -79,8 +85,16 @@ function fakeServer(allowed: readonly string[], answers: { outcome?: "rejected";
         : jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v2" });
     }
     if (name === SESSION_CREATE) {
-      return jsonResponse({ ...scenario.session,
-        editor_session: { ...scenario.session.editor_session, editor_session_id: NEW_SESSION } });
+      creations += 1;
+      const editor_session = { ...scenario.session.editor_session,
+        editor_session_id: answers.later !== undefined && creations > 1 ? OTHER_SESSION : NEW_SESSION };
+      if (answers.later === undefined) return jsonResponse({ ...scenario.session, editor_session });
+      const revision = answers.later.chapter.current_revision;
+      return jsonResponse({ ...scenario.session, editor_session, base_snapshot: { ...scenario.session.base_snapshot,
+        snapshot_id: crypto.randomUUID(), project_activity_position: answers.later.project_activity_position,
+        authoritative_head_revision_id: revision.revision_id, materialized_revision: revision,
+        materialized_payload_digest: { ...scenario.session.base_snapshot.materialized_payload_digest,
+          value_hex_lowercase: await sha256(revision.body) } } });
     }
     if (name === CHALLENGE) {
       challenges.push(requireRequestBody(init));
@@ -93,18 +107,30 @@ function fakeServer(allowed: readonly string[], answers: { outcome?: "rejected";
     }
     nonces.push(requestHeaders(init).get("x-storyos-anti-forgery"));
     return answers.outcome === "rejected" ? jsonResponse({
-      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v2",
       correlation_id: "018f0000-0000-7001-8000-000000000082", project_scope: scenario.project.project_scope,
       outcome: { outcome_kind: "rejected", reason: "challenge_expired_unconsumed" } }) : new Promise<Response>(() => {});
   };
   return { fetchImpl, requests, challenges, edits, nonces };
 }
 
+async function sha256(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** The Chapter after a save of another tab: a later Revision with a second block. */
+const LATER_CHAPTER: GetChapterResponse = { ...scenario.chapter, project_activity_position: "1",
+  chapter: { ...scenario.chapter.chapter, current_revision: { revision_id: LATER_REVISION, body: "Base\nLater",
+    blocks: [{ manuscript_block_id: BLOCK, block_kind: "paragraph", text: "Base" },
+      { manuscript_block_id: LATER_BLOCK, block_kind: "paragraph", text: "Later" }] } } };
+
 /** Opens the editor. A null `active` is a tab with no Editor Session in its session storage. */
-async function openStored(server: ReturnType<typeof fakeServer>, active: string | null = SESSION) {
+async function openStored(server: ReturnType<typeof fakeServer>, active: string | null = SESSION,
+  chapter = scenario.chapter) {
   if (active !== null) sessionStorage.setItem(ACTIVE_KEY, active);
   const state = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
-    chapter: scenario.chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
+    chapter, profile: scenario.profile, fetchImpl: server.fetchImpl });
   requireEditorReady(state);
   trackDatabase(state.database, databases);
   return state;
@@ -241,6 +267,45 @@ it("puts the text of the Session of the version 5 rows in local recovery when th
   expect({ body: (await openStored(stored)).openedProjection.body, requests: stored.requests })
     .toEqual({ body: "Base!?", requests: [SESSION_READ] });
 });
+
+it("puts the text of the stored Session of the version 5 rows in local recovery when the Server refuses its read",
+  async () => {
+    // The session storage of the tab names the Session of the version 5 rows, as at a reload after the upgrade.
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([SESSION_READ, CHALLENGE, SESSION_CREATE], { session: "missing" });
+
+    const state = await openStored(server);
+
+    expect({ body: state.openedProjection.body, session: state.session.editor_session.editor_session_id,
+      active: sessionStorage.getItem(ACTIVE_KEY), requests: server.requests }).toEqual({ body: "Base",
+      session: NEW_SESSION, active: NEW_SESSION, requests: [SESSION_READ, CHALLENGE, SESSION_CREATE] });
+    expect(await recoveryItems(state, 1)).toEqual([["正文修改", "Base!?"]]);
+  });
+
+it("puts the text of the version 5 rows in one Author Edit when a second tab opens after the catch-up of the first",
+  async () => {
+    // Another tab saved the Chapter, so the Session of the version 5 rows has an earlier base. Tab 1 claims that
+    // Session and puts its text on the later Revision in a new Editor Session.
+    await restore(unsentFixture as Fixture);
+    const server = fakeServer([CHALLENGE, SESSION_READ, SESSION_CREATE, AUTHOR_EDIT], { later: LATER_CHAPTER });
+    const first = await openStored(server, null, LATER_CHAPTER);
+    expect({ body: first.openedProjection.body, session: first.session.editor_session.editor_session_id })
+      .toEqual({ body: "Base!?\nLater", session: NEW_SESSION });
+
+    // Tab 2 is a new tab. It does not claim the Session whose text tab 1 has.
+    sessionStorage.removeItem(ACTIVE_KEY);
+    const second = await openStored(server, null, LATER_CHAPTER);
+    expect({ body: second.openedProjection.body, session: second.session.editor_session.editor_session_id })
+      .toEqual({ body: "Base\nLater", session: OTHER_SESSION });
+    await expect(submitOnePendingAuthorEdit({ workspace: second, baseUrl: location.origin,
+      fetchImpl: server.fetchImpl, cryptoImpl: crypto })).rejects.toThrow("One pending Author Edit is required");
+
+    void submitOnePendingAuthorEdit({ workspace: first, baseUrl: location.origin, fetchImpl: server.fetchImpl,
+      cryptoImpl: crypto });
+    await expect.poll(() => server.requests.filter((request) => request === AUTHOR_EDIT).length).toBe(1);
+    expect({ editor: server.edits[0]!.body.editor_session_id, sessionReads: server.requests
+      .filter((request) => request === SESSION_READ).length }).toEqual({ editor: NEW_SESSION, sessionReads: 1 });
+  });
 
 // Two tabs opened the version 5 Journal at the same time, and both read the marker of the unsent group. The first tab
 // completed the new freeze before the second tab read the group, or after that read and before the write of the second

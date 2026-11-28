@@ -178,7 +178,8 @@ export interface Version5Session { editor_session_id: string; journal_partition_
  * Selects the Editor Session that a tab opens after the upgrade of a version 5 Journal. A tab with a `stored` Session
  * of the version 5 rows opens it when no other open tab has it, else the tab opens a new Session. A tab with no stored
  * Session, as a new tab or a browser that started again, opens the first Session of the version 5 rows that no other
- * open tab has. `claimed` is that Session.
+ * open tab has. `claimed` is the Session of the version 5 rows that the tab opens, stored or not, so that its text goes
+ * to local recovery when it does not open.
  */
 export async function claimVersion5Session(database: IDBDatabase, stored: string | null | undefined):
   Promise<{ active: string | null | undefined; claimed?: Version5Session }> {
@@ -187,7 +188,8 @@ export async function claimVersion5Session(database: IDBDatabase, stored: string
   const sessions = marker?.value ?? [];
   if (stored) {
     const session = sessions.find((item) => item.editor_session_id === stored);
-    return { active: session === undefined || await lockEditorSession(session.editor_session_id) ? stored : null };
+    if (session === undefined) return { active: stored };
+    return await lockEditorSession(session.editor_session_id) ? { active: stored, claimed: session } : { active: null };
   }
   for (const session of sessions) {
     if (await lockEditorSession(session.editor_session_id)) {
@@ -204,10 +206,20 @@ export async function claimVersion5Session(database: IDBDatabase, stored: string
 export async function releaseVersion5Session(database: IDBDatabase, session: Version5Session, cryptoImpl: Crypto,
   maxJsonStringUtf8Bytes: number): Promise<void> {
   await retainPartitionTexts(database, [session.journal_partition_id], cryptoImpl, maxJsonStringUtf8Bytes);
+  await removeVersion5Session(database, session.editor_session_id);
+}
+
+/**
+ * Removes the Editor Session `editorSessionId` from the Sessions of the version 5 rows, so that no tab claims it. A
+ * catch-up that copied the text of that Session to a new Session calls it before it ends the lock of the Session, so a
+ * new tab does not copy the same text again.
+ */
+export async function removeVersion5Session(database: IDBDatabase, editorSessionId: string): Promise<void> {
   const transaction = database.transaction("metadata", "readwrite");
   const metadata = transaction.objectStore("metadata");
   const marker = await requestResult(metadata.get(SESSIONS_KEY)) as { value: Version5Session[] } | undefined;
-  const rest = (marker?.value ?? []).filter((item) => item.editor_session_id !== session.editor_session_id);
+  if (marker === undefined) return;
+  const rest = marker.value.filter((item) => item.editor_session_id !== editorSessionId);
   if (rest.length === 0) metadata.delete(SESSIONS_KEY);
   else metadata.put({ key: SESSIONS_KEY, value: rest });
   await transactionResult(transaction);

@@ -40,8 +40,8 @@ import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-sessio
 import { recoveryPrefix } from "./local-recovery-record.ts";
 import { groupNeverSent } from "./protected-transport-capsule.ts";
 import {
-  claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, retainVersion5PartitionText,
-  upgradeVersion5Journal, type Version5Session,
+  claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, removeVersion5Session,
+  retainVersion5PartitionText, upgradeVersion5Journal, type Version5Session,
 } from "./journal-version-5-upgrade.ts";
 
 export {
@@ -389,6 +389,11 @@ export function startEditorWorkspace(options: EditorWorkspaceOptions): EditorWor
       } catch {
         return opened;
       }
+      // The tab stops the use of a stored Session that did not open, so the next open creates a Session.
+      const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
+      if (globalThis.sessionStorage?.getItem(activeSessionKey) === claimed.editor_session_id) {
+        globalThis.sessionStorage.removeItem(activeSessionKey);
+      }
       return startEditorWorkspace(options).finish(chapter, read, shown);
     },
     otherChapter: async (currentChapterId, shown, keep = false) => {
@@ -694,6 +699,11 @@ async function finishEditorWorkspace(started: Promise<EditorSessionStart>, {
     for (const edit of catchUp) {
       await appendAuthorEdit(workspace, { ...edit, inputOrigin: "selection_replacement", undoGroupId, createdAt },
         cryptoImpl);
+    }
+    // The new Session has the text of the stored Session. While this tab has the lock of the stored Session, no other
+    // tab claims it as a Session of version 5 rows, so a new tab does not copy the same text again (#1965).
+    if (stored !== undefined && catchUp.length > 0) {
+      await removeVersion5Session(database, stored.partition.editor_session_id);
     }
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
     releaseEarlierEditorSessions(session.editor_session.editor_session_id);
