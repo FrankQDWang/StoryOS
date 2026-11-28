@@ -167,8 +167,10 @@ The catch-up runs at a load, when a save gets `stale_authoritative_head`, and
 when the tab comes to the front (`visibilitychange`). At the front, the tab
 waits for the end of an open IME composition, saves its input, then reads the
 Chapter one time. Input during that quiet step refuses it, so the check waits
-for the save of that input and runs again. The check compares the read with the
-Revision of the editor when the read ends, so a save that applied during the
+for the save of that input and runs again, with no limit. Each wait is for the
+editor, and not for a timer. A tab that goes to the background ends the check,
+and its next return to the front starts a new one. When the tab installs a
+Revision during the read, that Revision is at least as late as the read, so the
 read starts no catch-up. A live tab waits for the end
 of an open IME composition, then ends input: the editor is read-only, and the
 controller starts no submission and no Author Undo, but captured input still
@@ -191,8 +193,12 @@ Chapter current again with that Editor Session, and then catches up on it. The
 later action wins, as for a block. A conflict (`wrong_target_head` or
 `stale_current_chapter`) is a command of another tab after the reads, so the tab
 reads the Project and its Chapter again and sends the command again, at most 8
-times. When another tab set the Chapter current again, the tab sends nothing
-more. A reopen that finds another Current Chapter reads that Chapter
+times. A Project read after an applied command that names another Chapter is
+one more conflict. When another tab set the Chapter current again, the tab sends
+nothing more. After the last conflict, a tab at the front keeps its Chapter: it
+opens nothing, its editor stays read-only with its text, and it sends no other
+request. Its next return to the front reads its Chapter one time and opens
+again. A reopen that finds another Current Chapter reads that Chapter
 only when it does not set its own Chapter current again. With no such text, a
 load or a reopen opens the Chapter that the other tab set current, in a new
 Editor Session when the records of the stored Session have no net change. A tab
