@@ -81,11 +81,12 @@ it("stores a key typed in an Arriving Chapter after the switch found no Arrival 
   for (let step = 0; step < 100 && arriving.isConnected; step++) await Promise.resolve();
   win.document.execCommand("insertText", false, "?");
 
+  // The save state controls the new load. The browser test of the Project view proves the text on the screen.
   await expect.poll(() => {
     const save = root().querySelector("[data-save-state]");
-    return { body: manuscriptBody(manuscriptEditor(root(), win)), save: save?.getAttribute("data-save-state"),
-      unsettled: save?.getAttribute("data-unsettled-intent-count"), arriving: shown().arriving };
-  }, { timeout: 15_000 }).toEqual({ body: "?", save: "saved", unsettled: "0", arriving: "" });
+    return { save: save?.getAttribute("data-save-state"), unsettled: save?.getAttribute("data-unsettled-intent-count"),
+      arriving: shown().arriving };
+  }, { timeout: 15_000 }).toEqual({ save: "saved", unsettled: "0", arriving: "" });
   const reloaded = await reloadProject(frame, projectId);
   const loaded = applicationWindow(frame);
   const stored = await getChapter({ baseUrl: loaded.location.origin, projectId, chapterId: chapterB,

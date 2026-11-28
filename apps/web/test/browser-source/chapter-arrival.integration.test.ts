@@ -1976,7 +1976,7 @@ async function journalTransactionsEnded(name: string): Promise<void> {
   }
 }
 
-/** The text that each Author Edit of the server sends: the `[from, to, text]` of each primitive, in order. */
+/** The text that the tab sent in each Author Edit to the fake: the `[from, to, text]` of each primitive, in order. */
 const sentPrimitives = (server: ReturnType<typeof arrivalServer>["server"]) => server.editRequests
   .flatMap((request) => (request.author_edit_units as { normalized_primitives: Primitive[] }[]))
   .flatMap((unit) => unit.normalized_primitives.map((primitive) => [primitive.from, primitive.to, primitive.text]));
