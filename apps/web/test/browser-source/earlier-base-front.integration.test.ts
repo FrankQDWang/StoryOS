@@ -33,6 +33,7 @@ const CHAPTER_READ = `GET /api/v1/projects/${PROJECT}/chapters/${CHAPTER}`;
 const PROJECT_READ = `GET /api/v1/projects/${PROJECT}`;
 const CHAPTER_B_READ = `GET /api/v1/projects/${PROJECT}/chapters/${CHAPTER_B}`;
 const CREATION = `POST /api/v1/projects/${PROJECT}/editor-sessions`;
+const CHALLENGE = `POST /api/v1/projects/${PROJECT}/anti-forgery-challenges`;
 const scenario = createBrowserScenario();
 
 const APPLIED_REVISION = "018f0000-0000-7001-8000-000000000a66";
@@ -70,7 +71,8 @@ function gate() {
  * A fake Server of one Project. The Chapter starts at the base Revision, and `writeInOtherTab` gives it a later
  * Revision of another tab. An Author Edit on an earlier Revision gets `stale_authoritative_head`. With `applies`, an
  * Author Edit on the current Revision of this tab (the base, or a Revision of `applies`) applies and gives the next
- * Revision of `applies`; else it gets no response, so the test sees that it went out. With `readHeadAtRequest`, a
+ * Revision of `applies`; else it gets no response, so the test sees that it went out. A Command Challenge waits for
+ * `gates.challenge`, when the test gives it. With `readHeadAtRequest`, a
  * Chapter read gives the head at its request, before its gate. The first creation gives the Editor Session on the base, the second one a new Editor Session on the
  * current Revision. A Chapter read waits for `gates.chapter`, a Project read for `gates.project`, an Author Edit on
  * the base for `gates.edit`, and a creation after the first for `gates.creation`, when the test gives them.
@@ -87,13 +89,15 @@ function fakeServer(applies?: Revision | Revision[]) {
   const edits: Record<string, unknown>[] = [];
   const hooks: { beforeSwitch: (() => void)[]; beforeProjectRead: (() => void)[]; readHeadAtRequest?: boolean } =
     { beforeSwitch: [], beforeProjectRead: [] };
-  const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void> } = {};
+  const gates: { chapter?: Promise<void>; project?: Promise<void>; edit?: Promise<void>; creation?: Promise<void>;
+    challenge?: Promise<void> } = {};
   // The head of the Chapter and the base of the stored Editor Session, with their activity positions.
   const world = { head: BASE, position: 0, stored: BASE, storedPosition: 0, current: CHAPTER };
-  // One Editor Session response for each Editor Session and base, so a read gives the response of the creation.
+  // One Editor Session response for each Editor Session and base, so a read gives the response of the creation. Each
+  // move of a base gives a new Snapshot, also on the same Revision, as the Server does.
   const sessions = new Map<string, Promise<unknown>>();
   const session = (editorSessionId: string, at: Revision, position: number, chapterId = CHAPTER) => {
-    const key = `${editorSessionId}:${at.revision_id}`;
+    const key = `${editorSessionId}:${at.revision_id}:${position}`;
     if (!sessions.has(key)) {
       sessions.set(key, sha256(at.body).then((digest) => ({ ...scenario.session,
         editor_session: { ...scenario.session.editor_session, editor_session_id: editorSessionId },
@@ -164,7 +168,8 @@ function fakeServer(applies?: Revision | Revision[]) {
       return jsonResponse({ ...scenario.chapter, project_activity_position: String(position),
         chapter: { ...scenario.chapter.chapter, current_revision: head } });
     }
-    if (route === `POST ${project}/anti-forgery-challenges`) {
+    if (route === CHALLENGE) {
+      await gates.challenge;
       return jsonResponse({ nonce: "a".repeat(64), expires_at: new Date(Date.now() + 60_000).toISOString(),
         limit_profile_revision: scenario.profile.limit_profile_revision });
     }
@@ -855,4 +860,94 @@ it("opens the Chapter that another tab set current at a load when the tab has no
       failure: "", stored: NEW_SESSION });
     expect({ switches: server.switches, unexpected: server.unexpected }).toEqual({ switches: [], unexpected: [] });
   }, heldTimers, true);
+});
+
+/**
+ * Types "无人" in Chapter A and starts its save. `held` holds the Command Challenge of the save, or else the save, and
+ * the page closes. Then another tab sets Chapter B current.
+ */
+async function closeDuringSaveAndSetB(server: ReturnType<typeof fakeServer>, held: "challenge" | "edit") {
+  const { timers, fire } = manualTimers();
+  await withView(server, async (root) => {
+    await type(root, "无人");
+    await expect.poll(() => unsettled(root)).toBe("1");
+    const challenges = count(server, CHALLENGE);
+    if (held === "challenge") server.gates.challenge = new Promise(() => {});
+    fire();
+    await expect.poll(() => held === "challenge" ? count(server, CHALLENGE) : count(server, AUTHOR_EDIT))
+      .toBe(held === "challenge" ? challenges + 1 : 1);
+  }, timers);
+  delete server.gates.challenge;
+  server.setCurrentInOtherTab(CHAPTER_B);
+  server.requests.length = 0;
+}
+
+it("sets its Chapter current again at a load and sends the group that never went to the Server when the page closed "
+  + "before the Challenge answered", async () => {
+  const server = fakeServer(revision(APPLIED_REVISION, "雨夜。", "渡口。无人"));
+  await closeDuringSaveAndSetB(server, "challenge");
+  expect(count(server, AUTHOR_EDIT)).toBe(0);
+
+  const { timers, fire } = manualTimers();
+  await withView(server, async (root) => {
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+      save: "saving", failure: "", stored: SESSION });
+    fire();
+    await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-authoritative-revision-id"))
+      .toBe(APPLIED_REVISION);
+  }, timers, true);
+  expect({ edits: server.edits.length, switches: server.switches, unexpected: server.unexpected }).toEqual({ edits: 1,
+    switches: [{ chapter_id: CHAPTER, expected_current_chapter_id: CHAPTER_B, expected_target_revision_id: REVISION,
+      editor_session_id: SESSION }], unexpected: [] });
+
+  // A new load shows the stored text.
+  server.requests.length = 0;
+  await withView(server, async (root) => {
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜。\n渡口。无人", editable: true,
+      save: "saved", failure: "", stored: SESSION });
+  }, heldTimers, true);
+  expect({ edits: server.edits.length, switches: server.switches.length, unexpected: server.unexpected })
+    .toEqual({ edits: 1, switches: 1, unexpected: [] });
+});
+
+it("puts the text of the group that never went to the Server on the later Revision of its Chapter at a load", async () => {
+  const server = fakeServer();
+  await closeDuringSaveAndSetB(server, "challenge");
+  server.writeInOtherTab();
+
+  const { timers, fire } = manualTimers();
+  await withView(server, async (root) => {
+    await expect.poll(() => shown(root), { timeout: 10_000 }).toEqual({ text: "雨夜，风起。\n渡口。无人", editable: true,
+      save: "saving", failure: "", stored: NEW_SESSION });
+    // The save of the text goes out one time, in the new Editor Session on the later Revision.
+    fire();
+    await expect.poll(() => count(server, AUTHOR_EDIT)).toBe(1);
+  }, timers, true);
+  expect({ editors: server.edits.map((edit) => [edit.editor_session_id, edit.expected_authoritative_revision_id]),
+    switches: server.switches.length, unexpected: server.unexpected }).toEqual({
+    editors: [[NEW_SESSION, LATER_REVISION]], switches: 1, unexpected: [] });
+});
+
+it("does not send again a group with an unknown result when the page closed during its save and another tab set "
+  + "another Chapter current", async () => {
+  const server = fakeServer();
+  await closeDuringSaveAndSetB(server, "edit");
+
+  // The load keeps the recovery of the stored Editor Session, so the editor takes no input.
+  const { databases, openSpy } = trackOpens();
+  try {
+    const loaded = await load(server);
+    const view = mountStage1View(loaded.root, { ...loaded, writingTimers: heldTimers });
+    try {
+      await expect.poll(() => shown(loaded.root), { timeout: 10_000 }).toMatchObject({ editable: false,
+        save: "needs_attention", stored: SESSION });
+    } finally {
+      view.unmount();
+    }
+  } finally {
+    closeTrackedDatabases(databases);
+    openSpy.mockRestore();
+  }
+  expect({ edits: server.edits.length, switches: server.switches, unexpected: server.unexpected })
+    .toEqual({ edits: 1, switches: [], unexpected: [] });
 });

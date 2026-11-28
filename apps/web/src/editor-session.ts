@@ -38,6 +38,7 @@ import { SECURITY_POLICY_REVISION, uuidV7 } from "./client-identity.ts";
 import { requestResult, transactionResult } from "./indexed-db-request.ts";
 import { lockEditorSession, releaseEarlierEditorSessions } from "./editor-session-lock.ts";
 import { recoveryPrefix } from "./local-recovery-record.ts";
+import { groupNeverSent } from "./protected-transport-capsule.ts";
 import {
   claimVersion5Session, freezeUnsentVersion5Groups, releaseVersion5Session, retainVersion5PartitionText,
   upgradeVersion5Journal, type Version5Session,
@@ -533,7 +534,8 @@ async function partitionHasOpenWork(workspace: EditorWorkspace): Promise<boolean
  * The text of the stored Editor Session that a catch-up can put on the current Chapter (ADR 0107, section 2), or
  * `undefined` when its open work is not only Author Edit text of the Chapter. A group that went out with no known
  * result, input in a Proposal candidate, and decision work keep the stored Session, because the catch-up cannot know
- * if they applied. `shown` is the text that a live tab shows, with its input that is not in the Journal.
+ * if they applied. A group that never went to the Server has no result, so its text can catch up (#1964). `shown` is
+ * the text that a live tab shows, with its input that is not in the Journal.
  */
 async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
   shown: readonly ManuscriptParagraph[] | undefined): Promise<EarlierBaseText | undefined> {
@@ -543,8 +545,13 @@ async function earlierBaseText(workspace: EditorWorkspace, chapterId: string,
   const revisedCandidate = new Set(snapshot.groups.flatMap((group) => group.settlement.kind
     === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised"
     ? group.ordered_coverage.map((item) => item.local_intent_sequence) : []));
+  const unsent = new Set<string>();
+  for (const group of snapshot.groups) {
+    if (await groupNeverSent(workspace, group)) unsent.add(group.journal_submission_group_id);
+  }
   // Only a later head stopped the text. A refused edit, or a conflict for another reason, needs its recovery.
-  const known = ({ settlement }: (typeof snapshot.groups)[number]) => settlement.kind === "applied_receipt_settled"
+  const known = ({ journal_submission_group_id: id, settlement }: (typeof snapshot.groups)[number]) => unsent.has(id)
+    || settlement.kind === "applied_receipt_settled"
     || settlement.kind === "zero_authority_receipt_settled" && (settlement.effect.kind === "proposal_revised"
       || settlement.effect.kind === "no_effect" || settlement.effect.kind === "conflicted"
       && settlement.effect.reason === "stale_authoritative_head");
