@@ -138,11 +138,12 @@ export async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, bo
   editor.focus();
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text });
-  // A new authoritative revision proves that the input reached the saved manuscript.
+  // A new authoritative revision proves that the input reached the saved manuscript. The end of a Chapter switch can
+  // replace the editor after the key, so each step reads the editor that is on the screen.
   await expect.poll(() => {
     const save = root.querySelector("[data-save-state]");
     return {
-      body: manuscriptBody(editor),
+      body: manuscriptBody(manuscriptEditor(root, applicationWindow(frame))),
       saveState: save?.getAttribute("data-save-state"),
       unsettledIntentCount: save?.getAttribute("data-unsettled-intent-count"),
       revisionChanged: save?.getAttribute("data-authoritative-revision-id") !== previousRevision,

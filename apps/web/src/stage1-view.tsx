@@ -876,7 +876,8 @@ function ProjectEditorView({
                 }
               }
               handedOff = true;
-              onReopened(next);
+              // The editor changes in the task of the check, so no key goes to the Arriving Chapter after it (#1960).
+              flushSync(() => { onReopened(next); });
               return;
             }
           });
