@@ -1976,8 +1976,23 @@ async function journalTransactionsEnded(name: string): Promise<void> {
   }
 }
 
+/** The text that each Author Edit of the server sends: the `[from, to, text]` of each primitive, in order. */
+const sentPrimitives = (server: ReturnType<typeof arrivalServer>["server"]) => server.editRequests
+  .flatMap((request) => (request.author_edit_units as { normalized_primitives: Primitive[] }[]))
+  .flatMap((unit) => unit.normalized_primitives.map((primitive) => [primitive.from, primitive.to, primitive.text]));
+
+/** Saves the key `?` at the end of `Beta`, and gives the screen and the Author Edit primitives that the tab sent. */
+async function savedKey(workspace: Awaited<ReturnType<typeof openWorkspace>>) {
+  workspace.server.acceptEdits = true;
+  await expect.poll(() => {
+    workspace.runIdle();
+    return { ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice(),
+      sent: sentPrimitives(workspace.server) };
+  }).toEqual({ ...READY, body: "Beta?", save: "saved", notice: undefined, sent: [[4, 4, "?"]] });
+}
+
 // #1960: the switch finds no Arrival Input and changes the editor. A key that the author types in the Arriving Chapter
-// in the same task, before or after the switch decided, goes into the stored text. An IME composition with no text
+// in the same task, before or after the switch decided, goes into the Author Edit. An IME composition with no text
 // holds the decision until its end (ADR 0105, section 4), so the key comes in a known order.
 for (const order of ["before", "after"] as const) {
   it(`saves a key typed in an Arriving Chapter with no Arrival Input ${order} the switch decided its end`, async () => {
@@ -2005,19 +2020,33 @@ for (const order of ["before", "after"] as const) {
     }
     const target = { arriving: arriving.isConnected, focused: workspace.editor().contains(document.activeElement) };
     document.execCommand("insertText", false, "?");
-    workspace.server.acceptEdits = true;
 
-    await expect.poll(() => {
-      workspace.runIdle();
-      return { ...workspace.ready(), save: workspace.saveState(), notice: workspace.notice(),
-        stored: workspace.server.texts[CHAPTER_B]!.body };
-    }).toEqual({ ...READY, body: "Beta?", save: "saved", notice: undefined, stored: "Beta?" });
+    await savedKey(workspace);
     // Before the decision, the Arriving Chapter gets the key and hands it over. After it, the editor of the Chapter
     // replaced the Arriving Chapter at once and has the focus.
-    expect({ target, edits: workspace.server.editRequests.length })
-      .toEqual({ target: { arriving: order === "before", focused: true }, edits: 1 });
+    expect(target).toEqual({ arriving: order === "before", focused: true });
   });
 }
+
+// #1960: a key before the Chapter read of the reopen answers goes into the Arrival Input and its hand-over.
+it("saves a key typed in an Arriving Chapter while the Chapter read of the reopen waits", async () => {
+  const workspace = await openWorkspace();
+  await workspace.copy(CHAPTER_B);
+  workspace.stopIdle();
+  workspace.server.hold(SWITCH);
+  workspace.button(CHAPTER_B).click();
+  await expect.poll(() => workspace.server.isHeld(SWITCH)).toBe(true);
+  // The Chapter read of the switch answered, so the next read of Chapter B is the read of the reopen.
+  workspace.server.hold(READ_B);
+  workspace.server.release(SWITCH);
+  await expect.poll(() => workspace.server.isHeld(READ_B)).toBe(true);
+  await workspace.typeAtEnd("?");
+  const typed = workspace.ready();
+  workspace.server.release(READ_B);
+
+  await savedKey(workspace);
+  expect(typed).toEqual({ ...READY, body: "Beta?", arriving: "true" });
+});
 
 // ADR 0105, section 4: with no Arrival Input, a newer Revision of the Chapter read of the switch replaces the shown
 // text. The editor of the newer text keeps the focus and the caret of the click (#1934).
