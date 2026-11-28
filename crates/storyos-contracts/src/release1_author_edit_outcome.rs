@@ -3,12 +3,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ts_rs::TS;
 
 use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
-use crate::release1_author_edit::ApplyAuthorEditResponse;
+use crate::release1_author_edit::DomainReceipt;
+use crate::release1_author_edit::{ApplyAuthorEditEffect, ApplyAuthorEditResponse};
 
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID: &str =
     "storyos.query.apply-author-edit-outcome.request.v1";
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID: &str =
-    "storyos.query.apply-author-edit-outcome.response.v1";
+    "storyos.query.apply-author-edit-outcome.response.v2";
 
 pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME: QueryOperation = QueryOperation {
     operation_id: "getApplyAuthorEditOutcome",
@@ -109,11 +110,55 @@ pub enum ApplyAuthorEditReconfirmationReason {
     DirectEditIntentUnrecoverable,
 }
 
+/// The acknowledgement of a committed Author Edit: the response of the command with no Editor
+/// Session state, because the state is a read after the command (ADR 0106 section 3).
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CommittedApplyAuthorEdit {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: ProjectScope,
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub receipt: DomainReceipt,
+    pub effect: ApplyAuthorEditEffect,
+    pub completed_intent_record_id: String,
+    pub local_intent_sequence: String,
+}
+
+impl From<ApplyAuthorEditResponse> for CommittedApplyAuthorEdit {
+    fn from(response: ApplyAuthorEditResponse) -> Self {
+        let ApplyAuthorEditResponse {
+            schema_id,
+            correlation_id,
+            project_scope,
+            command_id,
+            author_command_admission_id,
+            receipt,
+            effect,
+            completed_intent_record_id,
+            local_intent_sequence,
+            editor_session_state: _,
+        } = response;
+        Self {
+            schema_id,
+            correlation_id,
+            project_scope,
+            command_id,
+            author_command_admission_id,
+            receipt,
+            effect,
+            completed_intent_record_id,
+            local_intent_sequence,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "outcome_kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ApplyAuthorEditOutcome {
     Committed {
-        response: Box<ApplyAuthorEditResponse>,
+        response: Box<CommittedApplyAuthorEdit>,
     },
     Rejected {
         reason: ApplyAuthorEditRejectionReason,

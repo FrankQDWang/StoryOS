@@ -104,17 +104,20 @@ fn contract_outcome(
 ) -> Result<contracts::ApplyAuthorEditOutcome, ApiError> {
     Ok(match outcome {
         ApplicationOutcome::Committed(committed) => contracts::ApplyAuthorEditOutcome::Committed {
-            response: Box::new(author_edit_response(
-                scope,
-                AuthorEditResponseIdentity {
-                    correlation_id: committed.correlation_id,
-                    canonical_command_digest: committed.canonical_command_digest,
-                    idempotency_key: committed.idempotency_key,
-                    expected_authoritative_revision_id: committed
-                        .expected_authoritative_revision_id,
-                },
-                committed.settlement,
-            )?),
+            response: Box::new(
+                author_edit_response(
+                    scope,
+                    AuthorEditResponseIdentity {
+                        correlation_id: committed.correlation_id,
+                        canonical_command_digest: committed.canonical_command_digest,
+                        idempotency_key: committed.idempotency_key,
+                        expected_authoritative_revision_id: committed
+                            .expected_authoritative_revision_id,
+                    },
+                    committed.settlement,
+                )?
+                .into(),
+            ),
         },
         ApplicationOutcome::Rejected { reason } => contracts::ApplyAuthorEditOutcome::Rejected {
             reason: match reason {

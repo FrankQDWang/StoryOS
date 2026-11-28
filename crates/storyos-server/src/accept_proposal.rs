@@ -75,9 +75,14 @@ fn accept_response(
     let envelope = &admitted.envelope;
     let input = &admitted.input;
     let expected = vec![input.expected_authoritative_revision_id.clone()];
+    let mut session = None;
     let (result, effect, resulting, commits) = match settlement.outcome {
         TransitionOutcome::Applied(applied) => (
-            contracts::AcceptanceReceiptResult::Applied,
+            {
+                // The first run of an Acceptance that moved the base of its Editor Session has it.
+                session = applied.session.map(|session| *session);
+                contracts::AcceptanceReceiptResult::Applied
+            },
             contracts::AcceptProposalEffect::Applied {
                 author_action_sequence: applied.author_action_sequence.to_string(),
                 authoritative_commit_id: applied.ids.authoritative_commit_id.clone(),
@@ -147,6 +152,7 @@ fn accept_response(
         },
         project: controlled_project(settlement.response),
         effect,
+        editor_session_state: session.map(super::editor_session::session_state),
     }))
 }
 

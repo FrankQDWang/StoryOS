@@ -67,6 +67,9 @@ mod producer_withdrawal_undo;
 #[path = "command_sequence_tests/author_edit_tests.rs"]
 mod author_edit;
 
+#[path = "command_sequence_tests/response_state_tests.rs"]
+mod response_state;
+
 #[path = "command_sequence_tests/secondary_operation_tests.rs"]
 mod secondary_operation;
 

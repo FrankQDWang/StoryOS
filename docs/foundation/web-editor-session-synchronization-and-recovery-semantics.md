@@ -860,7 +860,7 @@ BrowserProtocolObservation =
     }
   | ApplyAuthorEditAppliedObservation {
       protocol_observation_id
-      schema_id: "storyos.command.apply-author-edit.response.v2"
+      schema_id: "storyos.command.apply-author-edit.response.v2" | "storyos.command.apply-author-edit.response.v3"
       command_id
       author_command_admission_id
       project_scope
@@ -872,13 +872,16 @@ BrowserProtocolObservation =
         author_action_sequence
         project_activity_position
       }
+      // v3 only, and only on the first run of the edit: the Editor Session after the edit, as a read gives it. The
+      // Web then sends no read of the Editor Session (ADR 0106 section 3).
+      editor_session_state?: { editor_session, base_snapshot, author_undo_frontier_sequence? }
       completed_intent_record_id
       local_intent_sequence
       observed_at
     }
   | ApplyAuthorEditZeroAuthorityObservation {
       protocol_observation_id
-      schema_id: "storyos.command.apply-author-edit.response.v2"
+      schema_id: "storyos.command.apply-author-edit.response.v2" | "storyos.command.apply-author-edit.response.v3"
       command_id
       author_command_admission_id
       project_scope
@@ -999,6 +1002,9 @@ ApplyAuthorEditOutcomeQueryObservation =
     exact_transport_retry_capsule_id
     local_response_payload_ref
     exact_response_payload_digest
+    // The Journal record keeps this schema id and the field name below. The
+    // nested response is the v2 or v3 response that the outcome Query (v1 or
+    // v2) gave, with no Editor Session state (ADR 0106 section 3).
     schema_id: storyos.query.apply-author-edit-outcome.response.v1
     query_correlation_id
     project_scope
@@ -1177,8 +1183,8 @@ The attempt-to-GC closure matrix is:
 | terminal pre-admission Problem, including after fresh-challenge resend | `TerminalResolved { PreAdmissionProblem }` / `PreAdmissionRefused` | collect the attempt capsule; journal GC still requires refusal-surface convergence and an exact complete successor |
 | outcome Query unavailable or `StillUnknown` | `OutcomeQueryUnresolved` / `Unsettled` | keep capsule and all payload; preserve the strongest valid observation; no GC |
 | outcome Query `RejectedNoAdmission` | `TerminalResolved { OutcomeQueryRejected }` / `OutcomeQueryRejectedNoAdmission` | collect the attempt capsule only after the exact query observation is durable; journal GC waits for `OutcomeQueryRejectedVisible`, an exact successor, and dependency closure |
-| applied `ApplyAuthorEdit` v2 response, including from the outcome Query, exact replay, or fresh-challenge resend | `TerminalResolved { Committed }` / `AppliedReceiptSettled` | collect the attempt capsule; journal GC waits for applied Activity/Snapshot convergence and successor proof |
-| zero-authority `ApplyAuthorEdit` v2 response, including from the outcome Query, exact replay, or fresh-challenge resend | `TerminalResolved { Committed }` / `ZeroAuthorityReceiptSettled` | collect the attempt capsule; never wait for or fabricate Activity; journal GC still requires the result-visible branch and an exact successor proof |
+| applied `ApplyAuthorEdit` v2 or v3 response, including from the outcome Query, exact replay, or fresh-challenge resend | `TerminalResolved { Committed }` / `AppliedReceiptSettled` | collect the attempt capsule; journal GC waits for applied Activity/Snapshot convergence and successor proof |
+| zero-authority `ApplyAuthorEdit` v2 or v3 response, including from the outcome Query, exact replay, or fresh-challenge resend | `TerminalResolved { Committed }` / `ZeroAuthorityReceiptSettled` | collect the attempt capsule; never wait for or fabricate Activity; journal GC still requires the result-visible branch and an exact successor proof |
 | other editor `Committed` response | `TerminalResolved { Committed }` / `OtherEditorReceiptSettled` | retain its Receipt/Activity convergence and successor rules |
 | `RequiresReconfirmation`, including after a supplied settlement query | `TerminalResolved { RequiresReconfirmation }` / matching terminal settlement | collect the attempt capsule; journal GC waits for the visible terminal surface and section 9's exact successor rule |
 
@@ -1425,11 +1431,11 @@ Action Sequence, and Project Activity that an owning result actually creates.
 | outcome Query `StillUnknown { AdmissionCommitted }` | exact Command and Admission exist and reconciliation remains required; no Receipt or Activity is named | advance the strongest observation to the exact admitted identity; keep queue, capsule, and payload blocked; never invoke or replay; repeat only the protected GET |
 | outcome Query `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | enter the exact no-Receipt terminal settlement; show the closed reason; never invoke the old command |
 | outcome Query `Rejected { challenge_expired_unconsumed }` | positive proof that this identity created no Admission, Receipt, Activity, or authority | enter the exact query-rejected terminal reconciliation, settlement, and visible-author branch; do not fabricate a Problem or resend permission |
-| outcome Query `Committed` | exact nested `ApplyAuthorEditResponse` v2 | use the existing applied Receipt-plus-Activity or zero-authority Receipt-only settlement; exact-deduplicate any late POST acknowledgement |
+| outcome Query `Committed` | exact nested `ApplyAuthorEditResponse` v2 or v3, with no Editor Session state | use the existing applied Receipt-plus-Activity or zero-authority Receipt-only settlement; exact-deduplicate any late POST acknowledgement |
 | pre-admission Problem | exact safe `PreAdmissionProblemObservation`; no Admission or Receipt for the proven attempt | retain complete payload; either terminally show the typed refusal or, only when the exact Problem permits and the frozen request remains equal, enter `ProvenNoAdmission` before a fresh challenge |
 | unexpected HTTP `Accepted` for a Release-1 editor command | exact asynchronous operation reference and settlement query; no browser-visible Admission identity or terminal fact | enter `ProtocolIncompatibleAccepted`; preserve payload, pause the queue, and fail closed for protocol resync/compatible deployment without claiming query convergence |
-| HTTP `applyAuthorEdit` v2 `AuthoritativeApplied` | terminal `AppliedReceiptSettled`, exact typed Receipt, and applied-only Activity position | append `ApplyAuthorEditAppliedObservation`; wait for applied author-facing Activity/Snapshot convergence if not already observed |
-| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` | terminal `ZeroAuthorityReceiptSettled` and exact typed Receipt; no Activity exists for this result | append `ApplyAuthorEditZeroAuthorityObservation`; make the exact result visible without advancing checkpoint, Activity watermark, authoritative projection, or active base |
+| HTTP `applyAuthorEdit` v2 or v3 `AuthoritativeApplied` | terminal `AppliedReceiptSettled`, exact typed Receipt, and applied-only Activity position | append `ApplyAuthorEditAppliedObservation`; wait for applied author-facing Activity/Snapshot convergence if not already observed |
+| HTTP `applyAuthorEdit` v2 or v3 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` | terminal `ZeroAuthorityReceiptSettled` and exact typed Receipt; no Activity exists for this result | append `ApplyAuthorEditZeroAuthorityObservation`; make the exact result visible without advancing checkpoint, Activity watermark, authoritative projection, or active base |
 | other editor HTTP `Committed` | terminal `OtherEditorReceiptSettled`, exact typed Receipt, and its existing Activity position | retain its Activity/Snapshot convergence contract |
 | HTTP `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | show the exact reconfirmation reason and the preserved local text in the local recovery panel; a later author confirmation creates a new command and Admission |
 | post-admission `outcome_unknown` Problem | exact Admission identity and settlement query from that Problem; no claim about Receipt presence | enter `KnownSettlementQuery`; forbid blind retry or a new command derived from the uncertain one |
@@ -1476,8 +1482,8 @@ state, missing HTTP, or Event arrival is never an effect oracle.
 | Authoritative finding | Required client behavior |
 | --- | --- |
 | exact replay for another command returns `PreAdmissionProblemObservation` that positively proves the original attempt created no Admission | enter `ProvenNoAdmission`; either terminally resolve that refusal or, only when its retry semantics and every frozen local fact allow, obtain a fresh challenge and append a fresh physical attempt |
-| outcome Query returns `applyAuthorEdit` v2 `AuthoritativeApplied` | append the exact query observation and one `ApplyAuthorEditAppliedObservation` lifecycle effect, enter terminal `AppliedReceiptSettled`, wait for its exact Activity/Snapshot convergence, and never invoke again |
-| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` | append the exact query observation and one `ApplyAuthorEditZeroAuthorityObservation` lifecycle effect, enter terminal `ZeroAuthorityReceiptSettled`, make that exact Receipt result visible, with no Activity/checkpoint/projection/base advance, and never invoke again |
+| outcome Query returns `applyAuthorEdit` v2 or v3 `AuthoritativeApplied` | append the exact query observation and one `ApplyAuthorEditAppliedObservation` lifecycle effect, enter terminal `AppliedReceiptSettled`, wait for its exact Activity/Snapshot convergence, and never invoke again |
+| outcome Query returns `applyAuthorEdit` v2 or v3 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` | append the exact query observation and one `ApplyAuthorEditZeroAuthorityObservation` lifecycle effect, enter terminal `ZeroAuthorityReceiptSettled`, make that exact Receipt result visible, with no Activity/checkpoint/projection/base advance, and never invoke again |
 | outcome Query returns `Rejected { challenge_expired_unconsumed }` | append `RejectedNoAdmission`; enter `OutcomeQueryRejectedNoAdmission` and `OutcomeQueryRejectedVisible` through the same query observation identity; retain the author payload and never resend automatically |
 | outcome Query returns `StillUnknown { ChallengeIssued }` | preserve `OutcomeQueryUnresolved`, exact same expiry, `Unsettled`, queue block, capsule, and payload; no success, rejection, or retry permission |
 | outcome Query returns `StillUnknown { AdmissionCommitted }` | preserve the exact Command and Admission as the strongest valid observation, remain `Unsettled`, and never invoke or replay the admitted command |

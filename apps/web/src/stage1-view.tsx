@@ -18,6 +18,7 @@ import type {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject, readCurrentChapter, reopenControlledProject } from "./boot.ts";
+import { acceptedProjectState } from "./editor-session.ts";
 import {
   CHAPTER_SWITCH_WAITING_SENTENCE,
   chapterSwitchRecoveryMessage,
@@ -875,7 +876,8 @@ function ProjectEditorView({
                 }
               }
               handedOff = true;
-              onReopened(next);
+              // The editor changes in the task of the check, so no key goes to the Arriving Chapter after it (#1960).
+              flushSync(() => { onReopened(next); });
               return;
             }
           });
@@ -1124,9 +1126,12 @@ function ProjectEditorView({
             && pending.body === savedRevision.body
             && JSON.stringify(pending.blocks) === JSON.stringify(savedRevision.blocks))}
         onDecisionEnd={copies.proposalsChanged}
-        onAccepted={async (settled) => {
-          // A decision with no settled response opens the Project with each check of the first open.
-          onReopened(await (settled ? reopen() : openControlledProject({ baseUrl,
+        onAccepted={async (settled, accepted) => {
+          // An applied Acceptance whose response has the Editor Session state shows its Revision with no read
+          // (ADR 0106 section 3). A decision with no settled response opens the Project with each check of the first
+          // open.
+          const installed = accepted === undefined ? undefined : await acceptedProjectState(state, accepted);
+          onReopened(installed ?? await (settled ? reopen() : openControlledProject({ baseUrl,
             projectId: state.project.project.project_id, fetchImpl, cryptoImpl })));
         }}
         onUndoCurrentChapter={(chapterId) => {

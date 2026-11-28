@@ -7,8 +7,10 @@ import {
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditResponse,
+  GetEditorSessionResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
+  APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS,
   commitOutcomeQueryWithGroup,
   commitStrongerGroup,
   markOutcomeQueryUnresolved,
@@ -271,6 +273,22 @@ export async function freezeOneIntentSubmission(
   return group;
 }
 
+/** The Editor Session read of `session` after a command that gave `state`, in the form of a read. */
+export function sessionWithState(
+  session: GetEditorSessionResponse,
+  state: NonNullable<ApplyAuthorEditResponse["editor_session_state"]>,
+): GetEditorSessionResponse {
+  const { author_undo_frontier_sequence: _earlierFrontier, ...rest } = session;
+  return {
+    ...rest,
+    schema_id: "storyos.query.editor-session.response.v2",
+    editor_session: state.editor_session,
+    base_snapshot: state.base_snapshot,
+    ...(state.author_undo_frontier_sequence
+      ? { author_undo_frontier_sequence: state.author_undo_frontier_sequence } : {}),
+  };
+}
+
 async function settleAuthorEditResponse({
   workspace, group, response, baseUrl, fetchImpl, cryptoImpl, durableQuery,
 }: {
@@ -286,7 +304,7 @@ async function settleAuthorEditResponse({
   const settledResponse = response as ApplyAuthorEditResponse;
   const effect = settledResponse.effect;
   const receipt = settledResponse.receipt;
-  if (settledResponse.schema_id !== "storyos.command.apply-author-edit.response.v2"
+  if (!APPLY_AUTHOR_EDIT_RESPONSE_SCHEMAS.includes(settledResponse.schema_id)
     || settledResponse.correlation_id !== group.frozen_request_body.correlation_id
     || !UUID.test(settledResponse.command_id ?? "")
     || !UUID.test(settledResponse.author_command_admission_id ?? "")
@@ -404,12 +422,17 @@ async function settleAuthorEditResponse({
     || !positiveU64(effect.project_activity_position)) {
     throw new Error("Author Edit acknowledgement does not converge");
   }
-  const canonical = await getEditorSession({
-    baseUrl,
-    projectId: workspace.partition.project_scope.project_id,
-    editorSessionId: workspace.partition.editor_session_id,
-    fetchImpl,
-  });
+  // The first run of the edit gives the Editor Session state, so the Web sends no read. A replay and an
+  // earlier response form have none, and the Web reads the Editor Session (ADR 0106 section 3).
+  const state = settledResponse.editor_session_state ?? undefined;
+  const canonical: GetEditorSessionResponse = state === undefined
+    ? await getEditorSession({
+      baseUrl,
+      projectId: workspace.partition.project_scope.project_id,
+      editorSessionId: workspace.partition.editor_session_id,
+      fetchImpl,
+    })
+    : sessionWithState(workspace.session, state);
   const freshBase = canonical.base_snapshot;
   const request = group.frozen_request_body;
   const primitive = request.author_edit_units[0]?.normalized_primitives[0];

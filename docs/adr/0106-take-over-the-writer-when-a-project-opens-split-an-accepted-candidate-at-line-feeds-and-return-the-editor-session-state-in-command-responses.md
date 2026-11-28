@@ -41,9 +41,10 @@ Measured on the personal instance at `main` `54525595` from the browser of the a
 
 ### 3. Return the Editor Session state in command responses
 
-- The responses of the commands Apply Author Edit, Accept Proposal, and Take Over Project Writer carry the state of the Editor Session after the command: the same fields that a read of the Editor Session gives the tab for the next input (the base Snapshot identity, the base Revision, and the writer). The client uses them and does not read the Editor Session again after the command.
-- The response form of each of these commands gets a new version. The client reads the state from the response only when the response has it.
-- Each check stays: the Command Challenge before each command, its rate classes, the idempotency rules, and the writer generation compare. A read that protects another tab or another User stays.
+- The responses of the commands Apply Author Edit and Accept Proposal carry the state of the Editor Session after the command: the same fields that a read of the Editor Session gives the tab for the next input (the base Snapshot identity, the base Revision, and the Author Undo frontier). The client uses them and does not read the Editor Session again after the command.
+- The response form of each of these commands gets a new version. The client reads the state from the response only when the response has it. When a response has no state, the client reads the Editor Session, as before this section.
+- An exact retry returns the acknowledgement and the body of the first response with no Editor Session state. The state is a read after the command, and it is not a part of the acknowledgement. The base Snapshot of an Editor Session is one row that each base move changes, so the Server cannot make the state of the first run again. This is an exception to the replay rule of [ADR 0075](0075-prove-each-behavior-at-one-behavior-owner.md) for this one field.
+- Each check stays: the Command Challenge before each command, its rate classes, the idempotency rules, the Revision compare of an Author Edit, and the head compares of Acceptance. A read that protects another tab or another User stays.
 
 ## Consequences
 

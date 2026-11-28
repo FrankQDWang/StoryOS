@@ -232,7 +232,8 @@ async function acceptDisplayedBlockProposalLocked(
       });
       throw new AcceptanceDeliveryUnknown(error);
     }
-    if (accepted.schema_id !== "storyos.command.accept-proposal.response.v1"
+    if ((accepted.schema_id !== "storyos.command.accept-proposal.response.v1"
+        && accepted.schema_id !== "storyos.command.accept-proposal.response.v2")
       || typeof accepted.command_id !== "string" || accepted.command_id.length === 0
       || typeof accepted.author_command_admission_id !== "string"
       || accepted.author_command_admission_id.length === 0
