@@ -80,7 +80,7 @@ fn accept_response(
         TransitionOutcome::Applied(applied) => (
             {
                 // The first run of an Acceptance that moved the base of its Editor Session has it.
-                session = applied.session;
+                session = applied.session.map(|session| *session);
                 contracts::AcceptanceReceiptResult::Applied
             },
             contracts::AcceptProposalEffect::Applied {

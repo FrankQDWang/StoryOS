@@ -126,7 +126,7 @@ pub struct RevisionApplied<A> {
     /// The Editor Session of the command after it moved the base of that Session, as a read of it
     /// gives it in the same transaction. A command that did not move the base and a replay have
     /// none (ADR 0106 section 3, ADR 0107 section 3).
-    pub session: Option<crate::EditorSession>,
+    pub session: Option<Box<crate::EditorSession>>,
 }
 
 /// The settled outcome of one Manuscript Structure Transition command.

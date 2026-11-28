@@ -119,7 +119,7 @@ pub(crate) fn author_edit_settlement(
     let (effect, record) = match settled.outcome {
         TransitionOutcome::Applied(AuthorEditProfileApplied::Revision(applied)) => (
             {
-                editor_session = applied.session;
+                editor_session = applied.session.map(|session| *session);
                 AuthorEditSettlementEffect::AuthoritativeApplied {
                     ids: applied.ids,
                     body: applied.body,

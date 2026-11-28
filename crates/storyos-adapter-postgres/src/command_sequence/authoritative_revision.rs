@@ -389,6 +389,7 @@ pub(crate) async fn write_revision<E>(
                 }
                 _ => ProjectCommandError::BindingConflict,
             })?
+            .map(Box::new)
     } else {
         None
     };

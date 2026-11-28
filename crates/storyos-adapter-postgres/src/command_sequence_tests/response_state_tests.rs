@@ -84,7 +84,7 @@ async fn an_applied_author_edit_gives_the_editor_session_that_a_read_after_it_gi
 /// The Editor Session of an applied Acceptance. Panics on any other outcome.
 fn session(settlement: storyos_application::AcceptProposalSettlement) -> Option<EditorSession> {
     match settlement.outcome {
-        TransitionOutcome::Applied(applied) => applied.session,
+        TransitionOutcome::Applied(applied) => applied.session.map(|session| *session),
         other => panic!("the Acceptance must apply, got {other:?}"),
     }
 }
