@@ -199,13 +199,13 @@ stays writable.
 
 Set Current Chapter moves the base of the named Editor Session to the head of
 the Chapter at a later position. When the page closes after that and before the
-copy of step 3, the records still bind the earlier base. When the partition has
-open work, the next load decides on the catch-up with the base that the Journal
-binds, so it catches up on the current Revision and does not reject the
-Journal. With no open work, a command of the Editor Session moved its base, as a
-Chapter switch does, and the Editor Session stays (ADR 0105). When a group is not settled,
-the load keeps the stored Editor Session with the base of its Journal, and shows
-its recovery state.
+copy of step 3, the records still bind the earlier base. When the base of the
+Journal is on the Chapter of the Server base and the text of its open work can
+catch up, the next load decides on the catch-up with the base of the Journal, so
+it catches up on the current Revision and does not reject the Journal. Else a
+command of the Editor Session moved its base, as a Chapter switch (ADR 0105) or
+an Author Edit with a lost response does, and the load decides with the Server
+base as before.
 
 The catch-up does not run when the stored partition has a group that went out
 with no known result, a refused Author Edit, an Author Edit that conflicted for
